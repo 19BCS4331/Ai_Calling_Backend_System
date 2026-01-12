@@ -12,6 +12,7 @@ import { Logger, CallSession, STTConfig, LLMConfig, TTSConfig } from '../types';
 import { SessionManager, CreateSessionOptions } from '../session/session-manager';
 import { ToolRegistry, builtInTools } from '../tools/tool-registry';
 import { MCPServer, createCommonN8nTools } from '../mcp/mcp-server';
+import { MCPClientManager, MCPClientConfig } from '../mcp/mcp-client';
 import { VoicePipeline } from '../pipeline/voice-pipeline';
 import { STTProviderFactory } from '../providers/base/stt-provider';
 import { LLMProviderFactory } from '../providers/base/llm-provider';
@@ -29,6 +30,7 @@ export interface APIServerConfig {
     n8nBaseUrl?: string;
     n8nApiKey?: string;
   };
+  mcpClients?: MCPClientConfig[];  // External MCP servers to connect to
 }
 
 export class APIServer {
@@ -41,6 +43,7 @@ export class APIServer {
   private sessionManager: SessionManager;
   private toolRegistry: ToolRegistry;
   private mcpServer: MCPServer | null = null;
+  private mcpClientManager: MCPClientManager;
   private metrics: InMemoryMetrics;
   private costTracker: CostTracker;
   
@@ -61,6 +64,7 @@ export class APIServer {
     this.wss = new WebSocketServer({ server: this.httpServer });
     
     this.toolRegistry = new ToolRegistry(this.logger);
+    this.mcpClientManager = new MCPClientManager(this.toolRegistry, this.logger);
     this.metrics = new InMemoryMetrics();
     this.costTracker = new CostTracker();
     
@@ -71,6 +75,28 @@ export class APIServer {
     
     if (config.enableMCP && config.mcpConfig) {
       this.setupMCPServer(config.mcpConfig);
+    }
+    
+    // Connect to external MCP servers (async, non-blocking)
+    if (config.mcpClients && config.mcpClients.length > 0) {
+      this.setupMCPClients(config.mcpClients);
+    }
+  }
+  
+  /**
+   * Setup MCP client connections to external servers
+   */
+  private async setupMCPClients(clients: MCPClientConfig[]): Promise<void> {
+    for (const clientConfig of clients) {
+      try {
+        await this.mcpClientManager.addServer(clientConfig);
+        this.logger.info('Connected to MCP server', { name: clientConfig.name });
+      } catch (error) {
+        this.logger.error('Failed to connect to MCP server', { 
+          name: clientConfig.name, 
+          error: (error as Error).message 
+        });
+      }
     }
   }
 
@@ -158,13 +184,64 @@ export class APIServer {
       }
     );
 
-    // MCP endpoint
+    // MCP Server endpoint (for external clients connecting to us)
     if (this.config.enableMCP) {
       this.app.post('/api/v1/mcp', 
         this.authenticateRequest.bind(this), 
         this.handleMCPRequest.bind(this)
       );
     }
+    
+    // MCP Client management (for us connecting to external MCP servers)
+    this.app.get('/api/v1/mcp/clients', 
+      this.authenticateRequest.bind(this),
+      (req, res) => {
+        res.json({ clients: this.mcpClientManager.getStatus() });
+      }
+    );
+    
+    this.app.post('/api/v1/mcp/clients',
+      this.authenticateRequest.bind(this),
+      async (req, res) => {
+        try {
+          const config = req.body as MCPClientConfig;
+          await this.mcpClientManager.addServer(config);
+          res.json({ success: true, message: `Connected to MCP server: ${config.name}` });
+        } catch (error) {
+          res.status(400).json({ success: false, error: (error as Error).message });
+        }
+      }
+    );
+    
+    this.app.delete('/api/v1/mcp/clients/:name',
+      this.authenticateRequest.bind(this),
+      async (req, res) => {
+        try {
+          await this.mcpClientManager.removeServer(req.params.name);
+          res.json({ success: true, message: `Disconnected from MCP server: ${req.params.name}` });
+        } catch (error) {
+          res.status(400).json({ success: false, error: (error as Error).message });
+        }
+      }
+    );
+    
+    this.app.post('/api/v1/mcp/clients/:name/refresh',
+      this.authenticateRequest.bind(this),
+      async (req, res) => {
+        try {
+          const client = this.mcpClientManager.getClient(req.params.name);
+          if (!client) {
+            res.status(404).json({ success: false, error: 'MCP client not found' });
+            return;
+          }
+          await client.refreshTools();
+          const tools = client.getTools();
+          res.json({ success: true, tools: tools.map((t: { name: string }) => t.name) });
+        } catch (error) {
+          res.status(400).json({ success: false, error: (error as Error).message });
+        }
+      }
+    );
 
     // Error handler
     this.app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
@@ -265,9 +342,71 @@ export class APIServer {
           pipeline.handleBargeIn();
         }
         break;
+      
+      case 'add_mcp_server':
+        // Add MCP server connection dynamically
+        await this.handleAddMCPServer(ws, message);
+        break;
+        
+      case 'remove_mcp_server':
+        // Remove MCP server connection
+        await this.handleRemoveMCPServer(ws, message);
+        break;
+        
+      case 'list_tools':
+        // List all registered tools
+        ws.send(JSON.stringify({
+          type: 'tools_list',
+          tools: this.toolRegistry.getDefinitions()
+        }));
+        break;
         
       default:
         this.logger.warn('Unknown message type', { type: message.type });
+    }
+  }
+  
+  private async handleAddMCPServer(ws: WebSocket, message: any): Promise<void> {
+    try {
+      const config: MCPClientConfig = {
+        name: message.name,
+        transport: message.transport || 'sse',  // Default to SSE for n8n MCP
+        url: message.url,
+        apiKey: message.apiKey,
+        timeout: message.timeout || 30000
+      };
+      
+      await this.mcpClientManager.addServer(config);
+      const client = this.mcpClientManager.getClient(config.name);
+      const tools = client?.getTools() || [];
+      
+      ws.send(JSON.stringify({
+        type: 'mcp_server_added',
+        name: config.name,
+        tools: tools.map(t => ({ name: t.name, description: t.description }))
+      }));
+      
+      this.logger.info('MCP server added via WebSocket', { name: config.name, toolCount: tools.length });
+    } catch (error) {
+      ws.send(JSON.stringify({
+        type: 'mcp_error',
+        error: (error as Error).message
+      }));
+    }
+  }
+  
+  private async handleRemoveMCPServer(ws: WebSocket, message: any): Promise<void> {
+    try {
+      await this.mcpClientManager.removeServer(message.name);
+      ws.send(JSON.stringify({
+        type: 'mcp_server_removed',
+        name: message.name
+      }));
+    } catch (error) {
+      ws.send(JSON.stringify({
+        type: 'mcp_error',
+        error: (error as Error).message
+      }));
     }
   }
 

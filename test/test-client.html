@@ -189,6 +189,28 @@
     <button class="danger" id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
   </div>
   
+  <!-- MCP / n8n Tools Configuration -->
+  <div class="card">
+    <h3>🔧 MCP Tools (n8n Workflows)</h3>
+    <div class="row">
+      <div>
+        <label>n8n MCP Server URL</label>
+        <input type="text" id="mcpServerUrl" placeholder="http://localhost:5678/mcp" />
+      </div>
+      <div>
+        <label>n8n API Key (optional)</label>
+        <input type="password" id="mcpApiKey" placeholder="n8n API key..." />
+      </div>
+    </div>
+    <div style="margin-top: 10px;">
+      <button type="button" onclick="connectMCPServer()" id="mcpConnectBtn" disabled>🔌 Connect to n8n</button>
+      <button type="button" onclick="disconnectMCPServer()" id="mcpDisconnectBtn" disabled style="margin-left: 5px;">❌ Disconnect</button>
+      <button type="button" onclick="listTools()" id="listToolsBtn" disabled style="margin-left: 5px;">📋 List Tools</button>
+    </div>
+    <div id="mcpStatus" style="margin-top: 10px; font-size: 12px; color: #666;">Not connected to MCP server</div>
+    <div id="toolsList" style="margin-top: 10px; max-height: 150px; overflow-y: auto; font-size: 12px;"></div>
+  </div>
+  
   <!-- Session Controls -->
   <div class="card">
     <h3>Session Controls</h3>
@@ -323,6 +345,118 @@
       }
     }
     
+    // MCP / n8n Tools Management
+    let mcpConnected = false;
+    let mcpServerName = null;
+    
+    function connectMCPServer() {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        log('Connect to server first', 'error');
+        return;
+      }
+      
+      const url = document.getElementById('mcpServerUrl').value;
+      const apiKey = document.getElementById('mcpApiKey').value;
+      
+      if (!url) {
+        log('Please enter MCP server URL', 'error');
+        return;
+      }
+      
+      mcpServerName = 'n8n-' + Date.now();
+      
+      ws.send(JSON.stringify({
+        type: 'add_mcp_server',
+        name: mcpServerName,
+        transport: 'sse',  // Default to SSE for n8n MCP
+        url: url,
+        apiKey: apiKey || undefined
+      }));
+      
+      document.getElementById('mcpStatus').textContent = 'Connecting to MCP server...';
+      log(`Connecting to MCP server: ${url}`, 'info');
+      
+      // Save to localStorage
+      localStorage.setItem('mcpServerUrl', url);
+      if (apiKey) localStorage.setItem('mcpApiKey', apiKey);
+    }
+    
+    function disconnectMCPServer() {
+      if (!ws || ws.readyState !== WebSocket.OPEN || !mcpServerName) {
+        return;
+      }
+      
+      ws.send(JSON.stringify({
+        type: 'remove_mcp_server',
+        name: mcpServerName
+      }));
+      
+      mcpConnected = false;
+      mcpServerName = null;
+      updateMCPUI();
+      document.getElementById('mcpStatus').textContent = 'Disconnected from MCP server';
+      document.getElementById('toolsList').innerHTML = '';
+      log('Disconnected from MCP server', 'info');
+    }
+    
+    function listTools() {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        log('Connect to server first', 'error');
+        return;
+      }
+      
+      ws.send(JSON.stringify({ type: 'list_tools' }));
+      log('Requesting tools list...', 'info');
+    }
+    
+    function updateMCPUI() {
+      document.getElementById('mcpConnectBtn').disabled = !ws || ws.readyState !== WebSocket.OPEN || mcpConnected;
+      document.getElementById('mcpDisconnectBtn').disabled = !mcpConnected;
+      document.getElementById('listToolsBtn').disabled = !ws || ws.readyState !== WebSocket.OPEN;
+    }
+    
+    function handleMCPMessage(message) {
+      switch (message.type) {
+        case 'mcp_server_added':
+          mcpConnected = true;
+          updateMCPUI();
+          document.getElementById('mcpStatus').textContent = `✅ Connected to: ${message.name}`;
+          log(`Connected to MCP server: ${message.name}`, 'success');
+          
+          // Display discovered tools
+          if (message.tools && message.tools.length > 0) {
+            const toolsList = document.getElementById('toolsList');
+            toolsList.innerHTML = '<strong>Discovered Tools:</strong><br>' + 
+              message.tools.map(t => `• <b>${t.name}</b>: ${t.description || 'No description'}`).join('<br>');
+            log(`Discovered ${message.tools.length} tools from MCP server`, 'success');
+          }
+          break;
+          
+        case 'mcp_server_removed':
+          mcpConnected = false;
+          mcpServerName = null;
+          updateMCPUI();
+          document.getElementById('mcpStatus').textContent = 'Disconnected';
+          break;
+          
+        case 'mcp_error':
+          log(`MCP Error: ${message.error}`, 'error');
+          document.getElementById('mcpStatus').textContent = `❌ Error: ${message.error}`;
+          break;
+          
+        case 'tools_list':
+          const toolsList = document.getElementById('toolsList');
+          if (message.tools && message.tools.length > 0) {
+            toolsList.innerHTML = '<strong>Available Tools:</strong><br>' + 
+              message.tools.map(t => `• <b>${t.name}</b>: ${t.description || 'No description'}`).join('<br>');
+            log(`Listed ${message.tools.length} available tools`, 'info');
+          } else {
+            toolsList.innerHTML = '<em>No tools registered</em>';
+          }
+          break;
+      }
+    }
+    
     function log(message, type = 'info') {
       const container = document.getElementById('logContainer');
       const entry = document.createElement('div');
@@ -354,6 +488,7 @@
         document.getElementById('connectBtn').disabled = true;
         document.getElementById('disconnectBtn').disabled = false;
         document.getElementById('startSessionBtn').disabled = false;
+        updateMCPUI();  // Enable MCP buttons
       };
       
       ws.onclose = () => {
@@ -365,6 +500,9 @@
         document.getElementById('endSessionBtn').disabled = true;
         document.getElementById('recordBtn').disabled = true;
         sessionId = null;
+        mcpConnected = false;
+        mcpServerName = null;
+        updateMCPUI();  // Reset MCP UI
       };
       
       ws.onerror = (err) => {
@@ -511,6 +649,14 @@
           
         case 'error':
           log(`Error: ${msg.error}`, 'error');
+          break;
+        
+        // MCP messages
+        case 'mcp_server_added':
+        case 'mcp_server_removed':
+        case 'mcp_error':
+        case 'tools_list':
+          handleMCPMessage(msg);
           break;
           
         default:
@@ -741,12 +887,16 @@
       const savedCartesia = localStorage.getItem('cartesiaKey');
       const savedTtsProvider = localStorage.getItem('ttsProvider');
       const savedAudioQuality = localStorage.getItem('audioQuality');
+      const savedMcpUrl = localStorage.getItem('mcpServerUrl');
+      const savedMcpApiKey = localStorage.getItem('mcpApiKey');
       
       if (savedSarvam) document.getElementById('sarvamKey').value = savedSarvam;
       if (savedGemini) document.getElementById('geminiKey').value = savedGemini;
       if (savedCartesia) document.getElementById('cartesiaKey').value = savedCartesia;
       if (savedTtsProvider) document.getElementById('ttsProvider').value = savedTtsProvider;
       if (savedAudioQuality) document.getElementById('audioQuality').value = savedAudioQuality;
+      if (savedMcpUrl) document.getElementById('mcpServerUrl').value = savedMcpUrl;
+      if (savedMcpApiKey) document.getElementById('mcpApiKey').value = savedMcpApiKey;
       
       // Auto-load Cartesia voices if API key is saved
       if (savedCartesia) {

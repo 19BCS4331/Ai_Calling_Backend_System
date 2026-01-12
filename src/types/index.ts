@@ -285,6 +285,12 @@ export interface RegisteredTool {
   handler: (args: Record<string, unknown>, context: ToolExecutionContext) => Promise<unknown>;
   timeout?: number;
   requiresAuth?: boolean;
+  metadata?: {
+    source?: 'local' | 'mcp' | 'n8n';
+    server?: string;
+    originalName?: string;
+    [key: string]: unknown;
+  };
 }
 
 export interface ToolExecutionContext {
