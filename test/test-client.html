@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Voice Calling Test Client</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    h1 { color: #333; }
+    .card {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .status {
+      padding: 10px 15px;
+      border-radius: 4px;
+      margin-bottom: 15px;
+      font-weight: 500;
+    }
+    .status.connected { background: #d4edda; color: #155724; }
+    .status.disconnected { background: #f8d7da; color: #721c24; }
+    .status.session { background: #cce5ff; color: #004085; }
+    
+    label { display: block; margin-bottom: 5px; font-weight: 500; }
+    input, textarea, select {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 15px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    textarea { height: 100px; font-family: inherit; }
+    
+    button {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      margin-right: 10px;
+      margin-bottom: 10px;
+    }
+    button.primary { background: #007bff; color: white; }
+    button.success { background: #28a745; color: white; }
+    button.danger { background: #dc3545; color: white; }
+    button.warning { background: #ffc107; color: #333; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    
+    .log-container {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 15px;
+      border-radius: 4px;
+      height: 300px;
+      overflow-y: auto;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 13px;
+    }
+    .log-entry { margin: 3px 0; }
+    .log-entry.info { color: #569cd6; }
+    .log-entry.success { color: #4ec9b0; }
+    .log-entry.error { color: #f14c4c; }
+    .log-entry.stt { color: #dcdcaa; }
+    .log-entry.llm { color: #ce9178; }
+    .log-entry.audio { color: #b5cea8; }
+    
+    .audio-controls {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      flex-wrap: wrap;
+    }
+    .audio-indicator {
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      background: #ccc;
+    }
+    .audio-indicator.recording { background: #dc3545; animation: pulse 1s infinite; }
+    .audio-indicator.playing { background: #28a745; animation: pulse 1s infinite; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    .row { display: flex; gap: 15px; }
+    .row > * { flex: 1; }
+    
+    .transcript-box {
+      background: #f8f9fa;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 15px;
+      min-height: 100px;
+      margin-bottom: 15px;
+    }
+    .transcript-box h4 { margin: 0 0 10px 0; color: #666; }
+    .transcript-box p { margin: 5px 0; }
+    .partial { color: #888; font-style: italic; }
+    .final { color: #333; }
+  </style>
+</head>
+<body>
+  <h1>🎙️ AI Voice Calling Test Client</h1>
+  
+  <!-- Connection Status -->
+  <div id="status" class="status disconnected">Disconnected</div>
+  
+  <!-- Configuration -->
+  <div class="card">
+    <h3>Configuration</h3>
+    <div class="row">
+      <div>
+        <label>Server URL</label>
+        <input type="text" id="serverUrl" value="ws://localhost:3000" />
+      </div>
+      <div>
+        <label>Language</label>
+        <select id="language">
+          <option value="hi-IN">Hindi (hi-IN)</option>
+          <option value="en-IN">English India (en-IN)</option>
+          <option value="ta-IN">Tamil (ta-IN)</option>
+          <option value="te-IN">Telugu (te-IN)</option>
+          <option value="bn-IN">Bengali (bn-IN)</option>
+          <option value="mr-IN">Marathi (mr-IN)</option>
+          <option value="gu-IN">Gujarati (gu-IN)</option>
+        </select>
+      </div>
+    </div>
+    
+    <div class="row">
+      <div>
+        <label>Sarvam API Key (STT)</label>
+        <input type="password" id="sarvamKey" placeholder="sk_..." />
+      </div>
+      <div>
+        <label>Gemini API Key (LLM)</label>
+        <input type="password" id="geminiKey" placeholder="AIza..." />
+      </div>
+    </div>
+    
+    <div class="row">
+      <div>
+        <label>TTS Provider</label>
+        <select id="ttsProvider">
+          <option value="sarvam">Sarvam (Bulbul v2)</option>
+          <option value="cartesia">Cartesia (Sonic 3)</option>
+        </select>
+      </div>
+      <div>
+        <label>Audio Quality</label>
+        <select id="audioQuality">
+          <option value="web">Web (44.1kHz CD quality)</option>
+          <option value="telephony">Telephony (8kHz phone)</option>
+        </select>
+      </div>
+    </div>
+    
+    <div class="row">
+      <div>
+        <label>Cartesia API Key</label>
+        <input type="password" id="cartesiaKey" placeholder="sk_cart_..." onchange="onCartesiaKeyChange()" />
+      </div>
+      <div>
+        <label>Cartesia Voice</label>
+        <select id="cartesiaVoice" disabled>
+          <option value="">Enter API key to load voices</option>
+        </select>
+        <button type="button" onclick="loadCartesiaVoices()" style="margin-top: 5px; padding: 5px 10px; font-size: 12px;">🔄 Load Voices</button>
+      </div>
+    </div>
+    
+    <label>System Prompt</label>
+    <textarea id="systemPrompt">You are a helpful AI assistant for customer service. Respond naturally and helpfully in the same language the customer speaks. Keep responses concise and conversational.</textarea>
+    
+    <button class="primary" id="connectBtn" onclick="connect()">Connect</button>
+    <button class="danger" id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+  </div>
+  
+  <!-- Session Controls -->
+  <div class="card">
+    <h3>Session Controls</h3>
+    <button class="success" id="startSessionBtn" onclick="startSession()" disabled>Start Voice Session</button>
+    <button class="danger" id="endSessionBtn" onclick="endSession()" disabled>End Session</button>
+    
+    <div class="audio-controls" style="margin-top: 15px;">
+      <button class="warning" id="recordBtn" onclick="toggleConversation()" disabled>🎤 Start Conversation</button>
+      <div class="audio-indicator" id="audioIndicator"></div>
+      <span id="audioStatus">Not recording</span>
+    </div>
+  </div>
+  
+  <!-- Transcripts -->
+  <div class="card">
+    <h3>Conversation</h3>
+    <div class="transcript-box">
+      <h4>You (Speech-to-Text)</h4>
+      <p id="userTranscript" class="partial">-</p>
+    </div>
+    <div class="transcript-box">
+      <h4>AI Response</h4>
+      <p id="aiResponse">-</p>
+    </div>
+  </div>
+  
+  <!-- Logs -->
+  <div class="card">
+    <h3>Event Log</h3>
+    <div class="log-container" id="logContainer"></div>
+    <button onclick="clearLogs()" style="margin-top: 10px;">Clear Logs</button>
+  </div>
+  
+  <!-- Audio playback element -->
+  <audio id="audioPlayer" style="display: none;"></audio>
+
+  <script>
+    let ws = null;
+    let sessionId = null;
+    let mediaRecorder = null;
+    let audioContext = null;
+    let isRecording = false;
+    let audioChunks = [];
+    
+    // Audio playback queue to prevent chunks from overwriting each other
+    let audioQueue = [];
+    let isPlayingAudio = false;
+    
+    // Continuous conversation mode
+    let isConversationActive = false;
+    let audioStream = null;
+    let scriptProcessor = null;
+    const VAD_THRESHOLD = 0.04;  // Voice activity detection threshold (higher = less sensitive)
+    let isSpeaking = false;
+    let silenceStart = null;
+    const SILENCE_TIMEOUT = 1500;  // ms of silence before considering speech ended
+    
+    // Cartesia voices cache
+    let cartesiaVoices = [];
+    
+    async function loadCartesiaVoices() {
+      const apiKey = document.getElementById('cartesiaKey').value;
+      if (!apiKey) {
+        log('Please enter Cartesia API key first', 'error');
+        return;
+      }
+      
+      const voiceSelect = document.getElementById('cartesiaVoice');
+      voiceSelect.innerHTML = '<option value="">Loading voices...</option>';
+      
+      try {
+        const response = await fetch('https://api.cartesia.ai/voices?limit=100', {
+          method: 'GET',
+          headers: {
+            'X-API-Key': apiKey,
+            'Cartesia-Version': '2025-04-16'
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        cartesiaVoices = data.data || [];
+        
+        voiceSelect.innerHTML = '';
+        voiceSelect.disabled = false;
+        
+        // Group voices by gender for easier selection
+        const grouped = { masculine: [], feminine: [], neutral: [] };
+        cartesiaVoices.forEach(voice => {
+          const gender = voice.gender || 'neutral';
+          if (!grouped[gender]) grouped[gender] = [];
+          grouped[gender].push(voice);
+        });
+        
+        // Add grouped options
+        Object.entries(grouped).forEach(([gender, voices]) => {
+          if (voices.length > 0) {
+            const optgroup = document.createElement('optgroup');
+            optgroup.label = gender.charAt(0).toUpperCase() + gender.slice(1);
+            voices.forEach(voice => {
+              const option = document.createElement('option');
+              option.value = voice.id;
+              option.textContent = `${voice.name} (${voice.language})`;
+              option.title = voice.description || '';
+              optgroup.appendChild(option);
+            });
+            voiceSelect.appendChild(optgroup);
+          }
+        });
+        
+        // Try to restore saved voice
+        const savedVoice = localStorage.getItem('cartesiaVoice');
+        if (savedVoice && cartesiaVoices.find(v => v.id === savedVoice)) {
+          voiceSelect.value = savedVoice;
+        }
+        
+        log(`Loaded ${cartesiaVoices.length} Cartesia voices`, 'success');
+      } catch (error) {
+        log(`Failed to load Cartesia voices: ${error.message}`, 'error');
+        voiceSelect.innerHTML = '<option value="">Failed to load voices</option>';
+      }
+    }
+    
+    function onCartesiaKeyChange() {
+      localStorage.setItem('cartesiaKey', document.getElementById('cartesiaKey').value);
+      // Auto-load voices when key is entered
+      if (document.getElementById('cartesiaKey').value) {
+        loadCartesiaVoices();
+      }
+    }
+    
+    function log(message, type = 'info') {
+      const container = document.getElementById('logContainer');
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+      entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+      container.appendChild(entry);
+      container.scrollTop = container.scrollHeight;
+    }
+    
+    function clearLogs() {
+      document.getElementById('logContainer').innerHTML = '';
+    }
+    
+    function updateStatus(text, className) {
+      const status = document.getElementById('status');
+      status.textContent = text;
+      status.className = `status ${className}`;
+    }
+    
+    function connect() {
+      const url = document.getElementById('serverUrl').value;
+      log(`Connecting to ${url}...`);
+      
+      ws = new WebSocket(url);
+      
+      ws.onopen = () => {
+        log('WebSocket connected', 'success');
+        updateStatus('Connected', 'connected');
+        document.getElementById('connectBtn').disabled = true;
+        document.getElementById('disconnectBtn').disabled = false;
+        document.getElementById('startSessionBtn').disabled = false;
+      };
+      
+      ws.onclose = () => {
+        log('WebSocket disconnected', 'error');
+        updateStatus('Disconnected', 'disconnected');
+        document.getElementById('connectBtn').disabled = false;
+        document.getElementById('disconnectBtn').disabled = true;
+        document.getElementById('startSessionBtn').disabled = true;
+        document.getElementById('endSessionBtn').disabled = true;
+        document.getElementById('recordBtn').disabled = true;
+        sessionId = null;
+      };
+      
+      ws.onerror = (err) => {
+        log(`WebSocket error: ${err.message || 'Unknown error'}`, 'error');
+      };
+      
+      ws.onmessage = (event) => {
+        if (event.data instanceof Blob) {
+          // Binary audio data from TTS
+          handleAudioData(event.data);
+          return;
+        }
+        
+        try {
+          const msg = JSON.parse(event.data);
+          handleMessage(msg);
+        } catch (e) {
+          log(`Failed to parse message: ${e.message}`, 'error');
+        }
+      };
+    }
+    
+    function disconnect() {
+      if (ws) {
+        ws.close();
+        ws = null;
+      }
+    }
+    
+    function startSession() {
+      const ttsProvider = document.getElementById('ttsProvider').value;
+      const cartesiaKey = document.getElementById('cartesiaKey').value;
+      const sarvamKey = document.getElementById('sarvamKey').value;
+      const audioQuality = document.getElementById('audioQuality').value;
+      const cartesiaVoice = document.getElementById('cartesiaVoice').value;
+      
+      // Determine TTS config based on selected provider
+      let ttsConfig;
+      if (ttsProvider === 'cartesia') {
+        const voiceId = cartesiaVoice || 'f786b574-daa5-4673-aa0c-cbe3e8534c02';  // Default to Katie
+        ttsConfig = {
+          provider: 'cartesia',
+          apiKey: cartesiaKey,
+          voiceId: voiceId,
+          audioQuality: audioQuality  // 'web' or 'telephony'
+        };
+        // Save selected voice
+        localStorage.setItem('cartesiaVoice', voiceId);
+      } else {
+        ttsConfig = {
+          provider: 'sarvam',
+          apiKey: sarvamKey,
+          voiceId: 'anushka'
+        };
+      }
+      
+      const config = {
+        type: 'start_session',
+        tenantId: 'test-client',
+        config: {
+          language: document.getElementById('language').value,
+          systemPrompt: document.getElementById('systemPrompt').value,
+          stt: {
+            provider: 'sarvam',
+            apiKey: sarvamKey
+          },
+          llm: {
+            provider: 'gemini',
+            apiKey: document.getElementById('geminiKey').value,
+            model: 'gemini-2.5-flash'
+          },
+          tts: ttsConfig
+        }
+      };
+      
+      log(`Starting voice session with ${ttsProvider} TTS...`, 'info');
+      ws.send(JSON.stringify(config));
+    }
+    
+    function endSession() {
+      if (sessionId && ws) {
+        ws.send(JSON.stringify({
+          type: 'end_session',
+          sessionId: sessionId
+        }));
+        log('Ending session...', 'info');
+      }
+    }
+    
+    function handleMessage(msg) {
+      switch (msg.type) {
+        case 'connected':
+          log(`Connection ID: ${msg.connectionId}`, 'success');
+          break;
+          
+        case 'session_started':
+          sessionId = msg.sessionId;
+          log(`Session started: ${sessionId}`, 'success');
+          updateStatus(`Session: ${sessionId.substring(0, 8)}...`, 'session');
+          document.getElementById('startSessionBtn').disabled = true;
+          document.getElementById('endSessionBtn').disabled = false;
+          document.getElementById('recordBtn').disabled = false;
+          break;
+          
+        case 'session_ended':
+          log(`Session ended. Metrics: ${JSON.stringify(msg.metrics)}`, 'info');
+          sessionId = null;
+          updateStatus('Connected (No Session)', 'connected');
+          document.getElementById('startSessionBtn').disabled = false;
+          document.getElementById('endSessionBtn').disabled = true;
+          document.getElementById('recordBtn').disabled = true;
+          break;
+          
+        case 'stt_partial':
+          log(`STT Partial: ${msg.text}`, 'stt');
+          document.getElementById('userTranscript').textContent = msg.text;
+          document.getElementById('userTranscript').className = 'partial';
+          break;
+          
+        case 'stt_final':
+          log(`STT Final: ${msg.text}`, 'stt');
+          document.getElementById('userTranscript').textContent = msg.text;
+          document.getElementById('userTranscript').className = 'final';
+          break;
+          
+        case 'llm_token':
+          // Append token to response
+          const responseEl = document.getElementById('aiResponse');
+          if (responseEl.textContent === '-') responseEl.textContent = '';
+          responseEl.textContent += msg.token;
+          break;
+          
+        case 'llm_sentence':
+          log(`LLM Sentence: ${msg.sentence}`, 'llm');
+          break;
+          
+        case 'turn_complete':
+          log(`Turn complete. E2E Latency: ${msg.metrics?.firstByteLatencyMs}ms`, 'success');
+          break;
+          
+        case 'barge_in':
+          log('Barge-in detected - stopping playback', 'info');
+          break;
+          
+        case 'error':
+          log(`Error: ${msg.error}`, 'error');
+          break;
+          
+        default:
+          log(`Unknown message: ${JSON.stringify(msg)}`, 'info');
+      }
+    }
+    
+    async function handleAudioData(blob) {
+      log(`Received audio chunk: ${blob.size} bytes`, 'audio');
+      
+      // Queue audio chunk
+      const audioUrl = URL.createObjectURL(blob);
+      audioQueue.push(audioUrl);
+      
+      // Trigger playback check
+      tryPlayAudio();
+    }
+    
+    function tryPlayAudio() {
+      // Don't start if already playing or user is speaking
+      if (isPlayingAudio || isSpeaking) {
+        return;
+      }
+      
+      if (audioQueue.length === 0) {
+        return;
+      }
+      
+      playNextAudioChunk();
+    }
+    
+    async function playNextAudioChunk() {
+      if (audioQueue.length === 0) {
+        isPlayingAudio = false;
+        document.getElementById('audioIndicator').classList.remove('playing');
+        document.getElementById('audioStatus').textContent = isConversationActive ? 'Listening...' : 'Ready';
+        return;
+      }
+      
+      // Don't play if user is speaking (VAD detected voice)
+      if (isSpeaking) {
+        isPlayingAudio = false;
+        return;
+      }
+      
+      isPlayingAudio = true;
+      const audioUrl = audioQueue.shift();
+      const player = document.getElementById('audioPlayer');
+      
+      document.getElementById('audioIndicator').classList.add('playing');
+      document.getElementById('audioStatus').textContent = `Playing response... (${audioQueue.length} queued)`;
+      
+      player.src = audioUrl;
+      
+      player.onended = () => {
+        URL.revokeObjectURL(audioUrl);
+        playNextAudioChunk();
+      };
+      
+      player.onerror = () => {
+        log(`Audio playback error`, 'error');
+        URL.revokeObjectURL(audioUrl);
+        playNextAudioChunk();
+      };
+      
+      try {
+        await player.play();
+      } catch (e) {
+        log(`Audio play() failed: ${e.message}`, 'error');
+        URL.revokeObjectURL(audioUrl);
+        playNextAudioChunk();
+      }
+    }
+    
+    function clearAudioQueue() {
+      // Clear pending audio
+      audioQueue.forEach(url => URL.revokeObjectURL(url));
+      audioQueue = [];
+      isPlayingAudio = false;
+      
+      const player = document.getElementById('audioPlayer');
+      player.onended = null;
+      player.onerror = null;
+      player.pause();
+      player.currentTime = 0;
+      player.src = '';
+      
+      document.getElementById('audioIndicator').classList.remove('playing');
+    }
+    
+    async function toggleConversation() {
+      if (isConversationActive) {
+        stopConversation();
+      } else {
+        await startConversation();
+      }
+    }
+    
+    async function startConversation() {
+      if (isConversationActive) return;
+      
+      try {
+        audioStream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            sampleRate: 16000,
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true
+          }
+        });
+        
+        audioContext = new AudioContext({ sampleRate: 16000 });
+        const source = audioContext.createMediaStreamSource(audioStream);
+        scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+        
+        scriptProcessor.onaudioprocess = (e) => {
+          if (!isConversationActive || !ws || ws.readyState !== WebSocket.OPEN) return;
+          
+          const inputData = e.inputBuffer.getChannelData(0);
+          
+          // Calculate audio level for VAD
+          let sum = 0;
+          for (let i = 0; i < inputData.length; i++) {
+            sum += inputData[i] * inputData[i];
+          }
+          const rms = Math.sqrt(sum / inputData.length);
+          
+          // Voice Activity Detection
+          if (rms > VAD_THRESHOLD) {
+            // User is speaking
+            if (!isSpeaking) {
+              isSpeaking = true;
+              log('Voice detected', 'info');
+              
+              // Barge-in: stop AI audio if playing
+              if (isPlayingAudio || audioQueue.length > 0) {
+                log('Barge-in: stopping AI audio', 'info');
+                clearAudioQueue();
+                
+                // Notify server to abort current turn
+                if (ws && ws.readyState === WebSocket.OPEN && sessionId) {
+                  ws.send(JSON.stringify({ type: 'barge_in', sessionId }));
+                }
+              }
+            }
+            silenceStart = null;
+          } else {
+            // Silence detected
+            if (isSpeaking) {
+              if (!silenceStart) {
+                silenceStart = Date.now();
+              } else if (Date.now() - silenceStart > SILENCE_TIMEOUT) {
+                isSpeaking = false;
+                log('Speech ended (silence detected)', 'info');
+                
+                // Try to play any queued audio now that user stopped speaking
+                if (audioQueue.length > 0 && !isPlayingAudio) {
+                  tryPlayAudio();
+                }
+              }
+            }
+          }
+          
+          // Always send audio to server (server does its own VAD)
+          const pcmData = new Int16Array(inputData.length);
+          for (let i = 0; i < inputData.length; i++) {
+            pcmData[i] = Math.max(-32768, Math.min(32767, inputData[i] * 32768));
+          }
+          ws.send(pcmData.buffer);
+        };
+        
+        source.connect(scriptProcessor);
+        scriptProcessor.connect(audioContext.destination);
+        
+        isConversationActive = true;
+        isRecording = true;
+        document.getElementById('recordBtn').textContent = '🔴 End Conversation';
+        document.getElementById('recordBtn').classList.remove('warning');
+        document.getElementById('recordBtn').classList.add('danger');
+        document.getElementById('audioIndicator').classList.add('recording');
+        document.getElementById('audioStatus').textContent = 'Listening...';
+        document.getElementById('aiResponse').textContent = '-';
+        
+        log('Conversation started - speak anytime', 'success');
+        
+      } catch (err) {
+        log(`Microphone error: ${err.message}`, 'error');
+      }
+    }
+    
+    function stopConversation() {
+      if (!isConversationActive) return;
+      
+      isConversationActive = false;
+      isRecording = false;
+      isSpeaking = false;
+      
+      if (scriptProcessor) {
+        scriptProcessor.disconnect();
+        scriptProcessor = null;
+      }
+      
+      if (audioContext) {
+        audioContext.close();
+        audioContext = null;
+      }
+      
+      if (audioStream) {
+        audioStream.getTracks().forEach(track => track.stop());
+        audioStream = null;
+      }
+      
+      clearAudioQueue();
+      
+      document.getElementById('recordBtn').textContent = '🎤 Start Conversation';
+      document.getElementById('recordBtn').classList.remove('danger');
+      document.getElementById('recordBtn').classList.add('warning');
+      document.getElementById('audioIndicator').classList.remove('recording');
+      document.getElementById('audioStatus').textContent = 'Conversation ended';
+      
+      log('Conversation ended', 'info');
+    }
+    
+    // Load saved settings from localStorage
+    document.addEventListener('DOMContentLoaded', () => {
+      const savedSarvam = localStorage.getItem('sarvamKey');
+      const savedGemini = localStorage.getItem('geminiKey');
+      const savedCartesia = localStorage.getItem('cartesiaKey');
+      const savedTtsProvider = localStorage.getItem('ttsProvider');
+      const savedAudioQuality = localStorage.getItem('audioQuality');
+      
+      if (savedSarvam) document.getElementById('sarvamKey').value = savedSarvam;
+      if (savedGemini) document.getElementById('geminiKey').value = savedGemini;
+      if (savedCartesia) document.getElementById('cartesiaKey').value = savedCartesia;
+      if (savedTtsProvider) document.getElementById('ttsProvider').value = savedTtsProvider;
+      if (savedAudioQuality) document.getElementById('audioQuality').value = savedAudioQuality;
+      
+      // Auto-load Cartesia voices if API key is saved
+      if (savedCartesia) {
+        loadCartesiaVoices();
+      }
+    });
+    
+    // Save settings when changed
+    document.getElementById('sarvamKey').addEventListener('change', (e) => {
+      localStorage.setItem('sarvamKey', e.target.value);
+    });
+    document.getElementById('geminiKey').addEventListener('change', (e) => {
+      localStorage.setItem('geminiKey', e.target.value);
+    });
+    document.getElementById('audioQuality').addEventListener('change', (e) => {
+      localStorage.setItem('audioQuality', e.target.value);
+    });
+    document.getElementById('ttsProvider').addEventListener('change', (e) => {
+      localStorage.setItem('ttsProvider', e.target.value);
+    });
+  </script>
+</body>
+</html>
