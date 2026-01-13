@@ -35,6 +35,7 @@ export class TelephonyManager extends EventEmitter {
   private adapters: Map<string, BaseTelephonyAdapter> = new Map();
   private activePipelines: Map<string, VoicePipeline> = new Map();
   private callToSession: Map<string, string> = new Map();  // callId -> sessionId
+  private pendingAudio: Map<string, TelephonyAudioPacket[]> = new Map();  // Buffer for early packets
   private config: TelephonyManagerConfig;
 
   constructor(
@@ -177,6 +178,9 @@ export class TelephonyManager extends EventEmitter {
       // Store and start pipeline
       this.activePipelines.set(call.callId, pipeline);
       await pipeline.start();
+      
+      // Flush any audio that arrived before pipeline was ready
+      this.flushPendingAudio(call.callId);
 
       // Update session status
       await this.sessionManager.updateStatus(session.sessionId, 'active');
@@ -277,7 +281,16 @@ export class TelephonyManager extends EventEmitter {
   private handleAudioReceived(packet: TelephonyAudioPacket): void {
     const pipeline = this.activePipelines.get(packet.callId);
     if (!pipeline) {
-      this.logger.warn('No pipeline for audio packet', { callId: packet.callId });
+      // Buffer early packets until pipeline is ready
+      let buffer = this.pendingAudio.get(packet.callId);
+      if (!buffer) {
+        buffer = [];
+        this.pendingAudio.set(packet.callId, buffer);
+      }
+      // Limit buffer size to prevent memory issues
+      if (buffer.length < 100) {
+        buffer.push(packet);
+      }
       return;
     }
 
@@ -290,6 +303,33 @@ export class TelephonyManager extends EventEmitter {
 
     // Send to pipeline
     pipeline.processAudioChunk(pipelineAudio);
+  }
+  
+  /**
+   * Flush buffered audio packets to pipeline
+   */
+  private flushPendingAudio(callId: string): void {
+    const buffer = this.pendingAudio.get(callId);
+    if (!buffer || buffer.length === 0) return;
+    
+    const pipeline = this.activePipelines.get(callId);
+    if (!pipeline) return;
+    
+    this.logger.info('Flushing buffered audio packets', { 
+      callId, 
+      packetCount: buffer.length 
+    });
+    
+    for (const packet of buffer) {
+      const pipelineAudio = telephonyToPipeline(
+        packet.payload,
+        packet.encoding,
+        packet.sampleRate
+      );
+      pipeline.processAudioChunk(pipelineAudio);
+    }
+    
+    this.pendingAudio.delete(callId);
   }
 
   /**
