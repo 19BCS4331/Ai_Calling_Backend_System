@@ -28,6 +28,8 @@ export class PlivoAdapter extends BaseTelephonyAdapter {
   private config!: PlivoConfig;
   private activeStreams: Map<string, WebSocket> = new Map();  // streamId -> WebSocket
   private callToStream: Map<string, string> = new Map();       // callId -> streamId
+  private audioBuffers: Map<string, Buffer> = new Map();       // callId -> audio buffer
+  private readonly CHUNK_SIZE = 3200;  // 200ms at 8kHz, 16-bit = 3200 bytes
 
   constructor(logger: Logger) {
     super(logger.child({ adapter: 'plivo' }));
@@ -116,12 +118,14 @@ export class PlivoAdapter extends BaseTelephonyAdapter {
       this.activeStreams.delete(streamId);
       this.callToStream.delete(callId);
     }
+    this.audioBuffers.delete(callId);  // Clean up audio buffer
     this.removeSession(callId);
   }
 
   /**
    * Send audio to a call
    * Converts from pipeline format to Plivo format
+   * Buffers audio to send in larger chunks to avoid clipping
    */
   sendAudio(callId: string, audioData: Buffer, sampleRate: number): void {
     const streamId = this.callToStream.get(callId);
@@ -139,23 +143,62 @@ export class PlivoAdapter extends BaseTelephonyAdapter {
     // Convert to telephony format (8kHz linear16)
     const telephonyAudio = pipelineToTelephony(audioData, sampleRate, 'linear16');
     
-    // Send as Plivo playAudio event
-    const message = {
-      event: 'playAudio',
-      media: {
-        contentType: 'audio/x-l16',
-        sampleRate: 8000,
-        payload: telephonyAudio.toString('base64')
-      }
-    };
-
-    ws.send(JSON.stringify(message));
+    // Get or create buffer for this call
+    let buffer = this.audioBuffers.get(callId) || Buffer.alloc(0);
+    buffer = Buffer.concat([buffer, telephonyAudio]);
+    
+    // Send complete chunks
+    while (buffer.length >= this.CHUNK_SIZE) {
+      const chunk = buffer.subarray(0, this.CHUNK_SIZE);
+      buffer = buffer.subarray(this.CHUNK_SIZE);
+      
+      const message = {
+        event: 'playAudio',
+        media: {
+          contentType: 'audio/x-l16',
+          sampleRate: 8000,
+          payload: chunk.toString('base64')
+        }
+      };
+      ws.send(JSON.stringify(message));
+    }
+    
+    // Store remaining buffer
+    this.audioBuffers.set(callId, buffer);
+  }
+  
+  /**
+   * Flush any remaining buffered audio for a call
+   */
+  flushAudio(callId: string): void {
+    const streamId = this.callToStream.get(callId);
+    if (!streamId) return;
+    
+    const ws = this.activeStreams.get(streamId);
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    
+    const buffer = this.audioBuffers.get(callId);
+    if (buffer && buffer.length > 0) {
+      const message = {
+        event: 'playAudio',
+        media: {
+          contentType: 'audio/x-l16',
+          sampleRate: 8000,
+          payload: buffer.toString('base64')
+        }
+      };
+      ws.send(JSON.stringify(message));
+      this.audioBuffers.delete(callId);
+    }
   }
 
   /**
    * Clear buffered audio (for barge-in)
    */
   clearAudio(callId: string): void {
+    // Clear local buffer
+    this.audioBuffers.delete(callId);
+    
     const streamId = this.callToStream.get(callId);
     if (!streamId) return;
 

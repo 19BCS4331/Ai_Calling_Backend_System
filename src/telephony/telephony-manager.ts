@@ -222,9 +222,17 @@ export class TelephonyManager extends EventEmitter {
     pipeline.on('tts_audio_chunk', (chunk: Buffer) => {
       // Get TTS sample rate from config
       const ttsConfig = this.config.defaultTTSConfig as any;
-      let sampleRate = 22050;  // Sarvam default
-      if (ttsConfig.type === 'cartesia') {
-        sampleRate = ttsConfig.audioQuality === 'telephony' ? 8000 : 44100;
+      let sampleRate: number;
+      
+      switch (ttsConfig.type) {
+        case 'cartesia':
+          sampleRate = ttsConfig.audioQuality === 'telephony' ? 8000 : 44100;
+          break;
+        case 'sarvam':
+          sampleRate = 22050;
+          break;
+        default:
+          sampleRate = 22050;
       }
       
       adapter.sendAudio(callId, chunk, sampleRate);
