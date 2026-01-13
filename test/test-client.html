@@ -601,6 +601,11 @@
         case 'session_started':
           sessionId = msg.sessionId;
           log(`Session started: ${sessionId}`, 'success');
+          // Configure audio player with server's audio format
+          if (msg.audioFormat) {
+            serverSampleRate = msg.audioFormat.sampleRate || 44100;
+            log(`Audio format: ${serverSampleRate}Hz, ${msg.audioFormat.bitsPerSample}-bit, ${msg.audioFormat.encoding}`, 'info');
+          }
           updateStatus(`Session: ${sessionId.substring(0, 8)}...`, 'session');
           document.getElementById('startSessionBtn').disabled = true;
           document.getElementById('endSessionBtn').disabled = false;
@@ -638,9 +643,14 @@
         case 'llm_sentence':
           log(`LLM Sentence: ${msg.sentence}`, 'llm');
           break;
+        
+        case 'first_audio_byte':
+          log(`⚡ First audio byte: ${msg.latencyMs}ms`, 'success');
+          break;
           
         case 'turn_complete':
-          log(`Turn complete. E2E Latency: ${msg.metrics?.firstByteLatencyMs}ms`, 'success');
+          const m = msg.metrics || {};
+          log(`Turn complete. First LLM: ${m.firstLLMTokenMs || 0}ms, First Audio: ${m.firstTTSByteMs || 0}ms, Total: ${m.turnDurationMs || 0}ms`, 'success');
           break;
           
         case 'barge_in':
@@ -664,87 +674,291 @@
       }
     }
     
+    // ========================================
+    // AUDIOWORKLET-BASED PCM STREAMING PLAYER
+    // Ring buffer architecture for zero-crackle playback
+    // Audio thread pulls samples at constant rate
+    // Main thread only enqueues - never schedules
+    // ========================================
+    
+    let playbackAudioContext = null;
+    let pcmWorkletNode = null;
+    let isProcessingAudio = false;
+    let serverSampleRate = 44100;
+    let workletReady = false;
+    let workletInitializing = false;  // Prevent race condition
+    
+    // AudioWorklet processor code (embedded as blob)
+    const workletCode = `
+      class PCMStreamProcessor extends AudioWorkletProcessor {
+        constructor() {
+          super();
+          // Ring buffer: 15 seconds at 44.1kHz = 661500 samples
+          // TTS generates faster than real-time, so we need a large buffer
+          this.bufferSize = 661500;
+          this.buffer = new Float32Array(this.bufferSize);
+          this.writeIndex = 0;
+          this.readIndex = 0;
+          this.samplesAvailable = 0;
+          
+          this.port.onmessage = (e) => {
+            if (e.data.type === 'samples') {
+              this.enqueueSamples(e.data.samples);
+            } else if (e.data.type === 'clear') {
+              this.clearBuffer();
+            }
+          };
+        }
+        
+        enqueueSamples(samples) {
+          for (let i = 0; i < samples.length; i++) {
+            this.buffer[this.writeIndex] = samples[i];
+            this.writeIndex = (this.writeIndex + 1) % this.bufferSize;
+            
+            // If we overflow, advance read pointer (drop old samples)
+            if (this.samplesAvailable >= this.bufferSize) {
+              this.readIndex = (this.readIndex + 1) % this.bufferSize;
+            } else {
+              this.samplesAvailable++;
+            }
+          }
+        }
+        
+        clearBuffer() {
+          this.writeIndex = 0;
+          this.readIndex = 0;
+          this.samplesAvailable = 0;
+          this.buffer.fill(0);
+        }
+        
+        process(inputs, outputs, parameters) {
+          const output = outputs[0];
+          const channel = output[0];
+          
+          for (let i = 0; i < channel.length; i++) {
+            if (this.samplesAvailable > 0) {
+              channel[i] = this.buffer[this.readIndex];
+              this.readIndex = (this.readIndex + 1) % this.bufferSize;
+              this.samplesAvailable--;
+            } else {
+              // Underrun: output silence
+              channel[i] = 0;
+            }
+          }
+          
+          // Report buffer status periodically
+          if (Math.random() < 0.01) {
+            this.port.postMessage({
+              type: 'status',
+              samplesAvailable: this.samplesAvailable,
+              bufferMs: Math.round(this.samplesAvailable / sampleRate * 1000)
+            });
+          }
+          
+          return true; // Keep processor alive
+        }
+      }
+      
+      registerProcessor('pcm-stream-processor', PCMStreamProcessor);
+    `;
+    
+    async function initAudioWorklet() {
+      // Prevent multiple simultaneous init attempts
+      if (workletReady || workletInitializing) return;
+      workletInitializing = true;
+      
+      try {
+        playbackAudioContext = new (window.AudioContext || window.webkitAudioContext)({
+          sampleRate: serverSampleRate
+        });
+        
+        // Create blob URL for worklet code
+        const blob = new Blob([workletCode], { type: 'application/javascript' });
+        const workletUrl = URL.createObjectURL(blob);
+        
+        await playbackAudioContext.audioWorklet.addModule(workletUrl);
+        URL.revokeObjectURL(workletUrl);
+        
+        pcmWorkletNode = new AudioWorkletNode(playbackAudioContext, 'pcm-stream-processor');
+        pcmWorkletNode.connect(playbackAudioContext.destination);
+        
+        // Handle status messages from worklet
+        pcmWorkletNode.port.onmessage = (e) => {
+          if (e.data.type === 'status') {
+            const bufferMs = e.data.bufferMs;
+            if (bufferMs > 0) {
+              isPlayingAudio = true;
+              document.getElementById('audioIndicator').classList.add('playing');
+              document.getElementById('audioStatus').textContent = `Playing... (${bufferMs}ms buffered)`;
+            } else {
+              isPlayingAudio = false;
+              document.getElementById('audioIndicator').classList.remove('playing');
+              document.getElementById('audioStatus').textContent = isConversationActive ? 'Listening...' : 'Ready';
+            }
+          }
+        };
+        
+        workletReady = true;
+        log(`AudioWorklet initialized at ${serverSampleRate}Hz`, 'info');
+        
+      } catch (e) {
+        log(`AudioWorklet init failed: ${e.message}, falling back to ScriptProcessor`, 'error');
+        initScriptProcessorFallback();
+      }
+    }
+    
+    // Fallback for browsers without AudioWorklet support
+    // Buffer size: 15 seconds at 44.1kHz = 661500 samples
+    const FALLBACK_BUFFER_SIZE = 661500;
+    let fallbackScriptNode = null;
+    let fallbackBuffer = new Float32Array(FALLBACK_BUFFER_SIZE);
+    let fallbackWriteIdx = 0;
+    let fallbackReadIdx = 0;
+    let fallbackSamplesAvail = 0;
+    
+    function initScriptProcessorFallback() {
+      // Prevent multiple fallback inits
+      if (fallbackScriptNode) return;
+      
+      if (!playbackAudioContext) {
+        playbackAudioContext = new (window.AudioContext || window.webkitAudioContext)({
+          sampleRate: serverSampleRate
+        });
+      }
+      
+      fallbackScriptNode = playbackAudioContext.createScriptProcessor(2048, 1, 1);
+      fallbackScriptNode.onaudioprocess = (e) => {
+        const output = e.outputBuffer.getChannelData(0);
+        for (let i = 0; i < output.length; i++) {
+          if (fallbackSamplesAvail > 0) {
+            output[i] = fallbackBuffer[fallbackReadIdx];
+            fallbackReadIdx = (fallbackReadIdx + 1) % FALLBACK_BUFFER_SIZE;
+            fallbackSamplesAvail--;
+          } else {
+            output[i] = 0;
+          }
+        }
+        
+        // Update UI periodically (not every frame)
+        if (Math.random() < 0.05) {
+          if (fallbackSamplesAvail > 0) {
+            isPlayingAudio = true;
+            document.getElementById('audioIndicator').classList.add('playing');
+            const bufferMs = Math.round(fallbackSamplesAvail / serverSampleRate * 1000);
+            document.getElementById('audioStatus').textContent = `Playing... (${bufferMs}ms buffered)`;
+          } else if (isPlayingAudio) {
+            isPlayingAudio = false;
+            document.getElementById('audioIndicator').classList.remove('playing');
+            document.getElementById('audioStatus').textContent = isConversationActive ? 'Listening...' : 'Ready';
+          }
+        }
+      };
+      fallbackScriptNode.connect(playbackAudioContext.destination);
+      workletReady = true;
+      log(`ScriptProcessor fallback initialized at ${serverSampleRate}Hz`, 'info');
+    }
+    
+    function enqueuePCMSamples(float32Samples) {
+      if (pcmWorkletNode) {
+        // Send to AudioWorklet
+        pcmWorkletNode.port.postMessage({ type: 'samples', samples: float32Samples });
+      } else if (fallbackScriptNode) {
+        // Fallback: enqueue directly
+        for (let i = 0; i < float32Samples.length; i++) {
+          fallbackBuffer[fallbackWriteIdx] = float32Samples[i];
+          fallbackWriteIdx = (fallbackWriteIdx + 1) % FALLBACK_BUFFER_SIZE;
+          if (fallbackSamplesAvail < FALLBACK_BUFFER_SIZE) fallbackSamplesAvail++;
+        }
+      }
+    }
+    
     async function handleAudioData(blob) {
       log(`Received audio chunk: ${blob.size} bytes`, 'audio');
       
-      // Queue audio chunk
-      const audioUrl = URL.createObjectURL(blob);
-      audioQueue.push(audioUrl);
+      // Don't play if user is speaking (barge-in)
+      if (isSpeaking) {
+        return;
+      }
       
-      // Trigger playback check
-      tryPlayAudio();
+      // Initialize on first audio
+      if (!workletReady) {
+        await initAudioWorklet();
+      }
+      
+      // Resume if suspended
+      if (playbackAudioContext && playbackAudioContext.state === 'suspended') {
+        await playbackAudioContext.resume();
+      }
+      
+      try {
+        const arrayBuffer = await blob.arrayBuffer();
+        let pcmData = arrayBuffer;
+        
+        // Check if this is a WAV file (starts with "RIFF")
+        const header = new Uint8Array(arrayBuffer.slice(0, 4));
+        const isWav = header[0] === 0x52 && header[1] === 0x49 && header[2] === 0x46 && header[3] === 0x46; // "RIFF"
+        
+        if (isWav) {
+          // Strip 44-byte WAV header to get raw PCM
+          pcmData = arrayBuffer.slice(44);
+        }
+        
+        // Ensure byte length is multiple of 2 for Int16Array
+        if (pcmData.byteLength % 2 !== 0) {
+          pcmData = pcmData.slice(0, pcmData.byteLength - 1);
+        }
+        
+        const int16Array = new Int16Array(pcmData);
+        
+        // Convert Int16 PCM to Float32 [-1, 1]
+        const float32Samples = new Float32Array(int16Array.length);
+        for (let i = 0; i < int16Array.length; i++) {
+          float32Samples[i] = int16Array[i] / 32768.0;
+        }
+        
+        // Enqueue to ring buffer (audio thread will pull)
+        enqueuePCMSamples(float32Samples);
+        
+        isPlayingAudio = true;
+        isProcessingAudio = true;
+        
+      } catch (e) {
+        log(`PCM processing error: ${e.message}`, 'error');
+      }
+    }
+    
+    function processAudioQueue() {
+      // Not needed - audio thread pulls from ring buffer
     }
     
     function tryPlayAudio() {
-      // Don't start if already playing or user is speaking
-      if (isPlayingAudio || isSpeaking) {
-        return;
-      }
-      
-      if (audioQueue.length === 0) {
-        return;
-      }
-      
-      playNextAudioChunk();
+      // Not needed - audio thread pulls from ring buffer
     }
     
     async function playNextAudioChunk() {
-      if (audioQueue.length === 0) {
-        isPlayingAudio = false;
-        document.getElementById('audioIndicator').classList.remove('playing');
-        document.getElementById('audioStatus').textContent = isConversationActive ? 'Listening...' : 'Ready';
-        return;
-      }
-      
-      // Don't play if user is speaking (VAD detected voice)
-      if (isSpeaking) {
-        isPlayingAudio = false;
-        return;
-      }
-      
-      isPlayingAudio = true;
-      const audioUrl = audioQueue.shift();
-      const player = document.getElementById('audioPlayer');
-      
-      document.getElementById('audioIndicator').classList.add('playing');
-      document.getElementById('audioStatus').textContent = `Playing response... (${audioQueue.length} queued)`;
-      
-      player.src = audioUrl;
-      
-      player.onended = () => {
-        URL.revokeObjectURL(audioUrl);
-        playNextAudioChunk();
-      };
-      
-      player.onerror = () => {
-        log(`Audio playback error`, 'error');
-        URL.revokeObjectURL(audioUrl);
-        playNextAudioChunk();
-      };
-      
-      try {
-        await player.play();
-      } catch (e) {
-        log(`Audio play() failed: ${e.message}`, 'error');
-        URL.revokeObjectURL(audioUrl);
-        playNextAudioChunk();
-      }
+      // Not needed - audio thread pulls from ring buffer
     }
     
     function clearAudioQueue() {
-      // Clear pending audio
+      // Clear ring buffer immediately (barge-in)
+      if (pcmWorkletNode) {
+        pcmWorkletNode.port.postMessage({ type: 'clear' });
+      }
+      
+      // Clear fallback buffer
+      fallbackWriteIdx = 0;
+      fallbackReadIdx = 0;
+      fallbackSamplesAvail = 0;
+      
+      isPlayingAudio = false;
+      isProcessingAudio = false;
+      
+      // Legacy cleanup
       audioQueue.forEach(url => URL.revokeObjectURL(url));
       audioQueue = [];
-      isPlayingAudio = false;
-      
-      const player = document.getElementById('audioPlayer');
-      player.onended = null;
-      player.onerror = null;
-      player.pause();
-      player.currentTime = 0;
-      player.src = '';
       
       document.getElementById('audioIndicator').classList.remove('playing');
+      document.getElementById('audioStatus').textContent = isConversationActive ? 'Listening...' : 'Ready';
     }
     
     async function toggleConversation() {

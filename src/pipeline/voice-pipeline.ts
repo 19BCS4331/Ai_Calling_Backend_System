@@ -62,6 +62,11 @@ export class VoicePipeline extends EventEmitter {
   private currentTurnStart: number = 0;
   private pendingSentences: string[] = [];
   private metrics: PipelineMetrics;
+  
+  // Low-latency streaming state
+  private firstLLMTokenTime: number = 0;
+  private firstTTSByteTime: number = 0;
+  private ttsSessionReady: boolean = false;
 
   constructor(
     session: CallSession,
@@ -258,13 +263,17 @@ export class VoicePipeline extends EventEmitter {
     const stage = this.startStage('llm');
     let fullResponse = '';
     const toolCalls: ToolCall[] = [];
-    const sentencesForTTS: string[] = [];  // Queue sentences instead of sending immediately
+    
+    // Reset first-byte tracking for this turn
+    this.firstLLMTokenTime = 0;
+    this.firstTTSByteTime = 0;
+    this.ttsSessionReady = false;
 
     // Get tool definitions from registry
     const tools = this.toolRegistry.getDefinitions();
 
-    // Start TTS session for streaming audio output
-    await this.startTTSSession();
+    // Start TTS session FIRST for streaming audio output (don't block)
+    this.startTTSSessionAsync();
 
     this.llmSession = await this.llmProvider.generateStream(
       this.session.messages,
@@ -272,6 +281,13 @@ export class VoicePipeline extends EventEmitter {
       this.session.llmConfig.systemPrompt,
       {
         onToken: (chunk) => {
+          // Track first LLM token time
+          if (this.firstLLMTokenTime === 0) {
+            this.firstLLMTokenTime = Date.now();
+            this.logger.debug('First LLM token received', { 
+              latencyMs: this.firstLLMTokenTime - this.currentTurnStart 
+            });
+          }
           this.emit('llm_token', chunk.content);
         },
 
@@ -289,8 +305,9 @@ export class VoicePipeline extends EventEmitter {
             this.session.ttsConfig.voice.language = detectedLang;
           }
           
-          // Queue sentence for TTS (don't send immediately to avoid race conditions)
-          sentencesForTTS.push(sentence);
+          // STREAM IMMEDIATELY: Send each sentence to TTS as soon as it arrives
+          // This is critical for low-latency - don't wait for full response
+          this.streamSentenceToTTS(sentence);
         },
 
         onToolCall: async (toolCall) => {
@@ -317,6 +334,9 @@ export class VoicePipeline extends EventEmitter {
           if (response.usage) {
             this.session.metrics.tokenCount += response.usage.totalTokens;
           }
+          
+          // Signal TTS that no more text is coming (but don't wait for audio)
+          this.signalTTSComplete();
         },
 
         onError: (error) => {
@@ -327,38 +347,39 @@ export class VoicePipeline extends EventEmitter {
     );
 
     await this.llmSession.start();
-
-    // Send ALL sentences to TTS as a single combined text block
-    // This prevents race conditions where rapid individual sends get dropped
-    if (this.ttsSession?.isSessionActive() && sentencesForTTS.length > 0) {
-      const combinedText = sentencesForTTS.join(' ');
-      this.logger.debug('Sending combined text to TTS', { 
-        sentenceCount: sentencesForTTS.length,
-        totalLength: combinedText.length 
-      });
-      this.ttsSession.sendText(combinedText);
-    }
-
-    // Wait for TTS to complete
-    if (this.ttsSession?.isSessionActive()) {
-      await this.ttsSession.end();
-    }
+    
+    // LLM is done - turn is logically complete
+    // TTS continues streaming in background, user can barge-in
   }
-
-  private async startTTSSession(): Promise<void> {
+  
+  /**
+   * Start TTS session asynchronously (don't block LLM)
+   */
+  private startTTSSessionAsync(): void {
     const stage = this.startStage('tts');
 
     this.ttsSession = this.ttsProvider.createStreamingSession(
       {
         onAudioChunk: (chunk: Buffer) => {
-          this.isTTSPlaying = true;  // Mark TTS as playing when audio starts
+          // Track first TTS audio byte
+          if (this.firstTTSByteTime === 0) {
+            this.firstTTSByteTime = Date.now();
+            const firstByteLatency = this.firstTTSByteTime - this.currentTurnStart;
+            this.logger.info('First TTS audio byte', { 
+              latencyMs: firstByteLatency,
+              chunkSize: chunk.length
+            });
+            this.emit('first_audio_byte', { latencyMs: firstByteLatency });
+          }
+          
+          this.isTTSPlaying = true;
           this.emit('tts_audio_chunk', chunk);
         },
 
         onComplete: (result: TTSResult) => {
-          this.isTTSPlaying = false;  // Mark TTS as done
+          this.isTTSPlaying = false;
           this.endStage(stage);
-          this.logger.debug('TTS complete', { 
+          this.logger.debug('TTS streaming complete', { 
             durationMs: result.durationMs,
             latencyMs: result.latencyMs 
           });
@@ -374,7 +395,48 @@ export class VoicePipeline extends EventEmitter {
       this.session.ttsConfig.voice.language
     );
 
-    await this.ttsSession.start();
+    // Start session in background
+    this.ttsSession.start().then(() => {
+      this.ttsSessionReady = true;
+      this.logger.debug('TTS session ready for streaming');
+    }).catch((error) => {
+      this.logger.error('Failed to start TTS session', { error: error.message });
+    });
+  }
+  
+  /**
+   * Stream a sentence to TTS immediately (low-latency)
+   */
+  private streamSentenceToTTS(sentence: string): void {
+    if (!sentence.trim()) return;
+    
+    // Wait briefly for TTS session if not ready yet
+    if (!this.ttsSessionReady || !this.ttsSession?.isSessionActive()) {
+      // Retry after short delay
+      setTimeout(() => {
+        if (this.ttsSession?.isSessionActive()) {
+          this.logger.debug('Streaming sentence to TTS', { length: sentence.length });
+          this.ttsSession.sendText(sentence);
+        }
+      }, 50);
+      return;
+    }
+    
+    this.logger.debug('Streaming sentence to TTS', { length: sentence.length });
+    this.ttsSession.sendText(sentence);
+  }
+  
+  /**
+   * Signal TTS that no more text is coming
+   * Don't wait for audio completion - let it stream in background
+   */
+  private signalTTSComplete(): void {
+    if (this.ttsSession?.isSessionActive()) {
+      // End the session but don't await - audio continues streaming
+      this.ttsSession.end().catch((error) => {
+        this.logger.error('TTS end error', { error: error.message });
+      });
+    }
   }
 
   private async executeToolCall(toolCall: ToolCall): Promise<void> {
@@ -477,36 +539,41 @@ export class VoicePipeline extends EventEmitter {
   private emitTurnComplete(): void {
     const turnDuration = Date.now() - this.currentTurnStart;
     
-    // Calculate end-to-end latency
-    const e2eLatency = this.calculateE2ELatency();
-    this.session.metrics.e2eLatencyMs.push(e2eLatency);
+    // Calculate first-byte latency (time from turn start to first TTS audio byte)
+    const firstByteLatency = this.firstTTSByteTime > 0 
+      ? this.firstTTSByteTime - this.currentTurnStart 
+      : 0;
+    
+    // Calculate per-stage latencies
+    const firstLLMTokenLatency = this.firstLLMTokenTime > 0 
+      ? this.firstLLMTokenTime - this.currentTurnStart 
+      : 0;
+    
+    this.session.metrics.e2eLatencyMs.push(firstByteLatency);
     this.session.metrics.turnCount++;
 
     this.metrics.totalLatencyMs = turnDuration;
-    this.metrics.firstByteLatencyMs = e2eLatency;
+    this.metrics.firstByteLatencyMs = firstByteLatency;
 
-    this.emit('turn_complete', { ...this.metrics });
+    // Emit detailed metrics
+    const detailedMetrics = {
+      ...this.metrics,
+      firstLLMTokenMs: firstLLMTokenLatency,
+      firstTTSByteMs: firstByteLatency,
+      turnDurationMs: turnDuration
+    };
+
+    this.emit('turn_complete', detailedMetrics);
     
     this.logger.info('Turn complete', {
       turnDuration,
-      e2eLatency,
+      firstLLMTokenMs: firstLLMTokenLatency,
+      firstTTSByteMs: firstByteLatency,
       turnCount: this.session.metrics.turnCount
     });
 
     // Reset metrics for next turn
     this.metrics = this.createEmptyMetrics();
-  }
-
-  private calculateE2ELatency(): number {
-    // Time from first audio to first TTS audio chunk
-    const sttStage = this.metrics.stages.find(s => s.name === 'stt');
-    const ttsStage = this.metrics.stages.find(s => s.name === 'tts');
-    
-    if (sttStage?.startTime && ttsStage?.startTime) {
-      return ttsStage.startTime - sttStage.startTime;
-    }
-    
-    return 0;
   }
 
   /**

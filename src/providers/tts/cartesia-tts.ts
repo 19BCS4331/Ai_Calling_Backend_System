@@ -280,6 +280,9 @@ class CartesiaTTSStreamSession extends TTSStreamSession {
     }
   }
 
+  // Track if this is the first message (needs full config) vs continuation
+  private messagesSent: number = 0;
+  
   private sendTextMessage(text: string): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       this.logger.warn('Cannot send text - WebSocket not ready');
@@ -292,6 +295,8 @@ class CartesiaTTSStreamSession extends TTSStreamSession {
     // Map language to Cartesia format (e.g., 'en-US' -> 'en', 'hi-IN' -> 'hi')
     const lang = this.language.split('-')[0];
 
+    // Use continue: true to keep context open for more text
+    // This allows streaming multiple sentences to the same context
     const message = {
       model_id: this.modelId,
       transcript: text,
@@ -307,10 +312,44 @@ class CartesiaTTSStreamSession extends TTSStreamSession {
         sample_rate: this.qualityPreset.sampleRate
       },
       add_timestamps: false,
-      continue: false
+      continue: true  // Keep context open for more input
     };
 
-    this.logger.debug('Sending text to Cartesia TTS', { textLength: text.length, contextId: this.contextId });
+    this.messagesSent++;
+    this.logger.debug('Sending text to Cartesia TTS', { 
+      textLength: text.length, 
+      contextId: this.contextId,
+      messageNum: this.messagesSent 
+    });
+    this.ws.send(JSON.stringify(message));
+  }
+  
+  /**
+   * Signal end of input - send final message with continue: false
+   */
+  private sendEndSignal(): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    
+    // Send empty transcript with continue: false to signal end
+    const message = {
+      model_id: this.modelId,
+      transcript: '',
+      voice: {
+        mode: 'id',
+        id: this.voice.voiceId || (this.voice as any).id || 'f786b574-daa5-4673-aa0c-cbe3e8534c02'
+      },
+      language: this.language.split('-')[0],
+      context_id: this.contextId,
+      output_format: {
+        container: 'raw',
+        encoding: this.qualityPreset.encoding,
+        sample_rate: this.qualityPreset.sampleRate
+      },
+      add_timestamps: false,
+      continue: false  // Signal end of input
+    };
+    
+    this.logger.debug('Sending end signal to Cartesia TTS', { contextId: this.contextId });
     this.ws.send(JSON.stringify(message));
   }
 
@@ -320,6 +359,9 @@ class CartesiaTTSStreamSession extends TTSStreamSession {
     return new Promise((resolve) => {
       this.completionResolver = resolve;
 
+      // Send end signal to close the context
+      this.sendEndSignal();
+      
       // Wait for done message or timeout
       setTimeout(() => {
         if (this.completionResolver) {
@@ -348,6 +390,14 @@ class CartesiaTTSStreamSession extends TTSStreamSession {
     this.finalizeSession();
   }
 
+  // Buffer for accumulating PCM before emitting as WAV
+  // Target ~100ms chunks to reduce boundary artifacts while maintaining low latency
+  private streamBuffer: Buffer[] = [];
+  private streamBufferBytes: number = 0;
+  // 100ms at 22050Hz, 16-bit = 22050 * 0.1 * 2 = 4410 bytes
+  // But Cartesia uses 44100Hz typically, so 44100 * 0.1 * 2 = 8820 bytes
+  private readonly MIN_CHUNK_BYTES = 8000; // ~90ms at 44.1kHz 16-bit
+  
   private handleMessage(data: WebSocket.Data): void {
     try {
       const message = JSON.parse(data.toString());
@@ -355,30 +405,38 @@ class CartesiaTTSStreamSession extends TTSStreamSession {
       switch (message.type) {
         case 'chunk':
           if (message.data) {
-            // Accumulate PCM chunks - will convert to WAV on done
             const pcmChunk = Buffer.from(message.data, 'base64');
+            
+            // Accumulate PCM chunks
+            this.streamBuffer.push(pcmChunk);
+            this.streamBufferBytes += pcmChunk.length;
+            
+            // Emit when we have enough data for smooth playback
+            if (this.streamBufferBytes >= this.MIN_CHUNK_BYTES) {
+              this.flushStreamBuffer();
+            }
+            
+            // Track for metrics
             this.pcmBuffer.push(pcmChunk);
           }
           break;
 
         case 'done':
+          // Flush any remaining buffered audio
+          if (this.streamBufferBytes > 0) {
+            this.flushStreamBuffer();
+          }
+          
           this.logger.debug('Cartesia TTS generation complete', { 
             contextId: this.contextId,
-            pcmChunks: this.pcmBuffer.length 
+            pcmChunks: this.pcmBuffer.length,
+            totalBytes: this.pcmBuffer.reduce((sum, b) => sum + b.length, 0)
           });
           
-          // Convert accumulated PCM to single WAV and emit
-          if (this.pcmBuffer.length > 0) {
-            const allPcm = Buffer.concat(this.pcmBuffer);
-            const wavBuffer = this.pcmToWav(
-              allPcm, 
-              this.qualityPreset.sampleRate, 
-              1, 
-              this.qualityPreset.bitsPerSample
-            );
-            this.emitAudioChunk(wavBuffer);
-            this.pcmBuffer = [];
-          }
+          // Reset for next stream
+          this.pcmBuffer = [];
+          this.streamBuffer = [];
+          this.streamBufferBytes = 0;
           
           if (this.completionResolver) {
             this.completionResolver();
@@ -412,39 +470,67 @@ class CartesiaTTSStreamSession extends TTSStreamSession {
   }
 
   /**
+   * Flush accumulated PCM buffer as a single WAV chunk
+   */
+  private flushStreamBuffer(): void {
+    if (this.streamBuffer.length === 0) return;
+    
+    // Concatenate all buffered PCM chunks
+    const pcmData = Buffer.concat(this.streamBuffer);
+    
+    // Wrap with WAV header and emit
+    const wavChunk = this.pcmToWav(
+      pcmData,
+      this.qualityPreset.sampleRate,
+      1,
+      this.qualityPreset.bitsPerSample
+    );
+    this.emitAudioChunk(wavChunk);
+    
+    // Reset buffer
+    this.streamBuffer = [];
+    this.streamBufferBytes = 0;
+  }
+  
+  /**
+   * Create WAV header for streaming audio
+   * Uses placeholder size that browser will handle
+   */
+  private createWavHeader(dataSize: number, sampleRate: number, channels: number, bitsPerSample: number): Buffer {
+    const byteRate = sampleRate * channels * (bitsPerSample / 8);
+    const blockAlign = channels * (bitsPerSample / 8);
+    const headerSize = 44;
+    
+    const wavHeader = Buffer.alloc(headerSize);
+    
+    // RIFF header
+    wavHeader.write('RIFF', 0);
+    wavHeader.writeUInt32LE(36 + dataSize, 4);
+    wavHeader.write('WAVE', 8);
+    
+    // fmt chunk
+    wavHeader.write('fmt ', 12);
+    wavHeader.writeUInt32LE(16, 16);           // Subchunk1Size (16 for PCM)
+    wavHeader.writeUInt16LE(1, 20);            // AudioFormat (1 = PCM)
+    wavHeader.writeUInt16LE(channels, 22);     // NumChannels
+    wavHeader.writeUInt32LE(sampleRate, 24);   // SampleRate
+    wavHeader.writeUInt32LE(byteRate, 28);     // ByteRate
+    wavHeader.writeUInt16LE(blockAlign, 32);   // BlockAlign
+    wavHeader.writeUInt16LE(bitsPerSample, 34);// BitsPerSample
+    
+    // data chunk
+    wavHeader.write('data', 36);
+    wavHeader.writeUInt32LE(dataSize, 40);
+    
+    return wavHeader;
+  }
+
+  /**
    * Convert raw PCM audio to WAV format for browser playback
    */
   private pcmToWav(pcmData: Buffer, sampleRate: number, channels: number, bitsPerSample: number): Buffer {
-    const byteRate = sampleRate * channels * (bitsPerSample / 8);
-    const blockAlign = channels * (bitsPerSample / 8);
-    const dataSize = pcmData.length;
-    const headerSize = 44;
-    
-    const wavBuffer = Buffer.alloc(headerSize + dataSize);
-    
-    // RIFF header
-    wavBuffer.write('RIFF', 0);
-    wavBuffer.writeUInt32LE(36 + dataSize, 4);
-    wavBuffer.write('WAVE', 8);
-    
-    // fmt chunk
-    wavBuffer.write('fmt ', 12);
-    wavBuffer.writeUInt32LE(16, 16);           // Subchunk1Size (16 for PCM)
-    wavBuffer.writeUInt16LE(1, 20);            // AudioFormat (1 = PCM)
-    wavBuffer.writeUInt16LE(channels, 22);     // NumChannels
-    wavBuffer.writeUInt32LE(sampleRate, 24);   // SampleRate
-    wavBuffer.writeUInt32LE(byteRate, 28);     // ByteRate
-    wavBuffer.writeUInt16LE(blockAlign, 32);   // BlockAlign
-    wavBuffer.writeUInt16LE(bitsPerSample, 34);// BitsPerSample
-    
-    // data chunk
-    wavBuffer.write('data', 36);
-    wavBuffer.writeUInt32LE(dataSize, 40);
-    
-    // Copy PCM data
-    pcmData.copy(wavBuffer, 44);
-    
-    return wavBuffer;
+    const header = this.createWavHeader(pcmData.length, sampleRate, channels, bitsPerSample);
+    return Buffer.concat([header, pcmData]);
   }
 
   private finalizeSession(): void {

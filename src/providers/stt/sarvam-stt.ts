@@ -146,19 +146,19 @@ class SarvamSTTStreamSession extends STTStreamSession {
     const languageCode = this.mapLanguageCode(this.sessionConfig.language);
     
     // Build WebSocket URL with query parameters per Sarvam AsyncAPI spec
-    // Note: language-code uses hyphen, not underscore
     const params = new URLSearchParams({
       'language-code': languageCode,
       'model': this.sessionConfig.model,
       'sample_rate': this.sessionConfig.sampleRate.toString(),
+      'input_audio_codec': 'pcm_s16le',  // Required for raw PCM audio
       'high_vad_sensitivity': 'true',
       'vad_signals': 'true'
     });
 
     const wsUrl = `${this.sessionConfig.wsUrl}?${params.toString()}`;
 
-    this.logger.debug('Connecting to Sarvam STT', { 
-      url: this.sessionConfig.wsUrl,
+    this.logger.info('Connecting to Sarvam STT', { 
+      url: wsUrl,
       language: languageCode,
       model: this.sessionConfig.model
     });
@@ -173,7 +173,7 @@ class SarvamSTTStreamSession extends STTStreamSession {
 
       this.ws.on('open', () => {
         this.isConnected = true;
-        this.logger.debug('Sarvam STT WebSocket connected');
+        this.logger.info('Sarvam STT WebSocket connected successfully');
         
         // Send any pending audio chunks in correct JSON format
         for (const chunk of this.pendingChunks) {
@@ -202,7 +202,7 @@ class SarvamSTTStreamSession extends STTStreamSession {
       });
 
       this.ws.on('close', (code, reason) => {
-        this.logger.debug('Sarvam STT WebSocket closed', { code, reason: reason.toString() });
+        this.logger.info('Sarvam STT WebSocket closed', { code, reason: reason.toString() });
         this.isConnected = false;
         this.isActive = false;
         this.emitEnd();
@@ -210,13 +210,30 @@ class SarvamSTTStreamSession extends STTStreamSession {
     });
   }
 
+  private _writeCount: number = 0;
+  
   write(audioChunk: Buffer): void {
     if (!this.isActive) {
-      this.logger.warn('Attempted to write to inactive STT session');
+      this.logger.warn('Attempted to write to inactive STT session', {
+        isConnected: this.isConnected,
+        wsState: this.ws?.readyState,
+        chunkSize: audioChunk.length
+      });
       return;
     }
 
+    // Log first few writes to confirm audio is flowing
+    this._writeCount++;
+    if (this._writeCount <= 3 || this._writeCount % 50 === 0) {
+      this.logger.info('Writing audio to Sarvam STT', { 
+        writeCount: this._writeCount, 
+        chunkSize: audioChunk.length,
+        isConnected: this.isConnected
+      });
+    }
+
     // Format audio as JSON per Sarvam AsyncAPI spec
+    // Note: encoding must be 'audio/wav', input_audio_codec in URL specifies actual format
     const audioMessage = {
       audio: {
         data: audioChunk.toString('base64'),
@@ -272,7 +289,12 @@ class SarvamSTTStreamSession extends STTStreamSession {
     try {
       const message = JSON.parse(data.toString());
       
-      this.logger.debug('Sarvam STT message received', { type: message.type, data: message.data });
+      // Log ALL messages from Sarvam to debug
+      this.logger.info('Sarvam STT message received', { 
+        type: message.type, 
+        hasData: !!message.data,
+        rawPreview: data.toString().substring(0, 200)
+      });
       
       // Handle response format per Sarvam AsyncAPI spec:
       // { type: "data" | "error" | "events", data: {...} }

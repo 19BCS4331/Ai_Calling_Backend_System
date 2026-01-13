@@ -481,9 +481,28 @@ export class APIServer {
     // Update session status
     await this.sessionManager.updateStatus(session.sessionId, 'active');
 
+    // Send audio format info so client can configure playback correctly
+    // Sample rate depends on TTS provider:
+    // - Cartesia: 44100Hz (web) or 8000Hz (telephony)
+    // - Sarvam: 22050Hz
+    let sampleRate = 44100;
+    if (ttsConfig.type === 'sarvam') {
+      sampleRate = 22050;
+    } else if (ttsConfig.type === 'cartesia' && ttsConfig.audioQuality === 'telephony') {
+      sampleRate = 8000;
+    }
+    
+    const audioFormat = {
+      sampleRate,
+      bitsPerSample: 16,
+      channels: 1,
+      encoding: 'pcm_s16le'  // Raw PCM, signed 16-bit little-endian
+    };
+    
     ws.send(JSON.stringify({
       type: 'session_started',
-      sessionId: session.sessionId
+      sessionId: session.sessionId,
+      audioFormat
     }));
 
     this.logger.info('Voice session started', { 
@@ -518,6 +537,11 @@ export class APIServer {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(chunk);
       }
+    });
+
+    pipeline.on('first_audio_byte', (data: { latencyMs: number }) => {
+      ws.send(JSON.stringify({ type: 'first_audio_byte', sessionId, latencyMs: data.latencyMs }));
+      this.logger.info('First audio byte sent to client', { sessionId, latencyMs: data.latencyMs });
     });
 
     pipeline.on('turn_complete', (metrics: any) => {

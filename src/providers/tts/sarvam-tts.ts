@@ -153,7 +153,7 @@ export class SarvamTTSProvider extends TTSProvider {
         pace: config.pace ?? effectiveVoice.speakingRate ?? 1.0,
         minBufferSize: config.minBufferSize ?? 50,
         maxChunkLength: config.maxChunkLength ?? 200,
-        outputAudioCodec: this.mapAudioFormat(config.audioFormat?.encoding || 'MP3'),
+        outputAudioCodec: 'wav',  // Use WAV for PCM audio (Sarvam API format)
         outputAudioBitrate: config.outputAudioBitrate ?? '128k'
       }
     );
@@ -424,7 +424,7 @@ class SarvamTTSStreamSession extends TTSStreamSession {
     const result: TTSResult = {
       audioContent: totalAudio,
       audioFormat: {
-        encoding: 'MP3',
+        encoding: 'LINEAR16',
         sampleRateHertz: 22050,
         channels: 1
       },
