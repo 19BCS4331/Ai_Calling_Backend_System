@@ -67,6 +67,7 @@ export class VoicePipeline extends EventEmitter {
   private firstLLMTokenTime: number = 0;
   private firstTTSByteTime: number = 0;
   private ttsSessionReady: boolean = false;
+  private ttsSentText: boolean = false;  // Track if any text was sent to TTS
 
   constructor(
     session: CallSession,
@@ -417,6 +418,7 @@ export class VoicePipeline extends EventEmitter {
         if (this.ttsSession?.isSessionActive()) {
           this.logger.debug('Streaming sentence to TTS', { length: sentence.length });
           this.ttsSession.sendText(sentence);
+          this.ttsSentText = true;
         }
       }, 50);
       return;
@@ -424,6 +426,7 @@ export class VoicePipeline extends EventEmitter {
     
     this.logger.debug('Streaming sentence to TTS', { length: sentence.length });
     this.ttsSession.sendText(sentence);
+    this.ttsSentText = true;
   }
   
   /**
@@ -431,12 +434,16 @@ export class VoicePipeline extends EventEmitter {
    * Don't wait for audio completion - let it stream in background
    */
   private signalTTSComplete(): void {
-    if (this.ttsSession?.isSessionActive()) {
+    // Only end TTS session if we actually sent text to it
+    // Otherwise Cartesia will error with "No valid transcripts passed"
+    if (this.ttsSession?.isSessionActive() && this.ttsSentText) {
       // End the session but don't await - audio continues streaming
       this.ttsSession.end().catch((error) => {
         this.logger.error('TTS end error', { error: error.message });
       });
     }
+    // Reset flag for next turn
+    this.ttsSentText = false;
   }
 
   private async executeToolCall(toolCall: ToolCall): Promise<void> {

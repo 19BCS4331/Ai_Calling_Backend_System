@@ -54,6 +54,14 @@ async function main(): Promise<void> {
       n8nBaseUrl: process.env.N8N_BASE_URL,
       n8nApiKey: process.env.N8N_API_KEY
     } : undefined,
+    // Auto-connect to n8n MCP server for tools (used by telephony)
+    // Uses N8N_MCP_URL if set, otherwise derives from N8N_BASE_URL
+    mcpClients: (process.env.N8N_MCP_URL || process.env.N8N_BASE_URL) ? [{
+      name: 'n8n-tools',
+      transport: 'sse' as const,
+      url: process.env.N8N_MCP_URL || `${process.env.N8N_BASE_URL}/mcp/backendtest/goldloan`,
+      apiKey: process.env.N8N_MCP_API_KEY || process.env.N8N_API_KEY
+    }] : undefined,
     enableTelephony: process.env.ENABLE_TELEPHONY === 'true',
     telephonyConfig: process.env.ENABLE_TELEPHONY === 'true' ? {
       adapters: [{
