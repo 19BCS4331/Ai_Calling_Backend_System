@@ -9,6 +9,7 @@ dotenv.config();
 import { createLogger } from './utils/logger';
 import { SessionManager, SessionManagerConfig } from './session/session-manager';
 import { APIServer, APIServerConfig } from './server/api-server';
+import { TelephonyConfig } from './telephony';
 
 // Import providers to register them
 import './providers/stt/sarvam-stt';
@@ -52,6 +53,41 @@ async function main(): Promise<void> {
       name: process.env.MCP_SERVER_NAME || 'voice-agent-mcp',
       n8nBaseUrl: process.env.N8N_BASE_URL,
       n8nApiKey: process.env.N8N_API_KEY
+    } : undefined,
+    enableTelephony: process.env.ENABLE_TELEPHONY === 'true',
+    telephonyConfig: process.env.ENABLE_TELEPHONY === 'true' ? {
+      adapters: [{
+        provider: 'plivo',
+        credentials: {
+          authId: process.env.PLIVO_AUTH_ID || '',
+          authToken: process.env.PLIVO_AUTH_TOKEN || ''
+        },
+        webhookBaseUrl: process.env.WEBHOOK_BASE_URL || '',
+        defaultFromNumber: process.env.PLIVO_FROM_NUMBER
+      }] as TelephonyConfig[],
+      defaultSTTConfig: {
+        type: 'sarvam',
+        credentials: { apiKey: process.env.SARVAM_API_KEY || '' },
+        language: 'en-IN',
+        sampleRateHertz: 16000
+      },
+      defaultLLMConfig: {
+        type: 'gemini',
+        credentials: { apiKey: process.env.GEMINI_API_KEY || '' },
+        model: process.env.LLM_MODEL || 'gemini-2.0-flash',
+        systemPrompt: process.env.TELEPHONY_SYSTEM_PROMPT || 'You are a helpful voice assistant on a phone call. Be concise and natural.',
+        temperature: 0.7
+      },
+      defaultTTSConfig: {
+        type: 'sarvam',
+        credentials: { apiKey: process.env.SARVAM_API_KEY || '' },
+        voice: {
+          voiceId: process.env.TTS_VOICE_ID || 'anushka',
+          language: 'en-IN',
+          gender: 'female'
+        }
+      },
+      systemPrompt: process.env.TELEPHONY_SYSTEM_PROMPT || 'You are a helpful voice assistant on a phone call. Be concise and natural.'
     } : undefined
   };
 
@@ -81,7 +117,8 @@ async function main(): Promise<void> {
   logger.info('AI Voice Calling Backend is running', {
     port: serverConfig.port,
     host: serverConfig.host,
-    mcp: serverConfig.enableMCP
+    mcp: serverConfig.enableMCP,
+    telephony: serverConfig.enableTelephony
   });
 }
 

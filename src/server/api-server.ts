@@ -18,6 +18,7 @@ import { STTProviderFactory } from '../providers/base/stt-provider';
 import { LLMProviderFactory } from '../providers/base/llm-provider';
 import { TTSProviderFactory } from '../providers/base/tts-provider';
 import { InMemoryMetrics, CostTracker } from '../utils/logger';
+import { TelephonyManager, TelephonyManagerConfig, PlivoAdapter, TelephonyConfig } from '../telephony';
 
 export interface APIServerConfig {
   port: number;
@@ -31,6 +32,14 @@ export interface APIServerConfig {
     n8nApiKey?: string;
   };
   mcpClients?: MCPClientConfig[];  // External MCP servers to connect to
+  enableTelephony?: boolean;
+  telephonyConfig?: {
+    adapters: TelephonyConfig[];
+    defaultSTTConfig: STTConfig;
+    defaultLLMConfig: LLMConfig;
+    defaultTTSConfig: TTSConfig;
+    systemPrompt: string;
+  };
 }
 
 export class APIServer {
@@ -49,6 +58,7 @@ export class APIServer {
   
   private activePipelines: Map<string, VoicePipeline> = new Map();
   private activeConnections: Map<string, WebSocket> = new Map();
+  private telephonyManager: TelephonyManager | null = null;
 
   constructor(
     config: APIServerConfig,
@@ -81,6 +91,86 @@ export class APIServer {
     if (config.mcpClients && config.mcpClients.length > 0) {
       this.setupMCPClients(config.mcpClients);
     }
+    
+    // Initialize telephony if enabled
+    if (config.enableTelephony && config.telephonyConfig) {
+      this.setupTelephony(config.telephonyConfig);
+    }
+  }
+  
+  /**
+   * Setup telephony manager and routes
+   */
+  private async setupTelephony(config: TelephonyManagerConfig): Promise<void> {
+    this.telephonyManager = new TelephonyManager(
+      config,
+      this.sessionManager,
+      this.toolRegistry,
+      this.logger
+    );
+    
+    await this.telephonyManager.init();
+    
+    // Add telephony routes
+    this.setupTelephonyRoutes();
+    
+    this.logger.info('Telephony layer initialized', {
+      adapters: config.adapters.map(a => a.provider)
+    });
+  }
+  
+  /**
+   * Setup telephony webhook and stream routes
+   */
+  private setupTelephonyRoutes(): void {
+    // Plivo answer webhook - returns XML to start audio stream
+    this.app.post('/telephony/plivo/answer', (req, res) => {
+      this.logger.info('Plivo answer webhook received', { body: req.body });
+      
+      const adapter = this.telephonyManager?.getAdapter('plivo') as PlivoAdapter;
+      if (!adapter) {
+        res.status(500).send('Plivo adapter not configured');
+        return;
+      }
+      
+      const xml = adapter.handleWebhook('/answer', 'POST', req.body, req.query);
+      res.type('application/xml').send(xml);
+    });
+    
+    // Plivo status callback
+    this.app.post('/telephony/plivo/status', (req, res) => {
+      this.logger.info('Plivo status webhook', { body: req.body });
+      res.json({ success: true });
+    });
+    
+    // Make outbound call
+    this.app.post('/api/v1/telephony/call', async (req, res) => {
+      try {
+        const { provider, to, from } = req.body;
+        if (!this.telephonyManager) {
+          res.status(500).json({ error: 'Telephony not enabled' });
+          return;
+        }
+        const callId = await this.telephonyManager.makeCall(provider || 'plivo', to, from);
+        res.json({ success: true, callId });
+      } catch (error) {
+        res.status(400).json({ error: (error as Error).message });
+      }
+    });
+    
+    // End call
+    this.app.delete('/api/v1/telephony/call/:callId', async (req, res) => {
+      try {
+        if (!this.telephonyManager) {
+          res.status(500).json({ error: 'Telephony not enabled' });
+          return;
+        }
+        await this.telephonyManager.endCall(req.params.callId);
+        res.json({ success: true });
+      } catch (error) {
+        res.status(400).json({ error: (error as Error).message });
+      }
+    });
   }
   
   /**
@@ -256,6 +346,14 @@ export class APIServer {
   private setupWebSocket(): void {
     this.wss.on('connection', (ws: WebSocket, req) => {
       const connectionId = uuidv4();
+      const url = req.url || '';
+      
+      // Check if this is a Plivo stream connection
+      if (url.includes('/telephony/plivo/stream')) {
+        this.handlePlivoStreamConnection(ws, req);
+        return;
+      }
+      
       this.activeConnections.set(connectionId, ws);
       
       this.logger.info('WebSocket connected', { connectionId });
@@ -678,6 +776,23 @@ export class APIServer {
     this.logger.info('Built-in tools registered', { count: builtInTools.length });
   }
 
+  /**
+   * Handle Plivo audio stream WebSocket connection
+   */
+  private handlePlivoStreamConnection(ws: WebSocket, req: any): void {
+    this.logger.info('Plivo stream WebSocket connected', { url: req.url });
+    
+    const adapter = this.telephonyManager?.getAdapter('plivo') as PlivoAdapter;
+    if (!adapter) {
+      this.logger.error('Plivo adapter not available for stream connection');
+      ws.close(1011, 'Plivo adapter not configured');
+      return;
+    }
+    
+    // Delegate to Plivo adapter
+    adapter.handleStreamConnection(ws);
+  }
+
   private setupMCPServer(config: { name: string; n8nBaseUrl?: string; n8nApiKey?: string }): void {
     this.mcpServer = new MCPServer(
       { name: config.name, url: '' },
@@ -715,6 +830,11 @@ export class APIServer {
    * Stop the server
    */
   async stop(): Promise<void> {
+    // Shutdown telephony manager
+    if (this.telephonyManager) {
+      await this.telephonyManager.shutdown();
+    }
+    
     // Stop all active pipelines
     for (const [sessionId, pipeline] of this.activePipelines) {
       await pipeline.stop();
