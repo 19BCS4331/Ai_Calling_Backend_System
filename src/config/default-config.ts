@@ -79,7 +79,7 @@ export const defaultVoices: Record<SupportedLanguage, VoiceConfig> = {
     speakingRate: 1.0,
     pitch: 0
   },
-  'auto': {
+  'unknown': {
     voiceId: 'anushka',
     language: 'hi-IN',
     gender: 'female',

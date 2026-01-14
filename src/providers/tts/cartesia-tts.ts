@@ -293,7 +293,7 @@ class CartesiaTTSStreamSession extends TTSStreamSession {
     const voiceId = this.voice.voiceId || (this.voice as any).id || 'f786b574-daa5-4673-aa0c-cbe3e8534c02';
 
     // Map language to Cartesia format (e.g., 'en-US' -> 'en', 'hi-IN' -> 'hi')
-    const lang = this.language.split('-')[0];
+    const lang = this.language === 'unknown' ? 'en' : this.language.split('-')[0];
 
     // Use continue: true to keep context open for more text
     // This allows streaming multiple sentences to the same context
@@ -338,7 +338,7 @@ class CartesiaTTSStreamSession extends TTSStreamSession {
         mode: 'id',
         id: this.voice.voiceId || (this.voice as any).id || 'f786b574-daa5-4673-aa0c-cbe3e8534c02'
       },
-      language: this.language.split('-')[0],
+      language: this.language === 'unknown' ? 'en' : this.language.split('-')[0],
       context_id: this.contextId,
       output_format: {
         container: 'raw',

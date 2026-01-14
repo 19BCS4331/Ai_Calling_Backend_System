@@ -18,7 +18,7 @@ export type SupportedLanguage =
   | 'mr-IN'  // Marathi
   | 'gu-IN'  // Gujarati
   | 'pa-IN'  // Punjabi
-  | 'auto';  // Auto-detect
+  | 'unknown';  // Auto-detect
 
 export interface VoiceConfig {
   voiceId: string;

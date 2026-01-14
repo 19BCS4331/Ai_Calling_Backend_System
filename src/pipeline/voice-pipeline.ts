@@ -471,8 +471,21 @@ export class VoicePipeline extends EventEmitter {
       };
       this.session.messages.push(toolMessage);
 
+      // Check if this is an end_call - trigger session end
+      if (toolCall.function.name === 'end_call') {
+        this.logger.info('End call requested by agent, stopping pipeline');
+        this.emit('session_end_requested', { reason: args.reason });
+        // Stop the pipeline after a short delay to allow final TTS to play
+        setTimeout(() => this.stop(), 500);
+        return; // Don't continue LLM generation for end_call
+      }
+
       // Continue LLM generation with tool result
-      // The LLM will see the tool result and generate appropriate response
+      // Make a follow-up call so LLM can speak the response to the user
+      this.logger.debug('Continuing LLM generation with tool result', { 
+        tool: toolCall.function.name 
+      });
+      await this.generateLLMResponse();
 
     } catch (error) {
       this.logger.error('Tool execution failed', { 

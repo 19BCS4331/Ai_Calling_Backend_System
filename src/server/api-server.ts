@@ -124,8 +124,9 @@ export class APIServer {
    */
   private setupTelephonyRoutes(): void {
     // Plivo answer webhook - returns XML to start audio stream
-    this.app.post('/telephony/plivo/answer', (req, res) => {
-      this.logger.info('Plivo answer webhook received', { body: req.body });
+    // Handles both /answer (outbound) and /inbound (inbound calls)
+    const handlePlivoAnswer = (req: any, res: any) => {
+      this.logger.info('Plivo answer webhook received', { body: req.body, path: req.path });
       
       const adapter = this.telephonyManager?.getAdapter('plivo') as PlivoAdapter;
       if (!adapter) {
@@ -135,12 +136,30 @@ export class APIServer {
       
       const xml = adapter.handleWebhook('/answer', 'POST', req.body, req.query);
       res.type('application/xml').send(xml);
-    });
+    };
     
-    // Plivo status callback
+    this.app.post('/telephony/plivo/answer', handlePlivoAnswer);
+    this.app.post('/telephony/plivo/inbound', handlePlivoAnswer);
+    
+    // Plivo status/events callback
     this.app.post('/telephony/plivo/status', (req, res) => {
       this.logger.info('Plivo status webhook', { body: req.body });
       res.json({ success: true });
+    });
+    
+    this.app.post('/telephony/plivo/events', (req, res) => {
+      this.logger.info('Plivo events webhook', { body: req.body });
+      res.json({ success: true });
+    });
+    
+    // Fallback handler
+    this.app.post('/telephony/plivo/fallback', (req, res) => {
+      this.logger.warn('Plivo fallback triggered', { body: req.body });
+      res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Speak>Sorry, there was an error processing your call. Please try again later.</Speak>
+  <Hangup/>
+</Response>`);
     });
     
     // Make outbound call
@@ -655,6 +674,31 @@ export class APIServer {
 
     pipeline.on('barge_in', () => {
       ws.send(JSON.stringify({ type: 'barge_in', sessionId }));
+    });
+
+    pipeline.on('session_end_requested', async (data: { reason?: string }) => {
+      this.logger.info('Agent requested call end', { sessionId, reason: data?.reason });
+      
+      // Send session_ended message to client
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'session_ended',
+          sessionId,
+          reason: data?.reason || 'Call ended by agent'
+        }));
+      }
+      
+      // Clean up pipeline and session
+      const pipeline = this.activePipelines.get(sessionId);
+      if (pipeline) {
+        this.activePipelines.delete(sessionId);
+      }
+      await this.sessionManager.endSession(sessionId);
+      
+      // Close WebSocket connection
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close(1000, 'Call ended by agent');
+      }
     });
   }
 

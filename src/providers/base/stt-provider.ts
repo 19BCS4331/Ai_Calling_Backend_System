@@ -84,11 +84,11 @@ export abstract class STTProvider {
    */
   protected isLanguageSupported(language: SupportedLanguage): boolean {
     const capabilities = this.getCapabilities();
-    return capabilities.supportedLanguages.includes(language) || language === 'auto';
+    return capabilities.supportedLanguages.includes(language) || language === 'unknown';
   }
 
   /**
-   * Get the effective language (resolve 'auto' to default)
+   * Get the effective language (resolve 'unknown' to default)
    */
   protected getEffectiveLanguage(language?: SupportedLanguage): SupportedLanguage {
     return language || this.config.language || 'en-IN';

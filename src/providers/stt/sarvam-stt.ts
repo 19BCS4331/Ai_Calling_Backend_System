@@ -43,7 +43,7 @@ export class SarvamSTTProvider extends STTProvider {
       supportsStreaming: true,
       supportedLanguages: [
         'en-IN', 'hi-IN', 'ta-IN', 'te-IN', 'ml-IN', 
-        'kn-IN', 'bn-IN', 'mr-IN', 'gu-IN', 'pa-IN', 'auto'
+        'kn-IN', 'bn-IN', 'mr-IN', 'gu-IN', 'pa-IN', 'unknown'
       ],
       supportedEncodings: ['wav', 'pcm_s16le', 'pcm_l16', 'pcm_raw'],
       supportsWordTimestamps: true,
@@ -361,7 +361,7 @@ class SarvamSTTStreamSession extends STTStreamSession {
 
   private mapLanguageCode(language: SupportedLanguage): string {
     // Sarvam uses standard BCP-47 codes
-    if (language === 'auto') return 'unknown';
+    if (language === 'unknown') return 'unknown';
     return language;
   }
 }
