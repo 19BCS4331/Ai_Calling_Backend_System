@@ -258,6 +258,14 @@ export class TelephonyManager extends EventEmitter {
     pipeline.on('error', (error: Error) => {
       this.logger.error('Pipeline error', { callId, error: error.message });
     });
+
+    // Handle agent-initiated call end
+    pipeline.on('session_end_requested', async (data: { reason?: string }) => {
+      this.logger.info('Agent requested call end', { callId, reason: data?.reason });
+      
+      // End the telephony call
+      await adapter.endCall(callId);
+    });
   }
 
   /**

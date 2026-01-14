@@ -209,8 +209,14 @@ export class VoicePipeline extends EventEmitter {
           
           accumulatedText = result.text;
           
-          if (accumulatedText.trim().length > 0) {
+          // Filter out garbage/phantom transcripts
+          if (this.isValidTranscript(accumulatedText)) {
             await this.processUserInput(accumulatedText);
+          } else {
+            this.logger.debug('Filtered invalid transcript', { 
+              text: accumulatedText,
+              reason: this.getFilterReason(accumulatedText)
+            });
           }
           
           accumulatedText = '';
@@ -525,6 +531,57 @@ export class VoicePipeline extends EventEmitter {
     this.pendingSentences = [];
 
     this.emit('barge_in');
+  }
+
+  /**
+   * Validate transcript to filter out garbage/phantom STT results
+   * Returns true if the transcript should be processed
+   */
+  private isValidTranscript(text: string): boolean {
+    const trimmed = text.trim();
+    
+    // Filter empty or very short transcripts
+    if (trimmed.length < 2) {
+      return false;
+    }
+    
+    // Filter transcripts that are mostly non-ASCII (garbled text)
+    const asciiChars = trimmed.replace(/[^\x00-\x7F]/g, '');
+    const asciiRatio = asciiChars.length / trimmed.length;
+    if (asciiRatio < 0.5 && trimmed.length < 10) {
+      return false;
+    }
+    
+    // Filter during TTS playback (echo suppression)
+    // Only filter very short utterances during playback as they're likely echo
+    if (this.isTTSPlaying && trimmed.length < 5) {
+      return false;
+    }
+    
+    return true;
+  }
+
+  /**
+   * Get the reason why a transcript was filtered (for logging)
+   */
+  private getFilterReason(text: string): string {
+    const trimmed = text.trim();
+    
+    if (trimmed.length < 2) {
+      return 'too_short';
+    }
+    
+    const asciiChars = trimmed.replace(/[^\x00-\x7F]/g, '');
+    const asciiRatio = asciiChars.length / trimmed.length;
+    if (asciiRatio < 0.5 && trimmed.length < 10) {
+      return 'garbled_text';
+    }
+    
+    if (this.isTTSPlaying && trimmed.length < 5) {
+      return 'echo_during_playback';
+    }
+    
+    return 'unknown';
   }
 
   private startStage(name: string): PipelineStage {
