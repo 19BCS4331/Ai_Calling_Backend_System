@@ -103,10 +103,9 @@ You must always sound **natural, reassuring, and human**.
 ## 🗣️ VOICE & CONVERSATION RULES (VERY IMPORTANT)
 
 - NEVER remain silent while checking data  
-  Use phrases like:
-  - “Let me quickly verify that for you.” if the conversation is in English
-  - “Ek minute dijiye, main check kar rahi hoon…” if the conversation is in Hindi
-
+  Use phrases like (based on user language change the language):
+  - “Let me quickly verify that for you.”
+  - "Give me a moment, please."
 - NEVER read or speak a payment link out loud  
 - ALWAYS confirm phone numbers and email addresses verbally  
 - ALWAYS speak amounts in **Indian format and words**:
@@ -129,7 +128,7 @@ End the call politely using the 'end_call' function when the whole flow is compl
 
 If information is unavailable, say:
 
-> **“Mujhe iski jaankari abhi uplabdh nahi hai. Main team se confirm karwa kar batati hoon.”**
+> **“I don't have this information. I will confirm with the team and let you know.”**
 
 Never guess.
 
@@ -354,11 +353,21 @@ Say clearly (according to the conversation language):
 `,
         temperature: 0.7
       },
+      // defaultTTSConfig: {
+      //   type: 'cartesia',
+      //   credentials: { apiKey: process.env.CARTESIA_API_KEY || '' },
+      //   voice: {
+      //     voiceId: process.env.TTS_VOICE_ID || 'a0e99841-438c-4a64-b679-ae501e7d6091',
+      //     language: 'en-IN',
+      //     gender: 'female'
+      //   },
+      //   audioQuality: 'telephony'
+      // } as any,
       defaultTTSConfig: {
-        type: 'cartesia',
-        credentials: { apiKey: process.env.CARTESIA_API_KEY || '' },
+        type: 'sarvam',
+        credentials: { apiKey: process.env.SARVAM_API_KEY || '' },
         voice: {
-          voiceId: process.env.TTS_VOICE_ID || 'a0e99841-438c-4a64-b679-ae501e7d6091',
+          voiceId: "anushka",
           language: 'en-IN',
           gender: 'female'
         },
@@ -403,3 +412,10 @@ main().catch((error) => {
   logger.error('Failed to start server', { error: error.message });
   process.exit(1);
 });
+
+// Export types and services for external use
+export * from './types';
+export { AudioCacheService } from './services/audio-cache';
+export { VoicePipeline, VoicePipelineConfig } from './pipeline/voice-pipeline';
+export { APIServer, APIServerConfig } from './server/api-server';
+export { SessionManager, SessionManagerConfig } from './session/session-manager';

@@ -4,11 +4,11 @@ import { useVoiceStore } from '../store/voice';
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3000';
 
 interface SessionConfig {
-  language: string;
+  language?: string;
   systemPrompt: string;
-  stt: { provider: string; apiKey: string };
+  stt: { provider: string; apiKey: string; language?: string };
   llm: { provider: string; apiKey: string; model: string };
-  tts: { provider: string; apiKey: string; voiceId: string };
+  tts: { provider: string; apiKey: string; voiceId: string; language?: string };
 }
 
 export function useWebSocket() {

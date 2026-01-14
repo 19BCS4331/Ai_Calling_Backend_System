@@ -8,7 +8,7 @@ import { Server as HTTPServer, createServer } from 'http';
 import { WebSocket, WebSocketServer } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 
-import { Logger, CallSession, STTConfig, LLMConfig, TTSConfig } from '../types';
+import { Logger, CallSession, STTConfig, LLMConfig, TTSConfig, LatencyOptimizationConfig, DEFAULT_LATENCY_CONFIG } from '../types';
 import { SessionManager, CreateSessionOptions } from '../session/session-manager';
 import { ToolRegistry, builtInTools } from '../tools/tool-registry';
 import { MCPServer, createCommonN8nTools } from '../mcp/mcp-server';
@@ -19,6 +19,8 @@ import { LLMProviderFactory } from '../providers/base/llm-provider';
 import { TTSProviderFactory } from '../providers/base/tts-provider';
 import { InMemoryMetrics, CostTracker } from '../utils/logger';
 import { TelephonyManager, TelephonyManagerConfig, PlivoAdapter, TelephonyConfig } from '../telephony';
+import { AudioCacheService } from '../services/audio-cache';
+import { buildSystemPrompt } from '../prompts/tts-prompts';
 
 export interface APIServerConfig {
   port: number;
@@ -59,6 +61,7 @@ export class APIServer {
   private activePipelines: Map<string, VoicePipeline> = new Map();
   private activeConnections: Map<string, WebSocket> = new Map();
   private telephonyManager: TelephonyManager | null = null;
+  private audioCache: AudioCacheService;
 
   constructor(
     config: APIServerConfig,
@@ -77,6 +80,7 @@ export class APIServer {
     this.mcpClientManager = new MCPClientManager(this.toolRegistry, this.logger);
     this.metrics = new InMemoryMetrics();
     this.costTracker = new CostTracker();
+    this.audioCache = new AudioCacheService(this.logger);
     
     this.setupMiddleware();
     this.setupRoutes();
@@ -535,28 +539,37 @@ export class APIServer {
     const { tenantId, config } = message;
 
     // Create provider configs from dynamic credentials
-    // Default to en-IN for better English transcription; Hindi speakers still work well
+    // STT language: use 'unknown' for auto-detect (default), or specific language
+    // TTS language: must be specific (e.g., 'en-IN') - Sarvam TTS doesn't support 'unknown'
     const sttConfig: STTConfig = {
       type: config.stt?.provider || 'sarvam',
       credentials: { apiKey: config.stt?.apiKey || '' },
-      language: config.language || 'en-IN',
+      language: config.stt?.language || config.language || 'unknown',
       sampleRateHertz: config.sampleRate || 16000
     };
+
+    const ttsProviderType = config.tts?.provider || 'sarvam';
+    
+    // Build merged system prompt: behavioral prompt + TTS-specific guidelines
+    const mergedSystemPrompt = buildSystemPrompt(
+      config.systemPrompt || '',
+      ttsProviderType
+    );
 
     const llmConfig: LLMConfig = {
       type: config.llm?.provider || 'gemini',
       credentials: { apiKey: config.llm?.apiKey || '' },
       model: config.llm?.model || 'gemini-2.5-flash',
-      systemPrompt: config.systemPrompt,
+      systemPrompt: mergedSystemPrompt,
       temperature: config.llm?.temperature ?? 0.7
     };
 
     const ttsConfig: any = {
-      type: config.tts?.provider || 'sarvam',
+      type: ttsProviderType,
       credentials: { apiKey: config.tts?.apiKey || '' },
       voice: {
         voiceId: config.tts?.voiceId || 'anushka',
-        language: config.language || 'en-IN',
+        language: config.tts?.language || config.language || 'en-IN',
         gender: config.tts?.gender || 'female'
       },
       audioQuality: config.tts?.audioQuality || 'web'  // 'web' or 'telephony' for Cartesia
@@ -569,7 +582,7 @@ export class APIServer {
       sttConfig,
       llmConfig,
       ttsConfig,
-      systemPrompt: config.systemPrompt,
+      systemPrompt: mergedSystemPrompt,
       context: config.context || {}
     });
 
@@ -578,14 +591,25 @@ export class APIServer {
     const llmProvider = LLMProviderFactory.create(llmConfig, this.logger);
     const ttsProvider = TTSProviderFactory.create(ttsConfig, this.logger);
 
-    // Create pipeline
+    // Build latency optimization config from client request
+    const latencyConfig: LatencyOptimizationConfig = this.buildLatencyConfig(config.latencyOptimization);
+
+    // Initialize audio cache with TTS provider if not already done
+    if (latencyConfig.audioCaching.enabled && !this.audioCache.isReady()) {
+      this.audioCache.initialize(ttsProvider, latencyConfig.audioCaching.preloadLanguages)
+        .catch(err => this.logger.warn('Audio cache init failed', { error: err.message }));
+    }
+
+    // Create pipeline with latency optimization config and audio cache
     const pipeline = new VoicePipeline(
       session,
       sttProvider,
       llmProvider,
       ttsProvider,
       this.toolRegistry,
-      this.logger
+      this.logger,
+      { latencyOptimization: latencyConfig },
+      this.audioCache
     );
 
     // Set up pipeline events
@@ -626,6 +650,31 @@ export class APIServer {
       sessionId: session.sessionId, 
       tenantId 
     });
+  }
+
+  /**
+   * Build latency optimization config from client request
+   * Merges client config with defaults, allowing partial overrides
+   */
+  private buildLatencyConfig(clientConfig?: Partial<LatencyOptimizationConfig>): LatencyOptimizationConfig {
+    if (!clientConfig) {
+      return DEFAULT_LATENCY_CONFIG;
+    }
+
+    return {
+      turnDetection: {
+        ...DEFAULT_LATENCY_CONFIG.turnDetection,
+        ...clientConfig.turnDetection
+      },
+      fillers: {
+        ...DEFAULT_LATENCY_CONFIG.fillers,
+        ...clientConfig.fillers
+      },
+      audioCaching: {
+        ...DEFAULT_LATENCY_CONFIG.audioCaching,
+        ...clientConfig.audioCaching
+      }
+    };
   }
 
   private setupPipelineEvents(

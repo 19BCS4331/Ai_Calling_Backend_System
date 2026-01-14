@@ -424,6 +424,70 @@ export class TimeoutError extends VoiceAgentError {
 }
 
 // ============================================================================
+// LATENCY OPTIMIZATION TYPES
+// ============================================================================
+
+export interface TurnDetectionConfig {
+  /** Minimum silence duration (ms) before considering turn complete */
+  silenceThresholdMs: number;
+  /** Maximum wait time (ms) for additional speech after silence detected */
+  maxWaitAfterSilenceMs: number;
+  /** Minimum transcript length before processing */
+  minTranscriptLength: number;
+  /** Enable punctuation-based endpointing */
+  usePunctuationEndpoint: boolean;
+  /** Ignore STT during TTS playback (echo suppression) */
+  suppressEchoDuringPlayback: boolean;
+}
+
+export interface FillerConfig {
+  /** Enable filler speech during tool execution */
+  enabled: boolean;
+  /** Use cached audio for fillers (faster) */
+  useCachedAudio: boolean;
+  /** Categories of fillers to use */
+  categories: ('tool_execution' | 'thinking' | 'acknowledgment')[];
+}
+
+export interface AudioCachingConfig {
+  /** Enable audio caching */
+  enabled: boolean;
+  /** Preload common phrases on startup */
+  preloadOnStart: boolean;
+  /** Languages to preload */
+  preloadLanguages: SupportedLanguage[];
+  /** Maximum cache size */
+  maxCacheSize: number;
+}
+
+export interface LatencyOptimizationConfig {
+  turnDetection: TurnDetectionConfig;
+  fillers: FillerConfig;
+  audioCaching: AudioCachingConfig;
+}
+
+export const DEFAULT_LATENCY_CONFIG: LatencyOptimizationConfig = {
+  turnDetection: {
+    silenceThresholdMs: 300,
+    maxWaitAfterSilenceMs: 500,
+    minTranscriptLength: 2,
+    usePunctuationEndpoint: true,
+    suppressEchoDuringPlayback: true
+  },
+  fillers: {
+    enabled: true,
+    useCachedAudio: true,
+    categories: ['tool_execution', 'thinking']
+  },
+  audioCaching: {
+    enabled: true,
+    preloadOnStart: true,
+    preloadLanguages: ['en-IN', 'hi-IN'],
+    maxCacheSize: 100
+  }
+};
+
+// ============================================================================
 // EVENT TYPES
 // ============================================================================
 

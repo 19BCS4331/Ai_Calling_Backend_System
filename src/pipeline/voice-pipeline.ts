@@ -17,12 +17,15 @@ import {
   Logger,
   PipelineMetrics,
   PipelineStage,
-  SupportedLanguage
+  SupportedLanguage,
+  LatencyOptimizationConfig,
+  DEFAULT_LATENCY_CONFIG
 } from '../types';
 import { STTProvider, STTStreamSession } from '../providers/base/stt-provider';
 import { LLMProvider, LLMStreamSession } from '../providers/base/llm-provider';
 import { TTSProvider, TTSStreamSession } from '../providers/base/tts-provider';
 import { ToolRegistry } from '../tools/tool-registry';
+import { AudioCacheService } from '../services/audio-cache';
 
 export interface VoicePipelineConfig {
   enableBargeIn: boolean;
@@ -30,6 +33,7 @@ export interface VoicePipelineConfig {
   llmSentenceBuffer: number;     // Min chars before starting TTS
   maxTurnDuration: number;       // Max ms for a single turn
   silenceTimeout: number;        // Ms of silence before ending turn
+  latencyOptimization: LatencyOptimizationConfig;  // Phase 1 optimizations
 }
 
 export interface PipelineEvents {
@@ -69,6 +73,10 @@ export class VoicePipeline extends EventEmitter {
   private ttsSessionReady: boolean = false;
   private ttsSentText: boolean = false;  // Track if any text was sent to TTS
 
+  // Audio cache for filler phrases (Phase 1 optimization)
+  private audioCache: AudioCacheService | null = null;
+  private isTTSPlaying: boolean = false;
+
   constructor(
     session: CallSession,
     sttProvider: STTProvider,
@@ -76,7 +84,8 @@ export class VoicePipeline extends EventEmitter {
     ttsProvider: TTSProvider,
     toolRegistry: ToolRegistry,
     logger: Logger,
-    config?: Partial<VoicePipelineConfig>
+    config?: Partial<VoicePipelineConfig>,
+    audioCache?: AudioCacheService
   ) {
     super();
     this.session = session;
@@ -85,6 +94,7 @@ export class VoicePipeline extends EventEmitter {
     this.ttsProvider = ttsProvider;
     this.toolRegistry = toolRegistry;
     this.logger = logger.child({ sessionId: session.sessionId, component: 'pipeline' });
+    this.audioCache = audioCache || null;
 
     this.config = {
       enableBargeIn: true,
@@ -92,6 +102,7 @@ export class VoicePipeline extends EventEmitter {
       llmSentenceBuffer: 20,
       maxTurnDuration: 30000,
       silenceTimeout: 2000,
+      latencyOptimization: DEFAULT_LATENCY_CONFIG,
       ...config
     };
 
@@ -116,7 +127,6 @@ export class VoicePipeline extends EventEmitter {
     await this.startSTTSession();
   }
 
-  private isTTSPlaying: boolean = false;
   private bargeInThreshold: number = 500;  // Audio level threshold for barge-in
   private consecutiveLoudChunks: number = 0;
   private bargeInChunksRequired: number = 3;  // Require 3 consecutive loud chunks
@@ -458,12 +468,19 @@ export class VoicePipeline extends EventEmitter {
     try {
       const args = JSON.parse(toolCall.function.arguments);
       
-      const result = await this.toolRegistry.execute({
-        toolName: toolCall.function.name,
-        arguments: args,
-        sessionId: this.session.sessionId,
-        callContext: this.session.context
-      });
+      // Phase 1: Play filler speech during tool execution
+      const fillerPromise = this.playToolFiller(toolCall.function.name);
+      
+      // Execute tool in parallel with filler playback
+      const [result] = await Promise.all([
+        this.toolRegistry.execute({
+          toolName: toolCall.function.name,
+          arguments: args,
+          sessionId: this.session.sessionId,
+          callContext: this.session.context
+        }),
+        fillerPromise
+      ]);
 
       this.endStage(stage);
       this.session.metrics.toolCallCount++;
@@ -511,6 +528,73 @@ export class VoicePipeline extends EventEmitter {
   }
 
   /**
+   * Play filler speech while tool is executing
+   * Uses cached audio for instant playback, falls back to live TTS
+   */
+  private async playToolFiller(toolName: string): Promise<void> {
+    const fillerConfig = this.config.latencyOptimization.fillers;
+    
+    // Skip if fillers are disabled or it's an end_call tool
+    if (!fillerConfig.enabled || toolName === 'end_call') {
+      return;
+    }
+
+    try {
+      const language = this.session.sttConfig.language;
+      
+      // Try to use cached audio first
+      if (fillerConfig.useCachedAudio && this.audioCache?.isReady()) {
+        const cachedFiller = this.audioCache.getToolFiller(language);
+        
+        if (cachedFiller) {
+          this.logger.debug('Playing cached filler', { 
+            id: cachedFiller.id, 
+            text: cachedFiller.text 
+          });
+          
+          // Emit cached audio directly
+          this.isTTSPlaying = true;
+          this.emit('tts_audio_chunk', cachedFiller.audioBuffer);
+          this.isTTSPlaying = false;
+          return;
+        }
+      }
+
+      // Fall back to live TTS generation
+      const fillerText = this.getFillerText(language);
+      if (fillerText) {
+        this.logger.debug('Generating live filler TTS', { text: fillerText });
+        const result = await this.ttsProvider.synthesize(fillerText, undefined, language);
+        
+        this.isTTSPlaying = true;
+        this.emit('tts_audio_chunk', result.audioContent);
+        this.isTTSPlaying = false;
+      }
+    } catch (error) {
+      // Don't fail tool execution if filler fails
+      this.logger.warn('Filler playback failed', { 
+        error: (error as Error).message 
+      });
+    }
+  }
+
+  /**
+   * Get a filler text for the specified language
+   */
+  private getFillerText(language: SupportedLanguage): string {
+    const fillers: Record<string, string[]> = {
+      'en-IN': ['Let me check that for you.', 'One moment please.', 'Just a second.'],
+      'hi-IN': ['एक मिनट रुकिए।', 'बस एक सेकंड।', 'मैं देखता हूं।'],
+      'ta-IN': ['ஒரு நிமிடம் பாருங்கள்.'],
+      'te-IN': ['ఒక్క నిమిషం చూస్తాను.'],
+      'unknown': ['Let me check that for you.', 'One moment please.']
+    };
+
+    const langFillers = fillers[language] || fillers['en-IN'];
+    return langFillers[Math.floor(Math.random() * langFillers.length)];
+  }
+
+  /**
    * Handle barge-in - abort current TTS/LLM and reset for new input
    * Called from API server when client detects user speaking during AI audio
    */
@@ -536,12 +620,14 @@ export class VoicePipeline extends EventEmitter {
   /**
    * Validate transcript to filter out garbage/phantom STT results
    * Returns true if the transcript should be processed
+   * Uses configurable turn detection settings
    */
   private isValidTranscript(text: string): boolean {
     const trimmed = text.trim();
+    const turnConfig = this.config.latencyOptimization.turnDetection;
     
-    // Filter empty or very short transcripts
-    if (trimmed.length < 2) {
+    // Filter empty or very short transcripts (configurable minimum length)
+    if (trimmed.length < turnConfig.minTranscriptLength) {
       return false;
     }
     
@@ -552,10 +638,22 @@ export class VoicePipeline extends EventEmitter {
       return false;
     }
     
-    // Filter during TTS playback (echo suppression)
-    // Only filter very short utterances during playback as they're likely echo
-    if (this.isTTSPlaying && trimmed.length < 5) {
-      return false;
+    // Echo suppression during TTS playback (configurable)
+    if (turnConfig.suppressEchoDuringPlayback && this.isTTSPlaying) {
+      // Filter short utterances during playback as they're likely echo
+      if (trimmed.length < 8) {
+        return false;
+      }
+    }
+    
+    // Punctuation-based endpointing check (optional)
+    if (turnConfig.usePunctuationEndpoint) {
+      const endsWithPunctuation = /[.!?।॥]$/.test(trimmed);
+      // Allow through if ends with punctuation or is long enough
+      if (!endsWithPunctuation && trimmed.length < 15) {
+        // Short transcripts without punctuation might be incomplete
+        // But we still process them to avoid adding latency
+      }
     }
     
     return true;
@@ -566,8 +664,9 @@ export class VoicePipeline extends EventEmitter {
    */
   private getFilterReason(text: string): string {
     const trimmed = text.trim();
+    const turnConfig = this.config.latencyOptimization.turnDetection;
     
-    if (trimmed.length < 2) {
+    if (trimmed.length < turnConfig.minTranscriptLength) {
       return 'too_short';
     }
     
@@ -577,7 +676,7 @@ export class VoicePipeline extends EventEmitter {
       return 'garbled_text';
     }
     
-    if (this.isTTSPlaying && trimmed.length < 5) {
+    if (turnConfig.suppressEchoDuringPlayback && this.isTTSPlaying && trimmed.length < 8) {
       return 'echo_during_playback';
     }
     

@@ -4,7 +4,8 @@
  */
 
 import { EventEmitter } from 'events';
-import { Logger, CallSession, STTConfig, LLMConfig, TTSConfig } from '../types';
+import { Logger, CallSession, STTConfig, LLMConfig, TTSConfig, DEFAULT_LATENCY_CONFIG } from '../types';
+import { AudioCacheService } from '../services/audio-cache';
 import { SessionManager, CreateSessionOptions } from '../session/session-manager';
 import { VoicePipeline } from '../pipeline/voice-pipeline';
 import { STTProviderFactory } from '../providers/base/stt-provider';
@@ -37,6 +38,7 @@ export class TelephonyManager extends EventEmitter {
   private callToSession: Map<string, string> = new Map();  // callId -> sessionId
   private pendingAudio: Map<string, TelephonyAudioPacket[]> = new Map();  // Buffer for early packets
   private config: TelephonyManagerConfig;
+  private audioCache: AudioCacheService;
 
   constructor(
     config: TelephonyManagerConfig,
@@ -49,6 +51,7 @@ export class TelephonyManager extends EventEmitter {
     this.sessionManager = sessionManager;
     this.toolRegistry = toolRegistry;
     this.logger = logger.child({ component: 'telephony-manager' });
+    this.audioCache = new AudioCacheService(this.logger);
   }
 
   /**
@@ -162,14 +165,22 @@ export class TelephonyManager extends EventEmitter {
         this.logger
       );
 
-      // Create voice pipeline
+      // Initialize audio cache with TTS provider if not already done
+      if (!this.audioCache.isReady()) {
+        this.audioCache.initialize(ttsProvider, ['en-IN', 'hi-IN'])
+          .catch(err => this.logger.warn('Audio cache init failed', { error: err.message }));
+      }
+
+      // Create voice pipeline with latency optimization and audio cache
       const pipeline = new VoicePipeline(
         session,
         sttProvider,
         llmProvider,
         ttsProvider,
         this.toolRegistry,
-        this.logger
+        this.logger,
+        { latencyOptimization: DEFAULT_LATENCY_CONFIG },
+        this.audioCache
       );
 
       // Set up pipeline events to route audio back to telephony
