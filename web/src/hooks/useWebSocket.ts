@@ -17,6 +17,7 @@ export function useWebSocket() {
   const workletNodeRef = useRef<AudioWorkletNode | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const recordingContextRef = useRef<AudioContext | null>(null);  // Track recording AudioContext
   
   const {
     setConnectionStatus,
@@ -76,6 +77,17 @@ export function useWebSocket() {
     reset();
   }, [reset]);
 
+  const cleanupAudioPlayback = useCallback(() => {
+    if (workletNodeRef.current) {
+      workletNodeRef.current.disconnect();
+      workletNodeRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
+  }, []);
+
   const handleMessage = useCallback((msg: Record<string, unknown>) => {
     switch (msg.type) {
       case 'connected':
@@ -92,6 +104,8 @@ export function useWebSocket() {
         setSessionStatus('idle');
         setSessionId(null);
         setMetrics(msg.metrics as { firstLLMTokenMs: number; firstTTSByteMs: number; turnDurationMs: number });
+        // Clean up audio playback resources
+        cleanupAudioPlayback();
         break;
 
       case 'stt_partial':
@@ -123,7 +137,7 @@ export function useWebSocket() {
         setError(msg.error as string);
         break;
     }
-  }, [setSessionStatus, setSessionId, setUserTranscript, appendAIResponse, setError, setMetrics, setIsAIPlaying, setAIResponse]);
+  }, [setSessionStatus, setSessionId, setUserTranscript, appendAIResponse, setError, setMetrics, setIsAIPlaying, setAIResponse, cleanupAudioPlayback]);
 
   const initAudioPlayback = async (audioFormat: { sampleRate: number }) => {
     const sampleRate = audioFormat?.sampleRate || 44100;
@@ -243,9 +257,14 @@ export function useWebSocket() {
         audio: { sampleRate: 16000, channelCount: 1, echoCancellation: true, noiseSuppression: true },
       });
 
-      const audioCtx = new AudioContext({ sampleRate: 16000 });
-      const source = audioCtx.createMediaStreamSource(mediaStreamRef.current);
-      processorRef.current = audioCtx.createScriptProcessor(4096, 1, 1);
+      // Close previous recording context if exists
+      if (recordingContextRef.current) {
+        recordingContextRef.current.close().catch(() => {});
+      }
+      
+      recordingContextRef.current = new AudioContext({ sampleRate: 16000 });
+      const source = recordingContextRef.current.createMediaStreamSource(mediaStreamRef.current);
+      processorRef.current = recordingContextRef.current.createScriptProcessor(4096, 1, 1);
 
       processorRef.current.onaudioprocess = (e) => {
         if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
@@ -259,7 +278,7 @@ export function useWebSocket() {
       };
 
       source.connect(processorRef.current);
-      processorRef.current.connect(audioCtx.destination);
+      processorRef.current.connect(recordingContextRef.current.destination);
       
       useVoiceStore.getState().setIsRecording(true);
     } catch (err) {
@@ -276,6 +295,10 @@ export function useWebSocket() {
       processorRef.current.disconnect();
       processorRef.current = null;
     }
+    if (recordingContextRef.current) {
+      recordingContextRef.current.close().catch(() => {});
+      recordingContextRef.current = null;
+    }
     useVoiceStore.getState().setIsRecording(false);
   }, []);
 
@@ -283,8 +306,9 @@ export function useWebSocket() {
     return () => {
       disconnect();
       stopRecording();
+      cleanupAudioPlayback();
     };
-  }, [disconnect, stopRecording]);
+  }, [disconnect, stopRecording, cleanupAudioPlayback]);
 
   return {
     connect,

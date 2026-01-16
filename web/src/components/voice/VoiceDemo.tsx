@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, MicOff, Settings, Volume2, PhoneOff } from 'lucide-react';
 import { useWebSocket } from '../../hooks/useWebSocket';
@@ -13,6 +13,7 @@ interface VoiceDemoProps {
 export function VoiceDemo({ className, compact = false }: VoiceDemoProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const sessionStartedRef = useRef(false);  // Prevent double session start
   const [apiKeys, setApiKeys] = useState({
     sarvam: '',
     gemini: '',
@@ -97,9 +98,10 @@ Your success is measured by one reaction: "This doesn't feel like AI… this fee
     }
   }, [connectionStatus, sessionStatus, connect, disconnect, endSession, stopRecording]);
 
-  // Auto-start session when connected
+  // Auto-start session when connected (with guard against double-calls)
   useEffect(() => {
-    if (isStarting && connectionStatus === 'connected' && sessionStatus !== 'active') {
+    if (isStarting && connectionStatus === 'connected' && sessionStatus !== 'active' && !sessionStartedRef.current) {
+      sessionStartedRef.current = true;  // Prevent duplicate calls
       startSession({
         systemPrompt,
         stt: { provider: 'sarvam', apiKey: apiKeys.sarvam, language: 'unknown' },
@@ -114,6 +116,7 @@ Your success is measured by one reaction: "This doesn't feel like AI… this fee
     if (isStarting && sessionStatus === 'active' && !isRecording) {
       startRecording();
       setIsStarting(false);
+      sessionStartedRef.current = false;  // Reset for next session
     }
   }, [isStarting, sessionStatus, isRecording, startRecording]);
 
@@ -121,8 +124,16 @@ Your success is measured by one reaction: "This doesn't feel like AI… this fee
   useEffect(() => {
     if (error) {
       setIsStarting(false);
+      sessionStartedRef.current = false;  // Reset on error
     }
   }, [error]);
+
+  // Reset ref when session ends
+  useEffect(() => {
+    if (sessionStatus === 'idle') {
+      sessionStartedRef.current = false;
+    }
+  }, [sessionStatus]);
 
   const handleToggleRecording = () => {
     if (isRecording) {

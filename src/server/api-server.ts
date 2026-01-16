@@ -60,6 +60,7 @@ export class APIServer {
   
   private activePipelines: Map<string, VoicePipeline> = new Map();
   private activeConnections: Map<string, WebSocket> = new Map();
+  private connectionSessions: Map<string, Set<string>> = new Map();  // connectionId -> sessionIds
   private telephonyManager: TelephonyManager | null = null;
   private audioCache: AudioCacheService;
 
@@ -615,8 +616,18 @@ export class APIServer {
     // Set up pipeline events
     this.setupPipelineEvents(pipeline, ws, session.sessionId);
 
+    // Clean up any existing sessions for this connection before creating new one
+    await this.cleanupConnectionSessions(connectionId);
+    
     // Store and start pipeline
     this.activePipelines.set(session.sessionId, pipeline);
+    
+    // Track connection -> session mapping
+    if (!this.connectionSessions.has(connectionId)) {
+      this.connectionSessions.set(connectionId, new Set());
+    }
+    this.connectionSessions.get(connectionId)!.add(session.sessionId);
+    
     await pipeline.start();
 
     // Update session status
@@ -776,25 +787,62 @@ export class APIServer {
   private handleWebSocketClose(connectionId: string): void {
     this.activeConnections.delete(connectionId);
     
-    // Find and stop any associated pipelines
-    for (const [sessionId, pipeline] of this.activePipelines) {
-      // This is a simplified check - in production, maintain connection->session mapping
-      pipeline.stop().catch(err => {
-        this.logger.error('Error stopping pipeline on disconnect', { 
-          sessionId, 
-          error: err.message 
-        });
-      });
+    // Stop pipelines associated with this connection
+    const sessionIds = this.connectionSessions.get(connectionId);
+    if (sessionIds) {
+      for (const sessionId of sessionIds) {
+        const pipeline = this.activePipelines.get(sessionId);
+        if (pipeline) {
+          pipeline.stop().catch(err => {
+            this.logger.error('Error stopping pipeline on disconnect', { 
+              sessionId, 
+              error: err.message 
+            });
+          });
+          this.activePipelines.delete(sessionId);
+        }
+        // End session in session manager
+        this.sessionManager.endSession(sessionId).catch(() => {});
+      }
+      this.connectionSessions.delete(connectionId);
     }
     
     this.logger.info('WebSocket disconnected', { connectionId });
   }
 
+  /**
+   * Clean up existing sessions for a connection before creating a new one
+   */
+  private async cleanupConnectionSessions(connectionId: string): Promise<void> {
+    const sessionIds = this.connectionSessions.get(connectionId);
+    if (sessionIds && sessionIds.size > 0) {
+      this.logger.info('Cleaning up existing sessions for connection', { 
+        connectionId, 
+        sessionCount: sessionIds.size 
+      });
+      
+      for (const sessionId of sessionIds) {
+        const pipeline = this.activePipelines.get(sessionId);
+        if (pipeline) {
+          await pipeline.stop().catch(() => {});
+          this.activePipelines.delete(sessionId);
+        }
+        await this.sessionManager.endSession(sessionId).catch(() => {});
+      }
+      sessionIds.clear();
+    }
+  }
+
   private findPipelineForConnection(connectionId: string): VoicePipeline | undefined {
-    // In production, maintain proper connection->session mapping
-    // For now, return first active pipeline (simplified)
-    for (const pipeline of this.activePipelines.values()) {
-      return pipeline;
+    // Find the active pipeline for this connection
+    const sessionIds = this.connectionSessions.get(connectionId);
+    if (sessionIds) {
+      // Return the most recent session's pipeline (last in set)
+      const sessionArray = Array.from(sessionIds);
+      const lastSessionId = sessionArray[sessionArray.length - 1];
+      if (lastSessionId) {
+        return this.activePipelines.get(lastSessionId);
+      }
     }
     return undefined;
   }
