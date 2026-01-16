@@ -30,6 +30,7 @@ export class PlivoAdapter extends BaseTelephonyAdapter {
   private callToStream: Map<string, string> = new Map();       // callId -> streamId
   private audioBuffers: Map<string, Buffer> = new Map();       // callId -> audio buffer
   private readonly CHUNK_SIZE = 3200;  // 200ms at 8kHz, 16-bit = 3200 bytes
+  private readonly WAV_HEADER_SIZE = 44;  // Standard WAV header size
 
   constructor(logger: Logger) {
     super(logger.child({ adapter: 'plivo' }));
@@ -140,8 +141,11 @@ export class PlivoAdapter extends BaseTelephonyAdapter {
       return;
     }
 
+    // Strip WAV header if present (prevents thumping artifacts)
+    const rawPcm = this.stripWavHeader(audioData);
+    
     // Convert to telephony format (8kHz linear16)
-    const telephonyAudio = pipelineToTelephony(audioData, sampleRate, 'linear16');
+    const telephonyAudio = pipelineToTelephony(rawPcm, sampleRate, 'linear16');
     
     // Get or create buffer for this call
     let buffer = this.audioBuffers.get(callId) || Buffer.alloc(0);
@@ -190,6 +194,24 @@ export class PlivoAdapter extends BaseTelephonyAdapter {
       ws.send(JSON.stringify(message));
       this.audioBuffers.delete(callId);
     }
+  }
+
+  /**
+   * Strip WAV header from audio data if present
+   * This prevents "thumping" artifacts caused by repeated WAV headers in streamed chunks
+   */
+  private stripWavHeader(audioData: Buffer): Buffer {
+    // Check if buffer starts with "RIFF" magic bytes (WAV header)
+    if (audioData.length > this.WAV_HEADER_SIZE && 
+        audioData[0] === 0x52 && // 'R'
+        audioData[1] === 0x49 && // 'I'
+        audioData[2] === 0x46 && // 'F'
+        audioData[3] === 0x46) { // 'F'
+      // Skip the 44-byte WAV header and return raw PCM
+      return audioData.subarray(this.WAV_HEADER_SIZE);
+    }
+    // No WAV header, return as-is
+    return audioData;
   }
 
   /**

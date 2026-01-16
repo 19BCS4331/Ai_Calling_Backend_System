@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Key, Bell, Shield, Save } from 'lucide-react';
-import { Button } from '../../components/ui/Button';
+import { Key, Bell, Shield, Save, Check } from 'lucide-react';
 
 export function Settings() {
   const [apiKeys, setApiKeys] = useState({
@@ -23,18 +22,18 @@ export function Settings() {
     <div className="space-y-6 max-w-3xl">
       <div>
         <h1 className="text-2xl font-bold text-white mb-1">Settings</h1>
-        <p className="text-white/60">Manage your account and API configurations</p>
+        <p className="text-white/50">Manage your account and API configurations</p>
       </div>
 
       {/* API Keys */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="glass-card p-6"
+        className="bg-white/[0.02] border border-white/5 rounded-2xl p-6"
       >
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-xl bg-neon-blue/10 flex items-center justify-center">
-            <Key size={20} className="text-neon-blue" />
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
+            <Key size={20} className="text-white" />
           </div>
           <div>
             <h2 className="text-lg font-semibold text-white">API Keys</h2>
@@ -44,42 +43,45 @@ export function Settings() {
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm text-white/70 mb-2">Sarvam API Key (STT/TTS)</label>
+            <label className="block text-sm text-white/60 mb-2">Sarvam API Key (STT/TTS)</label>
             <input
               type="password"
               value={apiKeys.sarvam}
               onChange={(e) => setApiKeys(k => ({ ...k, sarvam: e.target.value }))}
-              className="input-field"
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
               placeholder="sk_..."
             />
           </div>
 
           <div>
-            <label className="block text-sm text-white/70 mb-2">Gemini API Key (LLM)</label>
+            <label className="block text-sm text-white/60 mb-2">Gemini API Key (LLM)</label>
             <input
               type="password"
               value={apiKeys.gemini}
               onChange={(e) => setApiKeys(k => ({ ...k, gemini: e.target.value }))}
-              className="input-field"
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
               placeholder="AIza..."
             />
           </div>
 
           <div>
-            <label className="block text-sm text-white/70 mb-2">Cartesia API Key (Optional TTS)</label>
+            <label className="block text-sm text-white/60 mb-2">Cartesia API Key (Optional TTS)</label>
             <input
               type="password"
               value={apiKeys.cartesia}
               onChange={(e) => setApiKeys(k => ({ ...k, cartesia: e.target.value }))}
-              className="input-field"
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
               placeholder="sk_cart_..."
             />
           </div>
 
-          <Button onClick={handleSave}>
-            <Save size={18} className="mr-2" />
+          <button 
+            onClick={handleSave}
+            className="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-purple-500 rounded-xl font-medium text-white hover:from-purple-500 hover:to-purple-400 transition-all duration-300 shadow-lg shadow-purple-500/25 flex items-center gap-2"
+          >
+            {saved ? <Check size={18} /> : <Save size={18} />}
             {saved ? 'Saved!' : 'Save API Keys'}
-          </Button>
+          </button>
         </div>
       </motion.div>
 
@@ -88,11 +90,11 @@ export function Settings() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="glass-card p-6"
+        className="bg-white/[0.02] border border-white/5 rounded-2xl p-6"
       >
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-xl bg-neon-purple/10 flex items-center justify-center">
-            <Bell size={20} className="text-neon-purple" />
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+            <Bell size={20} className="text-white" />
           </div>
           <div>
             <h2 className="text-lg font-semibold text-white">Notifications</h2>
@@ -102,14 +104,14 @@ export function Settings() {
 
         <div className="space-y-4">
           {notifications.map((item) => (
-            <div key={item.id} className="flex items-center justify-between p-3 bg-dark-800/30 rounded-xl">
+            <div key={item.id} className="flex items-center justify-between p-4 bg-white/[0.02] border border-white/5 rounded-xl">
               <div>
                 <p className="text-white font-medium">{item.label}</p>
                 <p className="text-sm text-white/50">{item.description}</p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input type="checkbox" defaultChecked={item.enabled} className="sr-only peer" />
-                <div className="w-11 h-6 bg-dark-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-neon-blue"></div>
+                <div className="w-11 h-6 bg-white/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
               </label>
             </div>
           ))}
@@ -121,11 +123,11 @@ export function Settings() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
-        className="glass-card p-6"
+        className="bg-white/[0.02] border border-white/5 rounded-2xl p-6"
       >
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-xl bg-neon-green/10 flex items-center justify-center">
-            <Shield size={20} className="text-neon-green" />
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center">
+            <Shield size={20} className="text-white" />
           </div>
           <div>
             <h2 className="text-lg font-semibold text-white">Security</h2>
@@ -135,14 +137,24 @@ export function Settings() {
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm text-white/70 mb-2">Current Password</label>
-            <input type="password" className="input-field" placeholder="••••••••" />
+            <label className="block text-sm text-white/60 mb-2">Current Password</label>
+            <input 
+              type="password" 
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all" 
+              placeholder="••••••••" 
+            />
           </div>
           <div>
-            <label className="block text-sm text-white/70 mb-2">New Password</label>
-            <input type="password" className="input-field" placeholder="••••••••" />
+            <label className="block text-sm text-white/60 mb-2">New Password</label>
+            <input 
+              type="password" 
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all" 
+              placeholder="••••••••" 
+            />
           </div>
-          <Button variant="secondary">Update Password</Button>
+          <button className="px-6 py-2.5 bg-white/5 border border-white/10 rounded-xl font-medium text-white hover:bg-white/10 transition-all">
+            Update Password
+          </button>
         </div>
       </motion.div>
     </div>

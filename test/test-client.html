@@ -655,6 +655,19 @@
           
         case 'barge_in':
           log('Barge-in detected - stopping playback', 'info');
+          // Clear audio buffer immediately
+          if (pcmWorkletNode) {
+            pcmWorkletNode.port.postMessage({ type: 'clear' });
+          }
+          if (fallbackScriptNode) {
+            fallbackWriteIdx = 0;
+            fallbackReadIdx = 0;
+            fallbackSamplesAvail = 0;
+          }
+          isPlayingAudio = false;
+          document.getElementById('audioIndicator').classList.remove('playing');
+          document.getElementById('audioStatus').textContent = 'Barge-in - listening...';
+          document.getElementById('aiResponse').textContent = '';  // Clear for new response
           break;
           
         case 'error':

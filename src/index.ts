@@ -353,26 +353,26 @@ Say clearly (according to the conversation language):
 `,
         temperature: 0.7
       },
-      // defaultTTSConfig: {
-      //   type: 'cartesia',
-      //   credentials: { apiKey: process.env.CARTESIA_API_KEY || '' },
-      //   voice: {
-      //     voiceId: process.env.TTS_VOICE_ID || 'a0e99841-438c-4a64-b679-ae501e7d6091',
-      //     language: 'en-IN',
-      //     gender: 'female'
-      //   },
-      //   audioQuality: 'telephony'
-      // } as any,
       defaultTTSConfig: {
-        type: 'sarvam',
-        credentials: { apiKey: process.env.SARVAM_API_KEY || '' },
+        type: 'cartesia',
+        credentials: { apiKey: process.env.CARTESIA_API_KEY || '' },
         voice: {
-          voiceId: "anushka",
+          voiceId: process.env.TTS_VOICE_ID || 'a0e99841-438c-4a64-b679-ae501e7d6091',
           language: 'en-IN',
           gender: 'female'
         },
         audioQuality: 'telephony'
       } as any,
+      // defaultTTSConfig: {
+      //   type: 'sarvam',
+      //   credentials: { apiKey: process.env.SARVAM_API_KEY || '' },
+      //   voice: {
+      //     voiceId: "anushka",
+      //     language: 'en-IN',
+      //     gender: 'female'
+      //   },
+      //   audioQuality: 'telephony'
+      // } as any,
       systemPrompt: ''  // Using systemPrompt from defaultLLMConfig
     } : undefined
   };
@@ -419,3 +419,5 @@ export { AudioCacheService } from './services/audio-cache';
 export { VoicePipeline, VoicePipelineConfig } from './pipeline/voice-pipeline';
 export { APIServer, APIServerConfig } from './server/api-server';
 export { SessionManager, SessionManagerConfig } from './session/session-manager';
+export { FallbackTTSProvider, FallbackTTSConfig } from './providers/tts/fallback-tts';
+export { buildSystemPrompt, getTTSProviderPrompt } from './prompts/tts-prompts';

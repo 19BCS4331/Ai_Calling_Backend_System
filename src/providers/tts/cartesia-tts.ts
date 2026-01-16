@@ -42,16 +42,18 @@ const CARTESIA_LANGUAGES: SupportedLanguage[] = [
 // Audio quality presets
 type AudioQualityMode = 'web' | 'telephony';
 
-const AUDIO_QUALITY_PRESETS = {
+const AUDIO_QUALITY_PRESETS: Record<AudioQualityMode, AudioQualityPreset> = {
   web: {
     encoding: 'pcm_s16le',
     sampleRate: 44100,   // CD quality
-    bitsPerSample: 16
+    bitsPerSample: 16,
+    isTelephony: false
   },
   telephony: {
-    encoding: 'pcm_s16le',  // Use pcm_mulaw for actual Twilio deployment
-    sampleRate: 8000,       // Telephony standard
-    bitsPerSample: 16
+    encoding: 'pcm_s16le',
+    sampleRate: 8000,       // Telephony standard - native 8kHz to avoid resampling
+    bitsPerSample: 16,
+    isTelephony: true       // Emit raw PCM without WAV headers
   }
 };
 
@@ -178,6 +180,7 @@ interface AudioQualityPreset {
   encoding: string;
   sampleRate: number;
   bitsPerSample: number;
+  isTelephony: boolean;  // If true, emit raw PCM without WAV headers
 }
 
 class CartesiaTTSStreamSession extends TTSStreamSession {
@@ -390,13 +393,17 @@ class CartesiaTTSStreamSession extends TTSStreamSession {
     this.finalizeSession();
   }
 
-  // Buffer for accumulating PCM before emitting as WAV
-  // Target ~100ms chunks to reduce boundary artifacts while maintaining low latency
+  // Buffer for accumulating PCM before emitting
+  // Target ~100ms chunks for web, ~200ms for telephony to reduce boundary artifacts
   private streamBuffer: Buffer[] = [];
   private streamBufferBytes: number = 0;
-  // 100ms at 22050Hz, 16-bit = 22050 * 0.1 * 2 = 4410 bytes
-  // But Cartesia uses 44100Hz typically, so 44100 * 0.1 * 2 = 8820 bytes
-  private readonly MIN_CHUNK_BYTES = 8000; // ~90ms at 44.1kHz 16-bit
+  
+  // Dynamic chunk size based on mode:
+  // Web: 8000 bytes = ~90ms at 44.1kHz 16-bit
+  // Telephony: 3200 bytes = 200ms at 8kHz 16-bit (larger time window = fewer boundaries)
+  private get MIN_CHUNK_BYTES(): number {
+    return this.qualityPreset.isTelephony ? 3200 : 8000;
+  }
   
   private handleMessage(data: WebSocket.Data): void {
     try {
@@ -470,7 +477,9 @@ class CartesiaTTSStreamSession extends TTSStreamSession {
   }
 
   /**
-   * Flush accumulated PCM buffer as a single WAV chunk
+   * Flush accumulated PCM buffer
+   * For web: wraps with WAV header for browser playback
+   * For telephony: emits raw PCM to avoid header artifacts when resampling
    */
   private flushStreamBuffer(): void {
     if (this.streamBuffer.length === 0) return;
@@ -478,14 +487,20 @@ class CartesiaTTSStreamSession extends TTSStreamSession {
     // Concatenate all buffered PCM chunks
     const pcmData = Buffer.concat(this.streamBuffer);
     
-    // Wrap with WAV header and emit
-    const wavChunk = this.pcmToWav(
-      pcmData,
-      this.qualityPreset.sampleRate,
-      1,
-      this.qualityPreset.bitsPerSample
-    );
-    this.emitAudioChunk(wavChunk);
+    if (this.qualityPreset.isTelephony) {
+      // Telephony mode: emit raw PCM without WAV header
+      // This prevents "thumping" artifacts when audio is processed downstream
+      this.emitAudioChunk(pcmData);
+    } else {
+      // Web mode: wrap with WAV header for browser playback
+      const wavChunk = this.pcmToWav(
+        pcmData,
+        this.qualityPreset.sampleRate,
+        1,
+        this.qualityPreset.bitsPerSample
+      );
+      this.emitAudioChunk(wavChunk);
+    }
     
     // Reset buffer
     this.streamBuffer = [];

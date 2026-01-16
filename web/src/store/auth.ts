@@ -1,75 +1,168 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { supabase } from '../lib/supabase';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
+import { useOrganizationStore } from './organization';
 
 interface User {
   id: string;
   email: string;
   name: string;
-  apiKey: string;
 }
 
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  error: string | null;
+  initialize: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<void>;
-  logout: () => void;
-  setApiKey: (apiKey: string) => void;
+  loginWithGoogle: () => Promise<void>;
+  logout: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set, get) => ({
-      user: null,
-      isAuthenticated: false,
-      isLoading: false,
+const mapSupabaseUser = (supabaseUser: SupabaseUser): User => ({
+  id: supabaseUser.id,
+  email: supabaseUser.email || '',
+  name: supabaseUser.user_metadata?.name || supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || '',
+});
 
-      login: async (email: string, _password: string) => {
-        set({ isLoading: true });
-        // Simulate API call - in production, call actual auth endpoint
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        const user: User = {
-          id: crypto.randomUUID(),
-          email,
-          name: email.split('@')[0],
-          apiKey: localStorage.getItem('vocaai_api_key') || '',
-        };
-        
-        set({ user, isAuthenticated: true, isLoading: false });
-      },
+export const useAuthStore = create<AuthState>()((set) => ({
+  user: null,
+  isAuthenticated: false,
+  isLoading: true,
+  error: null,
 
-      signup: async (name: string, email: string, _password: string) => {
-        set({ isLoading: true });
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
+  initialize: async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.user) {
+        set({ 
+          user: mapSupabaseUser(session.user), 
+          isAuthenticated: true, 
+          isLoading: false 
+        });
         
-        const user: User = {
-          id: crypto.randomUUID(),
-          email,
-          name,
-          apiKey: '',
-        };
-        
-        set({ user, isAuthenticated: true, isLoading: false });
-      },
+        // Fetch user's organizations
+        useOrganizationStore.getState().fetchUserOrganizations();
+      } else {
+        set({ user: null, isAuthenticated: false, isLoading: false });
+      }
 
-      logout: () => {
-        set({ user: null, isAuthenticated: false });
-      },
-
-      setApiKey: (apiKey: string) => {
-        const currentUser = get().user;
-        if (currentUser) {
-          localStorage.setItem('vocaai_api_key', apiKey);
-          set({ user: { ...currentUser, apiKey } });
+      // Listen for auth changes
+      supabase.auth.onAuthStateChange((_event, session) => {
+        if (session?.user) {
+          set({ 
+            user: mapSupabaseUser(session.user), 
+            isAuthenticated: true 
+          });
+          
+          // Fetch organizations on auth state change
+          useOrganizationStore.getState().fetchUserOrganizations();
+        } else {
+          set({ user: null, isAuthenticated: false });
         }
-      },
-    }),
-    {
-      name: 'vocaai-auth',
-      partialize: (state) => ({ user: state.user, isAuthenticated: state.isAuthenticated }),
+      });
+    } catch (error) {
+      console.error('Auth initialization error:', error);
+      set({ user: null, isAuthenticated: false, isLoading: false });
     }
-  )
-);
+  },
+
+  login: async (email: string, password: string) => {
+    set({ isLoading: true, error: null });
+    
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      set({ isLoading: false, error: error.message });
+      throw error;
+    }
+
+    if (data.user) {
+      set({ 
+        user: mapSupabaseUser(data.user), 
+        isAuthenticated: true, 
+        isLoading: false 
+      });
+    }
+  },
+
+  signup: async (name: string, email: string, password: string) => {
+    set({ isLoading: true, error: null });
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          name,
+          full_name: name,
+        },
+      },
+    });
+
+    if (error) {
+      set({ isLoading: false, error: error.message });
+      throw error;
+    }
+
+    if (data.user) {
+      set({ 
+        user: mapSupabaseUser(data.user), 
+        isAuthenticated: true, 
+        isLoading: false 
+      });
+      
+      // Don't fetch organizations yet - user needs to complete onboarding
+    }
+  },
+
+  loginWithGoogle: async () => {
+    set({ isLoading: true, error: null });
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/onboarding`,
+      },
+    });
+
+    if (error) {
+      set({ isLoading: false, error: error.message });
+      throw error;
+    }
+  },
+
+  logout: async () => {
+    set({ isLoading: true });
+    
+    const { error } = await supabase.auth.signOut();
+    
+    if (error) {
+      console.error('Logout error:', error);
+    }
+    
+    set({ user: null, isAuthenticated: false, isLoading: false });
+  },
+
+  resetPassword: async (email: string) => {
+    set({ isLoading: true, error: null });
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+
+    if (error) {
+      set({ isLoading: false, error: error.message });
+      throw error;
+    }
+
+    set({ isLoading: false });
+  },
+}));

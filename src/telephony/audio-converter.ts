@@ -4,7 +4,42 @@
  */
 
 /**
- * Resample audio from one sample rate to another using linear interpolation
+ * Simple low-pass filter to prevent aliasing when downsampling
+ * Uses a moving average filter which acts as a basic anti-aliasing filter
+ * @param input - Input buffer (16-bit PCM samples)
+ * @param windowSize - Number of samples to average (higher = more smoothing)
+ * @returns Filtered buffer
+ */
+function lowPassFilter(input: Buffer, windowSize: number): Buffer {
+  if (windowSize <= 1) return input;
+  
+  const samples = input.length / 2;
+  const output = Buffer.alloc(input.length);
+  const halfWindow = Math.floor(windowSize / 2);
+  
+  for (let i = 0; i < samples; i++) {
+    let sum = 0;
+    let count = 0;
+    
+    // Average samples in window
+    for (let j = -halfWindow; j <= halfWindow; j++) {
+      const idx = i + j;
+      if (idx >= 0 && idx < samples) {
+        sum += input.readInt16LE(idx * 2);
+        count++;
+      }
+    }
+    
+    const averaged = Math.round(sum / count);
+    output.writeInt16LE(Math.max(-32768, Math.min(32767, averaged)), i * 2);
+  }
+  
+  return output;
+}
+
+/**
+ * Resample audio from one sample rate to another
+ * Uses linear interpolation with anti-aliasing filter for downsampling
  * @param input - Input buffer (16-bit PCM samples)
  * @param inputRate - Input sample rate (e.g., 8000)
  * @param outputRate - Output sample rate (e.g., 16000)
@@ -15,8 +50,20 @@ export function resample(input: Buffer, inputRate: number, outputRate: number): 
     return input;
   }
 
+  let processedInput = input;
+  
+  // Apply low-pass filter before downsampling to prevent aliasing
+  // This reduces "thumping" and harsh artifacts in telephony audio
+  if (outputRate < inputRate) {
+    // Calculate filter window size based on downsampling ratio
+    // Higher ratio = more aggressive filtering needed
+    const ratio = inputRate / outputRate;
+    const windowSize = Math.min(Math.ceil(ratio * 2), 11); // Cap at 11 for performance
+    processedInput = lowPassFilter(input, windowSize);
+  }
+
   const ratio = outputRate / inputRate;
-  const inputSamples = input.length / 2;  // 16-bit samples
+  const inputSamples = processedInput.length / 2;  // 16-bit samples
   const outputSamples = Math.floor(inputSamples * ratio);
   const output = Buffer.alloc(outputSamples * 2);
 
@@ -26,8 +73,8 @@ export function resample(input: Buffer, inputRate: number, outputRate: number): 
     const srcIndexCeil = Math.min(srcIndexFloor + 1, inputSamples - 1);
     const fraction = srcIndex - srcIndexFloor;
 
-    const sample1 = input.readInt16LE(srcIndexFloor * 2);
-    const sample2 = input.readInt16LE(srcIndexCeil * 2);
+    const sample1 = processedInput.readInt16LE(srcIndexFloor * 2);
+    const sample2 = processedInput.readInt16LE(srcIndexCeil * 2);
     
     // Linear interpolation
     const interpolated = Math.round(sample1 + (sample2 - sample1) * fraction);

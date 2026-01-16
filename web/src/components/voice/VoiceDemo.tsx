@@ -1,9 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, MicOff, Phone, PhoneOff, Settings, Volume2 } from 'lucide-react';
+import { Mic, MicOff, Settings, Volume2, PhoneOff } from 'lucide-react';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useVoiceStore } from '../../store/voice';
-import { Button } from '../ui/Button';
 import { cn } from '../../lib/utils';
 
 interface VoiceDemoProps {
@@ -13,6 +12,7 @@ interface VoiceDemoProps {
 
 export function VoiceDemo({ className, compact = false }: VoiceDemoProps) {
   const [showSettings, setShowSettings] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
   const [apiKeys, setApiKeys] = useState({
     sarvam: '',
     gemini: '',
@@ -43,22 +43,7 @@ export function VoiceDemo({ className, compact = false }: VoiceDemoProps) {
     setShowSettings(false);
   };
 
-  const handleConnect = () => {
-    if (connectionStatus === 'connected') {
-      disconnect();
-    } else {
-      connect();
-    }
-  };
-
-  const handleStartSession = () => {
-    if (sessionStatus === 'active') {
-      endSession();
-      return;
-    }
-
-    startSession({
-      systemPrompt: `You are VocaAI, a real-time AI voice agent designed to demonstrate natural, human-like conversation.
+  const systemPrompt = `You are VocaAI, a real-time AI voice agent designed to demonstrate natural, human-like conversation.
 
 ## Core Behavior
 - Speak in a warm, confident, friendly, and professional tone
@@ -92,13 +77,52 @@ export function VoiceDemo({ className, compact = false }: VoiceDemoProps) {
 - Politely guide the conversation if the user is unsure what to say
 
 Your success is measured by one reaction: "This doesn't feel like AI… this feels human."
-`,
-      stt: { provider: 'sarvam', apiKey: apiKeys.sarvam, language: 'unknown' },
-      llm: { provider: 'gemini', apiKey: apiKeys.gemini, model: 'gemini-2.5-flash' },
-      // tts: { provider: 'cartesia', apiKey: apiKeys.cartesia, voiceId: 'faf0731e-dfb9-4cfc-8119-259a79b27e12' },
-      tts: { provider: 'sarvam', apiKey: apiKeys.sarvam, voiceId: 'anushka', language: 'en-IN' },
-    });
-  };
+`;
+
+  // Single click to start everything: connect -> start session -> start recording
+  const handleStartConversation = useCallback(async () => {
+    if (sessionStatus === 'active') {
+      // End everything
+      stopRecording();
+      endSession();
+      disconnect();
+      return;
+    }
+
+    setIsStarting(true);
+    
+    // Connect first
+    if (connectionStatus !== 'connected') {
+      connect();
+    }
+  }, [connectionStatus, sessionStatus, connect, disconnect, endSession, stopRecording]);
+
+  // Auto-start session when connected
+  useEffect(() => {
+    if (isStarting && connectionStatus === 'connected' && sessionStatus !== 'active') {
+      startSession({
+        systemPrompt,
+        stt: { provider: 'sarvam', apiKey: apiKeys.sarvam, language: 'unknown' },
+        llm: { provider: 'gemini', apiKey: apiKeys.gemini, model: 'gemini-2.5-flash' },
+        tts: { provider: 'cartesia', apiKey: apiKeys.cartesia, voiceId: 'faf0731e-dfb9-4cfc-8119-259a79b27e12' },
+      });
+    }
+  }, [isStarting, connectionStatus, sessionStatus, apiKeys, startSession]);
+
+  // Auto-start recording when session is active
+  useEffect(() => {
+    if (isStarting && sessionStatus === 'active' && !isRecording) {
+      startRecording();
+      setIsStarting(false);
+    }
+  }, [isStarting, sessionStatus, isRecording, startRecording]);
+
+  // Reset starting state on error
+  useEffect(() => {
+    if (error) {
+      setIsStarting(false);
+    }
+  }, [error]);
 
   const handleToggleRecording = () => {
     if (isRecording) {
@@ -108,40 +132,41 @@ Your success is measured by one reaction: "This doesn't feel like AI… this fee
     }
   };
 
-  const isConnected = connectionStatus === 'connected';
   const isSessionActive = sessionStatus === 'active';
   const hasKeys = apiKeys.sarvam && apiKeys.gemini;
+  const isActive = isSessionActive && isRecording;
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn(
-        'glass-card overflow-hidden',
+        'bg-white/[0.02] border border-white/5 rounded-2xl overflow-hidden',
         compact ? 'p-4' : 'p-6',
         className
       )}
     >
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <div className={cn(
-            'w-3 h-3 rounded-full',
-            connectionStatus === 'connected' ? 'bg-neon-green animate-pulse' :
-            connectionStatus === 'connecting' ? 'bg-yellow-500 animate-pulse' :
-            connectionStatus === 'error' ? 'bg-red-500' : 'bg-gray-500'
+            'w-2.5 h-2.5 rounded-full',
+            isActive ? 'bg-green-500 animate-pulse' :
+            isStarting ? 'bg-yellow-500 animate-pulse' :
+            connectionStatus === 'error' ? 'bg-red-500' : 'bg-white/20'
           )} />
-          <span className="text-sm text-white/60">
-            {connectionStatus === 'connected' ? 'Connected' :
-             connectionStatus === 'connecting' ? 'Connecting...' :
-             connectionStatus === 'error' ? 'Error' : 'Disconnected'}
+          <span className="text-sm text-white/50">
+            {isActive ? 'Listening...' :
+             isStarting ? 'Starting...' :
+             isAIPlaying ? 'AI Speaking...' :
+             connectionStatus === 'error' ? 'Error' : 'Ready'}
           </span>
         </div>
         <button
           onClick={() => setShowSettings(!showSettings)}
-          className="p-2 text-white/60 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+          className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
         >
-          <Settings size={18} />
+          <Settings size={16} />
         </button>
       </div>
 
@@ -152,153 +177,164 @@ Your success is measured by one reaction: "This doesn't feel like AI… this fee
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden mb-4"
+            className="overflow-hidden mb-6"
           >
-            <div className="p-4 bg-dark-800/50 rounded-xl space-y-3">
+            <div className="p-4 bg-white/[0.02] border border-white/5 rounded-xl space-y-3">
               <div>
-                <label className="block text-xs text-white/60 mb-1">Sarvam API Key</label>
+                <label className="block text-xs text-white/50 mb-1.5">Sarvam API Key</label>
                 <input
                   type="password"
                   value={apiKeys.sarvam}
                   onChange={(e) => setApiKeys(k => ({ ...k, sarvam: e.target.value }))}
-                  className="input-field text-sm"
+                  className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50"
                   placeholder="Enter Sarvam API key..."
                 />
               </div>
               <div>
-                <label className="block text-xs text-white/60 mb-1">Gemini API Key</label>
+                <label className="block text-xs text-white/50 mb-1.5">Gemini API Key</label>
                 <input
                   type="password"
                   value={apiKeys.gemini}
                   onChange={(e) => setApiKeys(k => ({ ...k, gemini: e.target.value }))}
-                  className="input-field text-sm"
+                  className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50"
                   placeholder="Enter Gemini API key..."
                 />
               </div>
               <div>
-                <label className="block text-xs text-white/60 mb-1">Cartesia API Key</label>
+                <label className="block text-xs text-white/50 mb-1.5">Cartesia API Key</label>
                 <input
                   type="password"
                   value={apiKeys.cartesia}
                   onChange={(e) => setApiKeys(k => ({ ...k, cartesia: e.target.value }))}
-                  className="input-field text-sm"
+                  className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50"
                   placeholder="Enter Cartesia API key..."
                 />
               </div>
-              <Button size="sm" onClick={saveApiKeys} className="w-full">
+              <button 
+                onClick={saveApiKeys} 
+                className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-sm font-medium text-white transition-colors"
+              >
                 Save Keys
-              </Button>
+              </button>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Voice Visualization */}
-      <div className="relative h-32 mb-4 flex items-center justify-center">
+      {/* Voice Visualization - Large clickable mic button */}
+      <div className="relative h-40 mb-6 flex items-center justify-center">
+        {/* Outer pulse ring */}
+        <motion.div
+          className={cn(
+            'absolute w-32 h-32 rounded-full',
+            isRecording ? 'bg-purple-500/20' : 'bg-white/[0.02]'
+          )}
+          animate={isRecording ? {
+            scale: [1, 1.3, 1],
+            opacity: [0.2, 0.4, 0.2],
+          } : {}}
+          transition={{ duration: 2, repeat: Infinity }}
+        />
+        {/* Middle pulse ring */}
         <motion.div
           className={cn(
             'absolute w-24 h-24 rounded-full',
-            isRecording ? 'bg-neon-blue/20' : 'bg-white/5'
+            isAIPlaying ? 'bg-pink-500/30' : isRecording ? 'bg-purple-500/30' : 'bg-white/[0.03]'
           )}
-          animate={isRecording ? {
+          animate={(isAIPlaying || isRecording) ? {
             scale: [1, 1.2, 1],
             opacity: [0.3, 0.6, 0.3],
           } : {}}
           transition={{ duration: 1.5, repeat: Infinity }}
         />
-        <motion.div
+        {/* Main mic button */}
+        <motion.button
+          onClick={handleStartConversation}
+          disabled={!hasKeys || isStarting}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
           className={cn(
-            'absolute w-16 h-16 rounded-full',
-            isAIPlaying ? 'bg-neon-purple/30' : 'bg-white/10'
+            'relative w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300',
+            isActive 
+              ? 'bg-gradient-to-br from-purple-500 to-pink-500 shadow-lg shadow-purple-500/30' 
+              : isAIPlaying
+              ? 'bg-gradient-to-br from-pink-500 to-purple-500 shadow-lg shadow-pink-500/30'
+              : 'bg-white/5 border border-white/10 hover:bg-white/10 hover:border-purple-500/30',
+            (!hasKeys || isStarting) && 'opacity-50 cursor-not-allowed'
           )}
-          animate={isAIPlaying ? {
-            scale: [1, 1.3, 1],
-            opacity: [0.4, 0.8, 0.4],
-          } : {}}
-          transition={{ duration: 1, repeat: Infinity }}
-        />
-        <div className={cn(
-          'relative w-12 h-12 rounded-full flex items-center justify-center',
-          isRecording ? 'bg-neon-blue shadow-neon' :
-          isAIPlaying ? 'bg-neon-purple shadow-neon-purple' :
-          'bg-dark-700'
-        )}>
-          {isAIPlaying ? <Volume2 size={20} /> : <Mic size={20} />}
-        </div>
+        >
+          {isActive ? (
+            <MicOff size={28} className="text-white" />
+          ) : isAIPlaying ? (
+            <Volume2 size={28} className="text-white" />
+          ) : (
+            <Mic size={28} className={hasKeys ? 'text-white/70' : 'text-white/30'} />
+          )}
+        </motion.button>
       </div>
+
+      {/* Status text */}
+      <p className="text-center text-sm text-white/40 mb-4">
+        {!hasKeys ? 'Configure API keys to start' :
+         isActive ? 'Tap to end conversation' :
+         isAIPlaying ? 'AI is responding...' :
+         isStarting ? 'Connecting...' :
+         'Tap to start conversation'}
+      </p>
 
       {/* Transcripts */}
       {!compact && (
         <div className="space-y-3 mb-4">
-          <div className="p-3 bg-dark-800/30 rounded-lg min-h-[60px]">
-            <p className="text-xs text-white/40 mb-1">You:</p>
-            <p className="text-sm text-white/80">{userTranscript || '...'}</p>
+          <div className="p-3 bg-white/[0.02] border border-white/5 rounded-xl min-h-[56px]">
+            <p className="text-xs text-white/30 mb-1">You</p>
+            <p className="text-sm text-white/70">{userTranscript || '...'}</p>
           </div>
-          <div className="p-3 bg-neon-blue/5 border border-neon-blue/20 rounded-lg min-h-[60px]">
-            <p className="text-xs text-neon-blue/60 mb-1">AI:</p>
-            <p className="text-sm text-white/90">{aiResponse || '...'}</p>
+          <div className="p-3 bg-purple-500/5 border border-purple-500/10 rounded-xl min-h-[56px]">
+            <p className="text-xs text-purple-400/60 mb-1">AI</p>
+            <p className="text-sm text-white/80">{aiResponse || '...'}</p>
           </div>
         </div>
       )}
 
       {/* Error Display */}
       {error && (
-        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
           <p className="text-sm text-red-400">{error}</p>
         </div>
       )}
 
       {/* Metrics */}
       {metrics && !compact && (
-        <div className="flex gap-4 mb-4 text-xs text-white/50">
-          <span>LLM: {metrics.firstLLMTokenMs}ms</span>
-          <span>TTS: {metrics.firstTTSByteMs}ms</span>
-          <span>Total: {metrics.turnDurationMs}ms</span>
+        <div className="flex justify-center gap-6 text-xs text-white/30">
+          <span>LLM: <span className="text-purple-400">{metrics.firstLLMTokenMs}ms</span></span>
+          <span>TTS: <span className="text-purple-400">{metrics.firstTTSByteMs}ms</span></span>
+          <span>Total: <span className="text-purple-400">{metrics.turnDurationMs}ms</span></span>
         </div>
       )}
 
-      {/* Controls */}
-      <div className="flex gap-2">
-        <Button
-          variant={isConnected ? 'danger' : 'secondary'}
-          size="sm"
-          onClick={handleConnect}
-          className="flex-1"
-        >
-          {isConnected ? <PhoneOff size={16} className="mr-2" /> : <Phone size={16} className="mr-2" />}
-          {isConnected ? 'Disconnect' : 'Connect'}
-        </Button>
-
-        {isConnected && (
-          <>
-            <Button
-              variant={isSessionActive ? 'danger' : 'primary'}
-              size="sm"
-              onClick={handleStartSession}
-              disabled={!hasKeys}
-              className="flex-1"
-            >
-              {isSessionActive ? 'End Session' : 'Start Session'}
-            </Button>
-
-            {isSessionActive && (
-              <Button
-                variant={isRecording ? 'danger' : 'secondary'}
-                size="sm"
-                onClick={handleToggleRecording}
-                className="px-3"
-              >
-                {isRecording ? <MicOff size={16} /> : <Mic size={16} />}
-              </Button>
+      {/* Manual controls - only show when session is active */}
+      {isSessionActive && (
+        <div className="flex gap-2 mt-4 pt-4 border-t border-white/5">
+          <button
+            onClick={handleToggleRecording}
+            className={cn(
+              'flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2',
+              isRecording 
+                ? 'bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20'
+                : 'bg-white/5 border border-white/10 text-white/70 hover:bg-white/10'
             )}
-          </>
-        )}
-      </div>
-
-      {!hasKeys && isConnected && (
-        <p className="text-xs text-yellow-500/80 mt-2 text-center">
-          Configure API keys in settings to start
-        </p>
+          >
+            {isRecording ? <MicOff size={16} /> : <Mic size={16} />}
+            {isRecording ? 'Mute' : 'Unmute'}
+          </button>
+          <button
+            onClick={handleStartConversation}
+            className="px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-lg text-sm font-medium text-red-400 hover:bg-red-500/20 transition-all flex items-center gap-2"
+          >
+            <PhoneOff size={16} />
+            End
+          </button>
+        </div>
       )}
     </motion.div>
   );

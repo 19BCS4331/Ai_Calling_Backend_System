@@ -7,27 +7,28 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Primary brand colors
+        // Primary brand colors - Purple themed
         primary: {
-          50: '#f0f9ff',
-          100: '#e0f2fe',
-          200: '#bae6fd',
-          300: '#7dd3fc',
-          400: '#38bdf8',
-          500: '#0ea5e9',
-          600: '#0284c7',
-          700: '#0369a1',
-          800: '#075985',
-          900: '#0c4a6e',
-          950: '#082f49',
+          50: '#faf5ff',
+          100: '#f3e8ff',
+          200: '#e9d5ff',
+          300: '#d8b4fe',
+          400: '#c084fc',
+          500: '#a855f7',
+          600: '#9333ea',
+          700: '#7c3aed',
+          800: '#6b21a8',
+          900: '#581c87',
+          950: '#3b0764',
         },
-        // Accent neon colors
+        // Accent neon colors - Purple dominant
         neon: {
-          blue: '#00d4ff',
+          blue: '#818cf8',
           purple: '#a855f7',
           pink: '#ec4899',
           green: '#10b981',
           cyan: '#06b6d4',
+          violet: '#8b5cf6',
         },
         // Dark theme colors
         dark: {
@@ -41,7 +42,7 @@ export default {
           700: '#334155',
           800: '#1e293b',
           900: '#0f172a',
-          950: '#020617',
+          950: '#0a0a0f',
         },
       },
       fontFamily: {
@@ -72,8 +73,8 @@ export default {
           '50%': { transform: 'translateY(-20px)' },
         },
         glow: {
-          '0%': { boxShadow: '0 0 20px rgba(0, 212, 255, 0.3)' },
-          '100%': { boxShadow: '0 0 40px rgba(0, 212, 255, 0.6)' },
+          '0%': { boxShadow: '0 0 20px rgba(168, 85, 247, 0.3)' },
+          '100%': { boxShadow: '0 0 40px rgba(168, 85, 247, 0.6)' },
         },
         slideUp: {
           '0%': { transform: 'translateY(20px)', opacity: '0' },
@@ -99,16 +100,19 @@ export default {
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
         'gradient-conic': 'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
-        'hero-gradient': 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)',
-        'card-gradient': 'linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(30, 27, 75, 0.9) 100%)',
-        'neon-glow': 'radial-gradient(circle at center, rgba(0, 212, 255, 0.15) 0%, transparent 70%)',
+        'hero-gradient': 'linear-gradient(135deg, #0a0a0f 0%, #1a0a2e 50%, #0a0a0f 100%)',
+        'card-gradient': 'linear-gradient(135deg, rgba(10, 10, 15, 0.9) 0%, rgba(26, 10, 46, 0.9) 100%)',
+        'neon-glow': 'radial-gradient(circle at center, rgba(168, 85, 247, 0.15) 0%, transparent 70%)',
+        'purple-glow': 'radial-gradient(circle at center, rgba(147, 51, 234, 0.2) 0%, transparent 70%)',
       },
       boxShadow: {
-        'neon': '0 0 20px rgba(0, 212, 255, 0.3)',
-        'neon-strong': '0 0 40px rgba(0, 212, 255, 0.5)',
-        'neon-purple': '0 0 20px rgba(168, 85, 247, 0.3)',
-        'glass': '0 8px 32px rgba(0, 0, 0, 0.12)',
-        'inner-glow': 'inset 0 0 20px rgba(0, 212, 255, 0.1)',
+        'neon': '0 0 20px rgba(168, 85, 247, 0.3)',
+        'neon-strong': '0 0 40px rgba(168, 85, 247, 0.5)',
+        'neon-purple': '0 0 20px rgba(168, 85, 247, 0.4)',
+        'neon-pink': '0 0 20px rgba(236, 72, 153, 0.3)',
+        'glass': '0 8px 32px rgba(0, 0, 0, 0.2)',
+        'inner-glow': 'inset 0 0 20px rgba(168, 85, 247, 0.1)',
+        'purple-lg': '0 10px 40px rgba(147, 51, 234, 0.3)',
       },
       backdropBlur: {
         xs: '2px',

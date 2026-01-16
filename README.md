@@ -1,38 +1,46 @@
-# 🎙️ AI Voice Calling Backend
+# 🎙️ VocaAI - AI Voice Calling Platform
 
-A **production-grade, low-latency AI voice calling backend** with pluggable STT/LLM/TTS providers, designed for real-time AI phone calls in India.
+A **production-grade, multi-tenant SaaS platform** for AI voice agents with pluggable STT/LLM/TTS providers, real-time telephony, and comprehensive billing.
+
+> **Built for India** — Supports 10+ Indian languages with low-latency voice processing.
 
 ## 🏗️ Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                     API Server (Express + WS)                    │
+│                     Web Dashboard (React)                        │
+│         Agent Builder │ Analytics │ Billing │ API Keys          │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    API Layer (Express + WS)                      │
+│          REST API (Port 3001)  │  Voice API (Port 8080)         │
 ├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐  │
-│  │  Session │    │   Tool   │    │   MCP    │    │ Metrics  │  │
-│  │ Manager  │    │ Registry │    │  Server  │    │ Collector│  │
-│  └──────────┘    └──────────┘    └──────────┘    └──────────┘  │
-│                                                                  │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐        │
+│  │ Session  │  │   Tool   │  │   MCP    │  │ Billing  │        │
+│  │ Manager  │  │ Registry │  │  Server  │  │ Engine   │        │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘        │
 ├─────────────────────────────────────────────────────────────────┤
 │                      Voice Pipeline                              │
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │  Audio In → STT → LLM (+ Tools) → TTS → Audio Out        │   │
 │  │            ↓         ↓              ↓                     │   │
 │  │        Streaming  Sentence      Streaming                 │   │
-│  │        Partial    Chunking      Audio                     │   │
+│  │        + Barge-in Chunking      Audio                     │   │
 │  └──────────────────────────────────────────────────────────┘   │
-│                                                                  │
 ├─────────────────────────────────────────────────────────────────┤
 │                     Provider Layer                               │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐                 │
-│  │    STT     │  │    LLM     │  │    TTS     │                 │
-│  ├────────────┤  ├────────────┤  ├────────────┤                 │
-│  │ • Sarvam   │  │ • Gemini   │  │ • Sarvam   │                 │
-│  │ • Google   │  │ • OpenAI   │  │ • Reverie  │                 │
-│  │ • Reverie  │  │ • Groq     │  │ • Google   │                 │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌──────────┐  │
+│  │    STT     │  │    LLM     │  │    TTS     │  │ Telephony│  │
+│  ├────────────┤  ├────────────┤  ├────────────┤  ├──────────┤  │
+│  │ • Sarvam   │  │ • Gemini   │  │ • Cartesia │  │ • Plivo  │  │
+│  │ • Deepgram │  │ • OpenAI   │  │ • Sarvam   │  │ • Twilio │  │
+│  │ • Assembly │  │ • Claude   │  │ • ElevenLabs│ └──────────┘  │
 │  └────────────┘  └────────────┘  └────────────┘                 │
-│                                                                  │
+├─────────────────────────────────────────────────────────────────┤
+│                     Data Layer (Supabase)                        │
+│   Organizations │ Users │ Agents │ Calls │ Billing │ Usage     │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -47,16 +55,26 @@ A **production-grade, low-latency AI voice calling backend** with pluggable STT/
 
 ### Technical Features
 - **WebSocket Streaming** - Real-time bidirectional audio
+- **Barge-in Detection** - Interrupt AI mid-sentence with natural conversation
 - **Dynamic API Keys** - Per-client, per-call credential injection
-- **Multi-tenant** - Session isolation with Redis-backed state
+- **Multi-tenant SaaS** - Organizations, users, roles with RLS
 - **Horizontal Scaling** - Stateless workers with external session store
+- **Docker Ready** - Production-grade containerization
 - **Observability** - Structured logging, metrics, cost tracking
+
+### SaaS Features
+- **🏢 Multi-tenant** - Organizations with team members and roles
+- **💳 Subscription Billing** - Stripe/Razorpay integration
+- **📊 Usage Tracking** - Per-minute billing with overage
+- **🔑 API Keys** - Scoped keys with rate limiting
+- **📞 Phone Numbers** - Provision and assign DIDs to agents
+- **📈 Analytics** - Call metrics, costs, and quality tracking
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 - Node.js 18+
-- Redis 6+
+- Supabase project (for database & auth)
 - API keys for your chosen providers
 
 ### Installation
@@ -69,13 +87,27 @@ npm install
 
 # Configure environment
 cp .env.example .env
-# Edit .env with your API keys
+# Edit .env with your API keys and Supabase credentials
 
 # Start development server
 npm run dev
 ```
 
-### Production Deployment
+### 🐳 Docker Deployment (Recommended)
+
+```bash
+# Build and run with Docker Compose
+docker-compose up -d
+
+# With Redis for session persistence
+docker-compose --profile with-redis up -d
+
+# Or build standalone
+docker build -t vocaai-backend .
+docker run -d --env-file .env -p 8080:8080 vocaai-backend
+```
+
+### Manual Production Deployment
 
 ```bash
 # Build
@@ -84,6 +116,15 @@ npm run build
 # Start
 npm start
 ```
+
+### Deploy to Cloud Platforms
+
+| Platform | Command |
+|----------|----------|
+| Railway | `railway up` |
+| Fly.io | `fly launch && fly deploy` |
+| Render | Connect repo, auto-deploy |
+| DigitalOcean | App Platform from Dockerfile |
 
 ## 📡 API Reference
 
@@ -307,43 +348,79 @@ Structured JSON logs with Pino:
 ## 📁 Project Structure
 
 ```
-src/
-├── index.ts                 # Main entry point
-├── types/                   # TypeScript type definitions
-│   └── index.ts
-├── providers/               # Provider implementations
-│   ├── base/               # Abstract base classes
-│   │   ├── stt-provider.ts
-│   │   ├── llm-provider.ts
-│   │   └── tts-provider.ts
-│   ├── stt/                # STT implementations
-│   │   └── sarvam-stt.ts
-│   ├── llm/                # LLM implementations
-│   │   └── gemini-llm.ts
-│   └── tts/                # TTS implementations
-│       ├── sarvam-tts.ts
-│       └── reverie-tts.ts
-├── pipeline/               # Voice pipeline
-│   └── voice-pipeline.ts
-├── tools/                  # Tool calling
-│   └── tool-registry.ts
-├── mcp/                    # MCP server
-│   └── mcp-server.ts
-├── session/                # Session management
-│   └── session-manager.ts
-├── server/                 # HTTP/WS server
-│   └── api-server.ts
-└── utils/                  # Utilities
-    └── logger.ts
+├── src/
+│   ├── index.ts                 # Main entry point
+│   ├── types/                   # TypeScript type definitions
+│   ├── providers/               # Provider implementations
+│   │   ├── base/                # Abstract base classes
+│   │   ├── stt/                 # Sarvam, Deepgram, AssemblyAI
+│   │   ├── llm/                 # Gemini, OpenAI, Claude
+│   │   └── tts/                 # Cartesia, Sarvam, ElevenLabs
+│   ├── pipeline/                # Voice pipeline with barge-in
+│   ├── telephony/               # Plivo/Twilio integration
+│   ├── tools/                   # Tool calling & registry
+│   ├── mcp/                     # MCP server for n8n
+│   ├── services/                # Audio cache, latency optimization
+│   ├── prompts/                 # TTS-specific prompts
+│   ├── session/                 # Session management
+│   ├── server/                  # HTTP/WS API server
+│   └── utils/                   # Logger, helpers
+├── web/                         # React dashboard (Vite)
+│   ├── src/components/          # UI components
+│   └── src/hooks/               # WebSocket hooks
+├── supabase/
+│   └── migrations/              # Database schema
+│       └── 001_initial_schema.sql
+├── test/                        # Test clients
+├── Dockerfile                   # Production container
+├── docker-compose.yml           # Orchestration
+└── .env.example                 # Environment template
 ```
+
+## 💰 Pricing Tiers
+
+Built-in subscription management with configurable plans:
+
+| Plan | Price | Minutes | Concurrency | Features |
+|------|-------|---------|-------------|----------|
+| **Free** | $0 | Trial | 1 | Basic testing |
+| **Starter** | $79/mo | 500 | 2 | Email support |
+| **Growth** | $349/mo | 2,500 | 5 | Analytics, Webhooks, API |
+| **Scale** | $1,299/mo | 10,000 | 20 | Voice cloning, Priority support |
+| **Enterprise** | Custom | Custom | 100+ | SLA, Custom integrations |
+
+## 🗄️ Database Schema (Supabase)
+
+See `supabase/migrations/001_initial_schema.sql` for full schema.
+
+**Core Tables:**
+- `organizations` - Multi-tenant root with billing info
+- `users` - Linked to Supabase Auth
+- `organization_members` - User-org mapping with roles
+- `plans` - Subscription tiers with pricing
+- `subscriptions` - Org subscriptions with status
+- `agents` - Voice agent configurations
+- `calls` - Call records with cost breakdown
+- `transcripts` - Conversation messages
+- `usage_records` - Granular usage tracking
+- `api_keys` - Scoped API keys
+- `webhooks` - Event subscriptions
+
+**Key Features:**
+- Row Level Security (RLS) on all tables
+- Automatic cost calculation triggers
+- Daily usage aggregation
+- Invoice number generation
 
 ## 🔒 Security
 
 - **No hardcoded credentials** - All API keys via environment or per-request
+- **Supabase RLS** - Row-level security for multi-tenancy
 - **Encrypted transport** - WSS/HTTPS in production
 - **PII redaction** - Sensitive data redacted from logs
-- **Tenant isolation** - Sessions isolated by tenant ID
-- **API key authentication** - Required for all endpoints
+- **Tenant isolation** - Sessions isolated by organization
+- **API key authentication** - Scoped keys with rate limiting
+- **Non-root Docker** - Container runs as unprivileged user
 
 ## 📈 Performance Targets
 
@@ -353,6 +430,30 @@ src/
 | First audio byte | < 500ms |
 | Concurrent calls | 1000+ |
 | Session memory | < 50MB |
+
+## 🛠️ Environment Variables
+
+See `.env.example` for full list. Key variables:
+
+```env
+# Supabase
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+
+# Providers
+SARVAM_API_KEY=your_sarvam_key
+CARTESIA_API_KEY=your_cartesia_key
+GOOGLE_API_KEY=your_google_key
+
+# Telephony
+PLIVO_AUTH_ID=your_plivo_id
+PLIVO_AUTH_TOKEN=your_plivo_token
+
+# Payments
+STRIPE_SECRET_KEY=sk_...
+RAZORPAY_KEY_ID=rzp_...
+```
 
 ## 🤝 Contributing
 
@@ -365,3 +466,7 @@ src/
 ## 📄 License
 
 MIT License - see LICENSE file for details.
+
+---
+
+**Built with ❤️ for the Indian market** | [Documentation](./docs) | [API Reference](./docs/api.md)

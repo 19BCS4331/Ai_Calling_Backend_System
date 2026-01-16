@@ -110,11 +110,20 @@ export function useWebSocket() {
         setMetrics(msg.metrics as { firstLLMTokenMs: number; firstTTSByteMs: number; turnDurationMs: number });
         break;
 
+      case 'barge_in':
+        // Clear audio buffer immediately on barge-in
+        if (workletNodeRef.current) {
+          workletNodeRef.current.port.postMessage({ type: 'clear' });
+        }
+        setIsAIPlaying(false);
+        setAIResponse('');  // Clear AI response for new turn
+        break;
+
       case 'error':
         setError(msg.error as string);
         break;
     }
-  }, [setSessionStatus, setSessionId, setUserTranscript, appendAIResponse, setError, setMetrics]);
+  }, [setSessionStatus, setSessionId, setUserTranscript, appendAIResponse, setError, setMetrics, setIsAIPlaying, setAIResponse]);
 
   const initAudioPlayback = async (audioFormat: { sampleRate: number }) => {
     const sampleRate = audioFormat?.sampleRate || 44100;

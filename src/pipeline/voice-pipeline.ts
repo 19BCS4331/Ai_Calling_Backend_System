@@ -77,6 +77,22 @@ export class VoicePipeline extends EventEmitter {
   private audioCache: AudioCacheService | null = null;
   private isTTSPlaying: boolean = false;
 
+  // Phase 2: Barge-in history truncation
+  private currentAssistantMessage: string = '';  // Full message being generated
+  private playedAudioText: string = '';          // Text that was actually spoken
+  private ttsTextQueue: string[] = [];           // Sentences sent to TTS
+  private ttsSentenceIndex: number = 0;          // Current sentence being played
+
+  // Phase 2: Enhanced echo suppression
+  private ttsPlaybackStartTime: number = 0;
+  private ttsPlaybackEndTime: number = 0;
+  private echoSuppressionWindowMs: number = 500;  // Ignore STT for this long after TTS ends
+  private lastSTTConfidence: number = 0;
+
+  // Phase 3: Tool execution state management
+  private isExecutingTool: boolean = false;       // True while tool is being executed
+  private queuedUserInput: string | null = null;  // User speech captured during tool execution
+
   constructor(
     session: CallSession,
     sttProvider: STTProvider,
@@ -127,38 +143,82 @@ export class VoicePipeline extends EventEmitter {
     await this.startSTTSession();
   }
 
-  private bargeInThreshold: number = 500;  // Audio level threshold for barge-in
+  private bargeInThreshold: number = 600;  // Audio level threshold for barge-in (tuned: 1000+ = speech, 200-500 = noise)
   private consecutiveLoudChunks: number = 0;
-  private bargeInChunksRequired: number = 3;  // Require 3 consecutive loud chunks
+  private bargeInChunksRequired: number = 3;  // Require 3 consecutive loud chunks for stability
 
   /**
    * Process incoming audio chunk from caller
+   * Phase 2: Enhanced echo suppression during TTS playback
    */
   processAudioChunk(audioChunk: Buffer): void {
     if (!this.isActive || !this.sttSession) {
       return;
     }
 
-    // Handle barge-in: only if TTS is playing AND user is actually speaking
+    // Barge-in detection - must run BEFORE echo suppression
+    // Check for barge-in whenever TTS is playing
     if (this.config.enableBargeIn && this.isTTSPlaying) {
       const audioLevel = this.calculateAudioLevel(audioChunk);
       
-      if (audioLevel > this.bargeInThreshold) {
+      // Use lower threshold for more sensitive barge-in detection
+      const threshold = this.bargeInThreshold;
+      
+      // Debug: Log audio levels periodically during TTS
+      if (Math.random() < 0.1) {
+        this.logger.debug('Barge-in check', { 
+          audioLevel, 
+          threshold,
+          consecutiveLoud: this.consecutiveLoudChunks,
+          isTTSPlaying: this.isTTSPlaying
+        });
+      }
+      
+      if (audioLevel > threshold) {
         this.consecutiveLoudChunks++;
         
-        // Only trigger barge-in after sustained speech detected
-        if (this.consecutiveLoudChunks >= this.bargeInChunksRequired) {
-          this.logger.info('Barge-in triggered', { audioLevel, chunks: this.consecutiveLoudChunks });
+        // Trigger barge-in after 2 consecutive loud chunks (reduced from 3)
+        if (this.consecutiveLoudChunks >= 2) {
+          this.logger.info('Barge-in triggered', { 
+            audioLevel, 
+            chunks: this.consecutiveLoudChunks,
+            threshold
+          });
           this.handleBargeIn();
-          this.isTTSPlaying = false;
           this.consecutiveLoudChunks = 0;
+          // Don't return - let the audio go to STT for the new turn
         }
       } else {
-        this.consecutiveLoudChunks = 0;  // Reset on quiet chunk
+        this.consecutiveLoudChunks = 0;
       }
     }
 
+    // Phase 2: Echo suppression - skip STT only during active TTS playback
+    // But still allow audio through shortly after TTS ends for natural conversation
+    if (this.isTTSPlaying) {
+      // Don't send audio to STT while TTS is actively playing
+      return;
+    }
+
     this.sttSession.write(audioChunk);
+  }
+
+  /**
+   * Phase 2: Check if we're in the echo suppression window
+   * Returns true if TTS is playing or recently ended
+   */
+  private isInEchoSuppressionWindow(): boolean {
+    if (this.isTTSPlaying) {
+      return true;
+    }
+    
+    // Also suppress for a short window after TTS ends
+    if (this.ttsPlaybackEndTime > 0) {
+      const timeSinceTTSEnd = Date.now() - this.ttsPlaybackEndTime;
+      return timeSinceTTSEnd < this.echoSuppressionWindowMs;
+    }
+    
+    return false;
   }
 
   /**
@@ -219,13 +279,27 @@ export class VoicePipeline extends EventEmitter {
           
           accumulatedText = result.text;
           
-          // Filter out garbage/phantom transcripts
-          if (this.isValidTranscript(accumulatedText)) {
+          // Phase 2: Store confidence for filtering
+          this.lastSTTConfidence = result.confidence;
+          
+          // Phase 3: If tool is executing, queue the input instead of processing
+          if (this.isExecutingTool) {
+            this.logger.debug('Queueing user input during tool execution', {
+              text: accumulatedText
+            });
+            this.queuedUserInput = accumulatedText;
+            accumulatedText = '';
+            return;
+          }
+          
+          // Filter out garbage/phantom transcripts (including confidence check)
+          if (this.isValidTranscript(accumulatedText, result.confidence)) {
             await this.processUserInput(accumulatedText);
           } else {
             this.logger.debug('Filtered invalid transcript', { 
               text: accumulatedText,
-              reason: this.getFilterReason(accumulatedText)
+              confidence: result.confidence,
+              reason: this.getFilterReason(accumulatedText, result.confidence)
             });
           }
           
@@ -331,6 +405,11 @@ export class VoicePipeline extends EventEmitter {
           this.emit('llm_tool_call', toolCall);
           toolCalls.push(toolCall);
           
+          // IMMEDIATELY play filler before tool execution starts
+          // This prevents silence gap between LLM decision and tool execution
+          this.isExecutingTool = true;
+          await this.playToolFillerImmediate(toolCall.function.name);
+          
           // Execute tool and continue conversation
           await this.executeToolCall(toolCall);
         },
@@ -389,21 +468,40 @@ export class VoicePipeline extends EventEmitter {
             this.emit('first_audio_byte', { latencyMs: firstByteLatency });
           }
           
+          // Phase 2: Track TTS playback timing for echo suppression
+          if (!this.isTTSPlaying) {
+            this.ttsPlaybackStartTime = Date.now();
+            this.logger.debug('TTS playback started', { chunkSize: chunk.length });
+          }
           this.isTTSPlaying = true;
           this.emit('tts_audio_chunk', chunk);
         },
 
         onComplete: (result: TTSResult) => {
-          this.isTTSPlaying = false;
-          this.endStage(stage);
-          this.logger.debug('TTS streaming complete', { 
+          // Keep isTTSPlaying true for estimated client playback duration
+          // Audio is buffered on client, so server completion != client playback complete
+          const estimatedPlaybackMs = result.durationMs || 2000;
+          this.logger.debug('TTS streaming complete on server, waiting for client playback', { 
             durationMs: result.durationMs,
-            latencyMs: result.latencyMs 
+            estimatedPlaybackMs
           });
+          
+          // Delay setting isTTSPlaying to false to allow barge-in during client playback
+          setTimeout(() => {
+            this.isTTSPlaying = false;
+            this.ttsPlaybackEndTime = Date.now();
+            this.logger.debug('TTS playback window ended');
+          }, estimatedPlaybackMs);
+          
+          // Phase 2: Mark all queued sentences as played
+          this.playedAudioText = this.ttsTextQueue.join(' ');
+          
+          this.endStage(stage);
         },
 
         onError: (error: Error) => {
           this.isTTSPlaying = false;
+          this.ttsPlaybackEndTime = Date.now();
           this.logger.error('TTS error', { error: error.message });
           this.emit('error', error);
         }
@@ -423,9 +521,14 @@ export class VoicePipeline extends EventEmitter {
   
   /**
    * Stream a sentence to TTS immediately (low-latency)
+   * Phase 2: Track sentences for barge-in history truncation
    */
   private streamSentenceToTTS(sentence: string): void {
     if (!sentence.trim()) return;
+    
+    // Phase 2: Track sentence for history truncation
+    this.ttsTextQueue.push(sentence.trim());
+    this.currentAssistantMessage += sentence;
     
     // Wait briefly for TTS session if not ready yet
     if (!this.ttsSessionReady || !this.ttsSession?.isSessionActive()) {
@@ -468,19 +571,16 @@ export class VoicePipeline extends EventEmitter {
     try {
       const args = JSON.parse(toolCall.function.arguments);
       
-      // Phase 1: Play filler speech during tool execution
-      const fillerPromise = this.playToolFiller(toolCall.function.name);
+      // Execute tool (filler already playing from onToolCall)
+      const result = await this.toolRegistry.execute({
+        toolName: toolCall.function.name,
+        arguments: args,
+        sessionId: this.session.sessionId,
+        callContext: this.session.context
+      });
       
-      // Execute tool in parallel with filler playback
-      const [result] = await Promise.all([
-        this.toolRegistry.execute({
-          toolName: toolCall.function.name,
-          arguments: args,
-          sessionId: this.session.sessionId,
-          callContext: this.session.context
-        }),
-        fillerPromise
-      ]);
+      // Tool execution complete - clear the flag
+      this.isExecutingTool = false;
 
       this.endStage(stage);
       this.session.metrics.toolCallCount++;
@@ -508,9 +608,20 @@ export class VoicePipeline extends EventEmitter {
       this.logger.debug('Continuing LLM generation with tool result', { 
         tool: toolCall.function.name 
       });
+      
+      // Clear any queued user input that arrived during tool execution
+      // This prevents overlap with the tool response
+      if (this.queuedUserInput) {
+        this.logger.debug('Discarding queued input during tool execution', {
+          queuedText: this.queuedUserInput
+        });
+        this.queuedUserInput = null;
+      }
+      
       await this.generateLLMResponse();
 
     } catch (error) {
+      this.isExecutingTool = false;  // Clear flag on error
       this.logger.error('Tool execution failed', { 
         tool: toolCall.function.name, 
         error: (error as Error).message 
@@ -528,10 +639,11 @@ export class VoicePipeline extends EventEmitter {
   }
 
   /**
-   * Play filler speech while tool is executing
+   * Play filler speech IMMEDIATELY when tool call is detected
+   * This runs BEFORE tool execution starts, eliminating the silence gap
    * Uses cached audio for instant playback, falls back to live TTS
    */
-  private async playToolFiller(toolName: string): Promise<void> {
+  private async playToolFillerImmediate(toolName: string): Promise<void> {
     const fillerConfig = this.config.latencyOptimization.fillers;
     
     // Skip if fillers are disabled or it's an end_call tool
@@ -596,15 +708,23 @@ export class VoicePipeline extends EventEmitter {
 
   /**
    * Handle barge-in - abort current TTS/LLM and reset for new input
-   * Called from API server when client detects user speaking during AI audio
+   * Phase 2: Truncate assistant message to only what was actually heard
    */
   public handleBargeIn(): void {
-    this.logger.info('Barge-in: aborting current turn');
+    this.logger.info('Barge-in: aborting current turn', {
+      fullMessage: this.currentAssistantMessage.length,
+      playedText: this.playedAudioText.length,
+      sentenceIndex: this.ttsSentenceIndex
+    });
+    
+    // Phase 2: Truncate the last assistant message to what was actually heard
+    this.truncateAssistantMessage();
     
     // Stop current TTS playback
     this.ttsSession?.abort();
     this.ttsSession = null;
     this.isTTSPlaying = false;
+    this.ttsPlaybackEndTime = Date.now();
 
     // Stop current LLM generation
     this.llmSession?.abort();
@@ -613,18 +733,60 @@ export class VoicePipeline extends EventEmitter {
     // Reset turn state so new input can be processed
     this.isProcessingTurn = false;
     this.pendingSentences = [];
+    
+    // Reset Phase 2 tracking
+    this.currentAssistantMessage = '';
+    this.playedAudioText = '';
+    this.ttsTextQueue = [];
+    this.ttsSentenceIndex = 0;
 
     this.emit('barge_in');
   }
 
   /**
+   * Phase 2: Truncate assistant message in history to only what was heard
+   * This ensures the conversation history reflects what the user actually heard
+   */
+  private truncateAssistantMessage(): void {
+    if (!this.playedAudioText || this.session.messages.length === 0) {
+      return;
+    }
+
+    // Find the last assistant message
+    for (let i = this.session.messages.length - 1; i >= 0; i--) {
+      const msg = this.session.messages[i];
+      if (msg.role === 'assistant' && msg.content) {
+        const originalLength = msg.content.length;
+        
+        // Truncate to what was actually played
+        if (this.playedAudioText.length < msg.content.length) {
+          msg.content = this.playedAudioText + '... [interrupted]';
+          this.logger.debug('Truncated assistant message on barge-in', {
+            originalLength,
+            truncatedLength: msg.content.length,
+            playedText: this.playedAudioText.substring(0, 50)
+          });
+        }
+        break;
+      }
+    }
+  }
+
+  /**
    * Validate transcript to filter out garbage/phantom STT results
    * Returns true if the transcript should be processed
-   * Uses configurable turn detection settings
+   * Phase 2: Added confidence-based filtering
    */
-  private isValidTranscript(text: string): boolean {
+  private isValidTranscript(text: string, confidence: number = 1.0): boolean {
     const trimmed = text.trim();
     const turnConfig = this.config.latencyOptimization.turnDetection;
+    
+    // Phase 2: Confidence-based filtering
+    // Reject low-confidence transcripts (likely noise or echo)
+    const minConfidence = 0.5;  // Minimum confidence threshold
+    if (confidence < minConfidence && trimmed.length < 15) {
+      return false;
+    }
     
     // Filter empty or very short transcripts (configurable minimum length)
     if (trimmed.length < turnConfig.minTranscriptLength) {
@@ -661,10 +823,17 @@ export class VoicePipeline extends EventEmitter {
 
   /**
    * Get the reason why a transcript was filtered (for logging)
+   * Phase 2: Added confidence reason
    */
-  private getFilterReason(text: string): string {
+  private getFilterReason(text: string, confidence: number = 1.0): string {
     const trimmed = text.trim();
     const turnConfig = this.config.latencyOptimization.turnDetection;
+    
+    // Phase 2: Check confidence first
+    const minConfidence = 0.5;
+    if (confidence < minConfidence && trimmed.length < 15) {
+      return `low_confidence (${(confidence * 100).toFixed(1)}%)`;
+    }
     
     if (trimmed.length < turnConfig.minTranscriptLength) {
       return 'too_short';
