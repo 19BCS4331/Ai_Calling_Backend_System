@@ -104,7 +104,9 @@ export class SarvamSTTProvider extends STTProvider {
         model: config.model || 'saarika:v2.5',
         sampleRate: config.sampleRateHertz || 16000,
         encoding: config.encoding || 'LINEAR16',
-        highVadSensitivity: config.highVadSensitivity ?? true,
+        // Phase 4: Default to LOW VAD sensitivity to prevent premature turn detection
+        // This gives users more time to pause and think without triggering AI response
+        highVadSensitivity: config.highVadSensitivity ?? false,
         vadSignals: config.vadSignals ?? true,
         flushSignal: config.flushSignal ?? false
       }
@@ -146,12 +148,14 @@ class SarvamSTTStreamSession extends STTStreamSession {
     const languageCode = this.mapLanguageCode(this.sessionConfig.language);
     
     // Build WebSocket URL with query parameters per Sarvam AsyncAPI spec
+    // Phase 4: Use lower VAD sensitivity to prevent premature endpointing
+    // high_vad_sensitivity=false means fewer false positives on brief pauses
     const params = new URLSearchParams({
       'language-code': languageCode,
       'model': this.sessionConfig.model,
       'sample_rate': this.sessionConfig.sampleRate.toString(),
       'input_audio_codec': 'pcm_s16le',  // Required for raw PCM audio
-      'high_vad_sensitivity': 'true',
+      'high_vad_sensitivity': this.sessionConfig.highVadSensitivity ? 'true' : 'false',
       'vad_signals': 'true'
     });
 

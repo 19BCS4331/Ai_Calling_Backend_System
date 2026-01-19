@@ -11,6 +11,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Logger, CallSession, STTConfig, LLMConfig, TTSConfig, LatencyOptimizationConfig, DEFAULT_LATENCY_CONFIG } from '../types';
 import { SessionManager, CreateSessionOptions } from '../session/session-manager';
 import { ToolRegistry, builtInTools } from '../tools/tool-registry';
+import { demoBookingTools } from '../tools/demo-booking-tools';
 import { MCPServer, createCommonN8nTools } from '../mcp/mcp-server';
 import { MCPClientManager, MCPClientConfig } from '../mcp/mcp-client';
 import { VoicePipeline } from '../pipeline/voice-pipeline';
@@ -61,6 +62,7 @@ export class APIServer {
   private activePipelines: Map<string, VoicePipeline> = new Map();
   private activeConnections: Map<string, WebSocket> = new Map();
   private connectionSessions: Map<string, Set<string>> = new Map();  // connectionId -> sessionIds
+  private sessionMcpClients: Map<string, string[]> = new Map();  // sessionId -> MCP client names (for cleanup)
   private telephonyManager: TelephonyManager | null = null;
   private audioCache: AudioCacheService;
 
@@ -539,12 +541,38 @@ export class APIServer {
   ): Promise<void> {
     const { tenantId, config } = message;
 
+    // Resolve API keys: use client-provided or fall back to environment variables
+    // This enables "demo mode" where the web app doesn't need to send API keys
+    const sttApiKey = config.stt?.apiKey || process.env.SARVAM_API_KEY || '';
+    const llmApiKey = config.llm?.apiKey || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || '';
+    const ttsApiKey = config.tts?.apiKey || process.env.CARTESIA_API_KEY || '';
+
+    // Log API key resolution for debugging (only shows if keys are present, not the actual keys)
+    this.logger.info('API keys resolved', {
+      stt: sttApiKey ? 'present' : 'MISSING',
+      llm: llmApiKey ? 'present' : 'MISSING', 
+      tts: ttsApiKey ? 'present' : 'MISSING',
+      source: {
+        stt: config.stt?.apiKey ? 'client' : 'env',
+        llm: config.llm?.apiKey ? 'client' : 'env',
+        tts: config.tts?.apiKey ? 'client' : 'env'
+      }
+    });
+
+    // Validate required API keys
+    if (!llmApiKey) {
+      throw new Error('LLM API key not configured. Set GOOGLE_API_KEY or GEMINI_API_KEY in environment.');
+    }
+    if (!sttApiKey) {
+      throw new Error('STT API key not configured. Set SARVAM_API_KEY in environment.');
+    }
+
     // Create provider configs from dynamic credentials
     // STT language: use 'unknown' for auto-detect (default), or specific language
     // TTS language: must be specific (e.g., 'en-IN') - Sarvam TTS doesn't support 'unknown'
     const sttConfig: STTConfig = {
       type: config.stt?.provider || 'sarvam',
-      credentials: { apiKey: config.stt?.apiKey || '' },
+      credentials: { apiKey: sttApiKey },
       language: config.stt?.language || config.language || 'unknown',
       sampleRateHertz: config.sampleRate || 16000
     };
@@ -559,7 +587,7 @@ export class APIServer {
 
     const llmConfig: LLMConfig = {
       type: config.llm?.provider || 'gemini',
-      credentials: { apiKey: config.llm?.apiKey || '' },
+      credentials: { apiKey: llmApiKey },
       model: config.llm?.model || 'gemini-2.5-flash',
       systemPrompt: mergedSystemPrompt,
       temperature: config.llm?.temperature ?? 0.7
@@ -567,7 +595,7 @@ export class APIServer {
 
     const ttsConfig: any = {
       type: ttsProviderType,
-      credentials: { apiKey: config.tts?.apiKey || '' },
+      credentials: { apiKey: ttsApiKey },
       voice: {
         voiceId: config.tts?.voiceId || 'anushka',
         language: config.tts?.language || config.language || 'en-IN',
@@ -618,6 +646,43 @@ export class APIServer {
 
     // Clean up any existing sessions for this connection before creating new one
     await this.cleanupConnectionSessions(connectionId);
+
+    // Connect to per-session MCP workflows if specified
+    // config.mcpWorkflows can be an array of { name, url, apiKey? } objects
+    const connectedMcpClients: string[] = [];
+    if (config.mcpWorkflows && Array.isArray(config.mcpWorkflows)) {
+      for (const workflow of config.mcpWorkflows) {
+        if (workflow.url) {
+          try {
+            // Use a unique name per session to avoid conflicts
+            const clientName = `${workflow.name || 'n8n'}_${session.sessionId.slice(0, 8)}`;
+            await this.mcpClientManager.addServer({
+              name: clientName,
+              transport: 'sse',
+              url: workflow.url,
+              apiKey: workflow.apiKey,
+              timeout: 30000
+            });
+            connectedMcpClients.push(clientName);
+            this.logger.info('Connected to session MCP workflow', { 
+              sessionId: session.sessionId,
+              workflow: workflow.name,
+              url: workflow.url
+            });
+          } catch (error) {
+            this.logger.warn('Failed to connect to MCP workflow', {
+              sessionId: session.sessionId,
+              workflow: workflow.name,
+              error: (error as Error).message
+            });
+          }
+        }
+      }
+      // Track which MCP clients belong to this session for cleanup
+      if (connectedMcpClients.length > 0) {
+        this.sessionMcpClients.set(session.sessionId, connectedMcpClients);
+      }
+    }
     
     // Store and start pipeline
     this.activePipelines.set(session.sessionId, pipeline);
@@ -772,7 +837,15 @@ export class APIServer {
       this.activePipelines.delete(sessionId);
     }
 
+    // Clean up session-specific MCP clients
+    await this.cleanupSessionMcpClients(sessionId);
+
     const session = await this.sessionManager.endSession(sessionId);
+    
+    // Trigger post-call follow-up email (non-blocking)
+    this.triggerPostCallFollowUp(sessionId, session).catch(err => {
+      this.logger.warn('Post-call follow-up failed', { sessionId, error: err.message });
+    });
     
     const ws = this.activeConnections.get(connectionId);
     if (ws?.readyState === WebSocket.OPEN) {
@@ -781,6 +854,111 @@ export class APIServer {
         sessionId,
         metrics: session?.metrics
       }));
+    }
+  }
+
+  /**
+   * Clean up MCP clients that were connected for a specific session
+   */
+  private async cleanupSessionMcpClients(sessionId: string): Promise<void> {
+    const clientNames = this.sessionMcpClients.get(sessionId);
+    if (clientNames && clientNames.length > 0) {
+      for (const clientName of clientNames) {
+        try {
+          await this.mcpClientManager.removeServer(clientName);
+          this.logger.info('Removed session MCP client', { sessionId, clientName });
+        } catch (error) {
+          this.logger.warn('Failed to remove session MCP client', {
+            sessionId,
+            clientName,
+            error: (error as Error).message
+          });
+        }
+      }
+      this.sessionMcpClients.delete(sessionId);
+    }
+  }
+
+  /**
+   * Trigger post-call follow-up email for demo enquiries
+   * Checks if the session has a pending email and triggers it
+   */
+  private async triggerPostCallFollowUp(sessionId: string, session: any): Promise<void> {
+    // Only process for web-demo tenant (voice demo)
+    if (session?.tenantId !== 'web-demo') {
+      return;
+    }
+
+    try {
+      const supabaseUrl = process.env.SUPABASE_URL;
+      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      
+      if (!supabaseUrl || !supabaseKey) {
+        return; // Supabase not configured
+      }
+
+      // Dynamic import to avoid issues if not installed
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(supabaseUrl, supabaseKey);
+
+      // Get the enquiry for this session
+      const { data: enquiry, error } = await supabase
+        .from('demo_enquiries')
+        .select('*')
+        .eq('session_id', sessionId)
+        .single();
+
+      if (error || !enquiry) {
+        return; // No enquiry found
+      }
+
+      // Update call duration
+      const callDuration = session?.metrics?.turnDurationMs 
+        ? Math.round(session.metrics.turnDurationMs / 1000)
+        : null;
+
+      await supabase
+        .from('demo_enquiries')
+        .update({
+          call_duration_seconds: callDuration,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', enquiry.id);
+
+      // Check if there's a pending email to send
+      const pendingEmail = enquiry.metadata?.pending_email;
+      if (pendingEmail && enquiry.email && !enquiry.follow_up_email_sent) {
+        this.logger.info('Triggering post-call follow-up email', {
+          sessionId,
+          emailType: pendingEmail.type,
+          customerEmail: enquiry.email
+        });
+
+        // TODO: Integrate with n8n workflow or direct email service
+        // For now, mark as needing email send (batch job can pick this up)
+        await supabase
+          .from('demo_enquiries')
+          .update({
+            metadata: {
+              ...enquiry.metadata,
+              email_ready_to_send: true,
+              call_ended_at: new Date().toISOString()
+            },
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', enquiry.id);
+
+        this.logger.info('Post-call follow-up queued', {
+          sessionId,
+          enquiryId: enquiry.id,
+          customerEmail: enquiry.email
+        });
+      }
+    } catch (error) {
+      this.logger.error('Error in post-call follow-up', {
+        sessionId,
+        error: (error as Error).message
+      });
     }
   }
 
@@ -914,7 +1092,11 @@ export class APIServer {
 
   private registerBuiltInTools(): void {
     this.toolRegistry.registerMany(builtInTools);
-    this.logger.info('Built-in tools registered', { count: builtInTools.length });
+    this.toolRegistry.registerMany(demoBookingTools);
+    this.logger.info('Built-in tools registered', { 
+      count: builtInTools.length + demoBookingTools.length,
+      demoTools: demoBookingTools.length
+    });
   }
 
   /**

@@ -41,7 +41,7 @@ export function Navbar() {
                 <Zap size={14} className="sm:hidden text-white" />
                 <Zap size={16} className="hidden sm:block text-white" />
               </div>
-              <span className="text-base sm:text-lg font-semibold text-white">VocaAI</span>
+              <span className="text-base sm:text-lg font-semibold text-white">VocaCore AI</span>
             </Link>
 
             {/* Desktop Navigation */}

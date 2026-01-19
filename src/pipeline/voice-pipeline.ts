@@ -93,6 +93,13 @@ export class VoicePipeline extends EventEmitter {
   private isExecutingTool: boolean = false;       // True while tool is being executed
   private queuedUserInput: string | null = null;  // User speech captured during tool execution
 
+  // Phase 4: Advanced Turn Detection
+  // Silence debounce - wait for sustained silence before processing
+  private silenceDebounceTimer: NodeJS.Timeout | null = null;
+  private accumulatedTranscript: string = '';     // Accumulate speech across multiple STT finals
+  private lastSpeechTime: number = 0;             // Track when user last spoke
+  private isSpeaking: boolean = false;            // Track if user is currently speaking
+
   constructor(
     session: CallSession,
     sttProvider: STTProvider,
@@ -243,6 +250,13 @@ export class VoicePipeline extends EventEmitter {
   async stop(): Promise<void> {
     this.isActive = false;
     
+    // Phase 4: Clear silence debounce timer
+    if (this.silenceDebounceTimer) {
+      clearTimeout(this.silenceDebounceTimer);
+      this.silenceDebounceTimer = null;
+    }
+    this.accumulatedTranscript = '';
+    
     // Abort all active sessions
     this.sttSession?.abort();
     this.llmSession?.abort();
@@ -260,16 +274,20 @@ export class VoicePipeline extends EventEmitter {
 
   private async startSTTSession(): Promise<void> {
     const stage = this.startStage('stt');
-    let accumulatedText = '';
 
     this.sttSession = this.sttProvider.createStreamingSession(
       {
         onPartialTranscript: (result: TranscriptionResult) => {
           this.emit('stt_partial', result.text);
           
-          // Early LLM triggering for lower latency
-          if (result.text.length >= this.config.sttPartialThreshold && !this.isProcessingTurn) {
-            accumulatedText = result.text;
+          // Phase 4: Mark user as speaking and update speech time
+          this.isSpeaking = true;
+          this.lastSpeechTime = Date.now();
+          
+          // Cancel any pending silence timer - user is still speaking
+          if (this.silenceDebounceTimer) {
+            clearTimeout(this.silenceDebounceTimer);
+            this.silenceDebounceTimer = null;
           }
         },
 
@@ -277,33 +295,50 @@ export class VoicePipeline extends EventEmitter {
           this.endStage(stage);
           this.emit('stt_final', result.text);
           
-          accumulatedText = result.text;
-          
           // Phase 2: Store confidence for filtering
           this.lastSTTConfidence = result.confidence;
           
           // Phase 3: If tool is executing, queue the input instead of processing
           if (this.isExecutingTool) {
             this.logger.debug('Queueing user input during tool execution', {
-              text: accumulatedText
+              text: result.text
             });
-            this.queuedUserInput = accumulatedText;
-            accumulatedText = '';
+            this.queuedUserInput = (this.queuedUserInput || '') + ' ' + result.text;
             return;
           }
+
+          // Phase 4: ACCUMULATE transcripts instead of processing immediately
+          // This allows user to pause briefly without triggering a response
+          const turnConfig = this.config.latencyOptimization.turnDetection;
           
-          // Filter out garbage/phantom transcripts (including confidence check)
-          if (this.isValidTranscript(accumulatedText, result.confidence)) {
-            await this.processUserInput(accumulatedText);
-          } else {
-            this.logger.debug('Filtered invalid transcript', { 
-              text: accumulatedText,
-              confidence: result.confidence,
-              reason: this.getFilterReason(accumulatedText, result.confidence)
-            });
+          // Add to accumulated transcript (with space separator)
+          if (result.text.trim()) {
+            this.accumulatedTranscript = this.accumulatedTranscript 
+              ? this.accumulatedTranscript + ' ' + result.text.trim()
+              : result.text.trim();
           }
           
-          accumulatedText = '';
+          this.lastSpeechTime = Date.now();
+          this.isSpeaking = false;  // Final transcript means this segment ended
+          
+          // Cancel existing timer
+          if (this.silenceDebounceTimer) {
+            clearTimeout(this.silenceDebounceTimer);
+          }
+          
+          // Start silence debounce timer
+          // Only process after sustained silence (user finished their thought)
+          const silenceWaitMs = this.calculateSilenceWait(this.accumulatedTranscript);
+          
+          this.logger.debug('Starting silence debounce timer', {
+            accumulatedLength: this.accumulatedTranscript.length,
+            silenceWaitMs,
+            transcript: this.accumulatedTranscript.substring(0, 50)
+          });
+          
+          this.silenceDebounceTimer = setTimeout(async () => {
+            await this.processDebouncedTranscript(result.confidence);
+          }, silenceWaitMs);
         },
 
         onError: (error: Error) => {
@@ -313,12 +348,136 @@ export class VoicePipeline extends EventEmitter {
 
         onEnd: () => {
           this.logger.debug('STT session ended');
+          // Process any remaining accumulated transcript on session end
+          if (this.accumulatedTranscript.trim()) {
+            this.processDebouncedTranscript(this.lastSTTConfidence);
+          }
         }
       },
       this.session.sttConfig.language
     );
 
     await this.sttSession.start();
+  }
+
+  /**
+   * Phase 4.1: Calculate how long to wait for silence based on transcript characteristics
+   * Prioritizes waiting longer to avoid interrupting users mid-thought
+   * Only reduces wait time when there's strong evidence of turn completion
+   */
+  private calculateSilenceWait(transcript: string): number {
+    const turnConfig = this.config.latencyOptimization.turnDetection;
+    const baseWait = turnConfig.silenceThresholdMs;
+    const maxWait = turnConfig.maxWaitAfterSilenceMs;
+    
+    const trimmed = transcript.trim();
+    
+    // Check for sentence-ending punctuation
+    const endsWithPunctuation = /[.!?।॥]$/.test(trimmed);
+    
+    // Check for common turn-ending phrases (must be at the end)
+    const turnEndingPhrases = /\b(thanks|thank you|okay|ok|bye|goodbye|done|that's it|that's all|please proceed|go ahead)\s*[.!?]?$/i;
+    const hasTurnEndingPhrase = turnEndingPhrases.test(trimmed);
+    
+    // Check for MID-THOUGHT indicators - user is likely to continue
+    // These patterns suggest incomplete thoughts that need more time
+    const midThoughtPatterns = [
+      /\b(and|but|or|so|because|however|although|though|since|while|if|when|where|which|that|um|uh|like|you know|I mean)\s*$/i,
+      /,\s*$/,                                           // Ends with comma
+      /\b(I|we|you|they|he|she|it)\s*$/i,               // Ends with pronoun
+      /\b(is|are|was|were|will|would|could|should|can|have|has|had)\s*$/i,  // Ends with auxiliary verb
+      /\b(the|a|an|this|that|these|those|my|your|our)\s*$/i,  // Ends with determiner
+      /\b(want|need|would like|am looking|am thinking|was wondering)\s*$/i,  // Ends with intent verb
+      /\b(about|for|to|with|from|in|on|at)\s*$/i,       // Ends with preposition
+    ];
+    const isMidThought = midThoughtPatterns.some(p => p.test(trimmed));
+    
+    // Questions ending with ? can be processed faster
+    const isQuestion = /\?$/.test(trimmed);
+    
+    // Calculate wait time based on characteristics
+    let waitMs = baseWait;
+    
+    // MID-THOUGHT: User is clearly not done - wait maximum time
+    if (isMidThought) {
+      waitMs = maxWait;
+      this.logger.debug('Mid-thought detected, using max wait', { 
+        transcript: trimmed.slice(-30),
+        waitMs 
+      });
+    }
+    // CLEAR ENDING: Strong signals of turn completion
+    else if (endsWithPunctuation && hasTurnEndingPhrase) {
+      // Very clear ending - can respond faster
+      waitMs = Math.min(baseWait * 0.5, 600);
+    } else if (isQuestion) {
+      // Questions with ? usually indicate turn completion
+      waitMs = Math.min(baseWait * 0.6, 700);
+    } else if (endsWithPunctuation && trimmed.length > 20) {
+      // Sentence with punctuation and decent length
+      waitMs = Math.min(baseWait * 0.75, 900);
+    } 
+    // UNCERTAIN: Need to wait longer
+    else if (trimmed.length < 20) {
+      // Short utterance without punctuation - wait max
+      waitMs = maxWait;
+    } else if (trimmed.length < 40) {
+      // Medium utterance without clear ending
+      waitMs = Math.max(baseWait, 1200);
+    } else {
+      // Long utterance but no punctuation - still wait base time
+      waitMs = baseWait;
+    }
+    
+    return waitMs;
+  }
+
+  /**
+   * Phase 4: Process accumulated transcript after silence debounce
+   */
+  private async processDebouncedTranscript(confidence: number): Promise<void> {
+    const transcript = this.accumulatedTranscript.trim();
+    
+    // Clear accumulated state
+    this.accumulatedTranscript = '';
+    this.silenceDebounceTimer = null;
+    
+    if (!transcript) {
+      return;
+    }
+    
+    // Don't process if user started speaking again
+    if (this.isSpeaking) {
+      this.logger.debug('Skipping debounced transcript - user is speaking again', {
+        transcript: transcript.substring(0, 50)
+      });
+      this.accumulatedTranscript = transcript;  // Keep the transcript
+      return;
+    }
+    
+    // Don't process if already processing a turn
+    if (this.isProcessingTurn) {
+      this.logger.debug('Skipping debounced transcript - already processing turn', {
+        transcript: transcript.substring(0, 50)
+      });
+      return;
+    }
+    
+    // Validate transcript
+    if (this.isValidTranscript(transcript, confidence)) {
+      this.logger.info('Processing debounced transcript', {
+        length: transcript.length,
+        confidence,
+        transcript: transcript.substring(0, 100)
+      });
+      await this.processUserInput(transcript);
+    } else {
+      this.logger.debug('Filtered invalid debounced transcript', { 
+        text: transcript,
+        confidence,
+        reason: this.getFilterReason(transcript, confidence)
+      });
+    }
   }
 
   private async processUserInput(userText: string): Promise<void> {
@@ -740,6 +899,14 @@ export class VoicePipeline extends EventEmitter {
     this.ttsTextQueue = [];
     this.ttsSentenceIndex = 0;
 
+    // Phase 4: Clear silence debounce timer and accumulated transcript
+    if (this.silenceDebounceTimer) {
+      clearTimeout(this.silenceDebounceTimer);
+      this.silenceDebounceTimer = null;
+    }
+    this.accumulatedTranscript = '';
+    this.isSpeaking = false;
+
     this.emit('barge_in');
   }
 
@@ -776,6 +943,7 @@ export class VoicePipeline extends EventEmitter {
    * Validate transcript to filter out garbage/phantom STT results
    * Returns true if the transcript should be processed
    * Phase 2: Added confidence-based filtering
+   * Phase 4: Enhanced validation with semantic completeness checks
    */
   private isValidTranscript(text: string, confidence: number = 1.0): boolean {
     const trimmed = text.trim();
@@ -783,9 +951,25 @@ export class VoicePipeline extends EventEmitter {
     
     // Phase 2: Confidence-based filtering
     // Reject low-confidence transcripts (likely noise or echo)
-    const minConfidence = 0.5;  // Minimum confidence threshold
-    if (confidence < minConfidence && trimmed.length < 15) {
+    const minConfidence = 0.5;
+    if (confidence < minConfidence && trimmed.length < 20) {
       return false;
+    }
+    
+    // Phase 4.2: Allow known valid short phrases BEFORE length check
+    // These are complete utterances even if very short
+    // Strip punctuation for matching (user might say "Hi." or "Hi!")
+    const textWithoutPunctuation = trimmed.replace(/[.!?।॥,;]+$/g, '').trim();
+    
+    const validShortPhrases = [
+      /^(hello|hi|hey|bye|goodbye)$/i,                    // Greetings
+      /^(yes|no|yeah|nope|nah|yep)$/i,                    // Responses
+      /^(thanks|thank you)$/i,                            // Thanks
+      /^(okay|ok|sure|fine|great|perfect|awesome)$/i,     // Acknowledgments
+    ];
+    
+    if (validShortPhrases.some(p => p.test(textWithoutPunctuation))) {
+      return true;  // Allow these even if below minTranscriptLength
     }
     
     // Filter empty or very short transcripts (configurable minimum length)
@@ -793,28 +977,45 @@ export class VoicePipeline extends EventEmitter {
       return false;
     }
     
-    // Filter transcripts that are mostly non-ASCII (garbled text)
-    const asciiChars = trimmed.replace(/[^\x00-\x7F]/g, '');
-    const asciiRatio = asciiChars.length / trimmed.length;
-    if (asciiRatio < 0.5 && trimmed.length < 10) {
+    // Phase 4: Filter common noise/filler words that aren't real input
+    // Note: Don't filter greetings/responses here - they're handled above
+    const noisePatterns = [
+      /^(um+|uh+|ah+|eh+|hmm+|hm+|mm+)$/i,           // Filler sounds only
+      /^\.+$/,                                        // Just periods
+      /^[^\w\s]+$/,                                   // Just punctuation/symbols
+    ];
+    
+    if (noisePatterns.some(p => p.test(trimmed))) {
       return false;
+    }
+    
+    // Filter transcripts that are mostly non-ASCII (garbled text)
+    // But allow Indic scripts (Devanagari, Tamil, Telugu, etc.)
+    const indicRange = /[\u0900-\u0DFF\u0E00-\u0E7F]/g;  // Indic scripts
+    const latinRange = /[a-zA-Z]/g;
+    const indicChars = (trimmed.match(indicRange) || []).length;
+    const latinChars = (trimmed.match(latinRange) || []).length;
+    const meaningfulChars = indicChars + latinChars;
+    
+    if (meaningfulChars === 0 && trimmed.length > 0) {
+      return false;  // No meaningful characters
     }
     
     // Echo suppression during TTS playback (configurable)
     if (turnConfig.suppressEchoDuringPlayback && this.isTTSPlaying) {
       // Filter short utterances during playback as they're likely echo
-      if (trimmed.length < 8) {
+      if (trimmed.length < 10) {
         return false;
       }
     }
     
-    // Punctuation-based endpointing check (optional)
-    if (turnConfig.usePunctuationEndpoint) {
-      const endsWithPunctuation = /[.!?।॥]$/.test(trimmed);
-      // Allow through if ends with punctuation or is long enough
-      if (!endsWithPunctuation && trimmed.length < 15) {
-        // Short transcripts without punctuation might be incomplete
-        // But we still process them to avoid adding latency
+    // Phase 4: Semantic completeness check for short utterances
+    // Very short transcripts without clear intent should wait for more input
+    if (trimmed.length < 15) {
+      // Check if it's a complete thought (has ending punctuation or is a clear question/statement)
+      const isComplete = this.isSemanticallyCom(trimmed);
+      if (!isComplete) {
+        return false;
       }
     }
     
@@ -822,8 +1023,38 @@ export class VoicePipeline extends EventEmitter {
   }
 
   /**
+   * Phase 4.1: Check if a short utterance is semantically complete
+   * STRICT version - only returns true when very confident user finished
+   * Used to determine if we should wait for more speech or process immediately
+   */
+  private isSemanticallyCom(text: string): boolean {
+    const trimmed = text.trim().toLowerCase();
+    
+    // Must end with sentence-ending punctuation for short utterances
+    // This is the strongest signal of completion
+    if (/[.!?।॥]$/.test(trimmed)) {
+      return true;
+    }
+    
+    // Without punctuation, only these very specific patterns are "complete"
+    // These are standalone phrases that don't need continuation
+    const standalonePatterns = [
+      /^(yes|no|yeah|nope|nah)$/i,                        // Single word responses
+      /^(hello|hi|hey|bye|goodbye)$/i,                    // Greetings (single word)
+      /^(thanks|thank you|thank you so much)$/i,          // Thanks (standalone)
+      /^(okay|ok|sure|fine|great|perfect|awesome|sounds good)$/i,  // Acknowledgments
+      /^(please|please do|go ahead|proceed)$/i,           // Permissions
+    ];
+    
+    // For short text without punctuation, ONLY standalone patterns are complete
+    // Everything else needs more context or punctuation
+    return standalonePatterns.some(p => p.test(trimmed));
+  }
+
+  /**
    * Get the reason why a transcript was filtered (for logging)
    * Phase 2: Added confidence reason
+   * Phase 4: Updated to match enhanced isValidTranscript logic
    */
   private getFilterReason(text: string, confidence: number = 1.0): string {
     const trimmed = text.trim();
@@ -831,7 +1062,7 @@ export class VoicePipeline extends EventEmitter {
     
     // Phase 2: Check confidence first
     const minConfidence = 0.5;
-    if (confidence < minConfidence && trimmed.length < 15) {
+    if (confidence < minConfidence && trimmed.length < 20) {
       return `low_confidence (${(confidence * 100).toFixed(1)}%)`;
     }
     
@@ -839,14 +1070,33 @@ export class VoicePipeline extends EventEmitter {
       return 'too_short';
     }
     
-    const asciiChars = trimmed.replace(/[^\x00-\x7F]/g, '');
-    const asciiRatio = asciiChars.length / trimmed.length;
-    if (asciiRatio < 0.5 && trimmed.length < 10) {
-      return 'garbled_text';
+    // Phase 4: Check for noise patterns
+    const noisePatterns = [
+      /^(um+|uh+|ah+|eh+|hmm+|hm+|mm+)$/i,
+      /^(okay|ok|right|yeah|yes|no|sure)$/i,
+      /^\.+$/,
+      /^[^\w\s]+$/,
+    ];
+    if (noisePatterns.some(p => p.test(trimmed))) {
+      return 'noise_or_filler';
     }
     
-    if (turnConfig.suppressEchoDuringPlayback && this.isTTSPlaying && trimmed.length < 8) {
+    // Check for meaningful characters
+    const indicRange = /[\u0900-\u0DFF\u0E00-\u0E7F]/g;
+    const latinRange = /[a-zA-Z]/g;
+    const indicChars = (trimmed.match(indicRange) || []).length;
+    const latinChars = (trimmed.match(latinRange) || []).length;
+    if (indicChars + latinChars === 0 && trimmed.length > 0) {
+      return 'no_meaningful_characters';
+    }
+    
+    if (turnConfig.suppressEchoDuringPlayback && this.isTTSPlaying && trimmed.length < 10) {
       return 'echo_during_playback';
+    }
+    
+    // Phase 4: Semantic completeness check
+    if (trimmed.length < 15 && !this.isSemanticallyCom(trimmed)) {
+      return 'incomplete_thought';
     }
     
     return 'unknown';

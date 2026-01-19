@@ -66,7 +66,7 @@ export function Signup() {
             <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/30">
               <Zap size={24} className="text-white" />
             </div>
-            <span className="text-2xl font-bold text-white">VocaAI</span>
+            <span className="text-2xl font-bold text-white">VocaCore AI</span>
           </Link>
 
           <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/20 rounded-full text-sm text-green-400 mb-6 w-fit">
@@ -81,7 +81,7 @@ export function Signup() {
             </span>
           </h1>
           <p className="text-white/50 text-lg mb-12 max-w-md">
-            Join 500+ companies already using VocaAI to automate customer conversations.
+            Join 500+ companies already using VocaCore AI to automate customer conversations.
           </p>
 
           {/* What you get */}
@@ -117,7 +117,7 @@ export function Signup() {
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
               <Zap size={20} className="text-white" />
             </div>
-            <span className="text-xl font-bold text-white">VocaAI</span>
+            <span className="text-xl font-bold text-white">VocaCore AI</span>
           </Link>
 
           {/* Card */}

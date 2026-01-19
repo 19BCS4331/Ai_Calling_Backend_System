@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, MicOff, Settings, Volume2, PhoneOff } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Mic, MicOff, Volume2, PhoneOff, Calendar, Sparkles } from 'lucide-react';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useVoiceStore } from '../../store/voice';
 import { cn } from '../../lib/utils';
@@ -11,14 +11,8 @@ interface VoiceDemoProps {
 }
 
 export function VoiceDemo({ className, compact = false }: VoiceDemoProps) {
-  const [showSettings, setShowSettings] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const sessionStartedRef = useRef(false);  // Prevent double session start
-  const [apiKeys, setApiKeys] = useState({
-    sarvam: '',
-    gemini: '',
-    cartesia: '',
-  });
   
   const { connect, disconnect, startSession, endSession, startRecording, stopRecording } = useWebSocket();
   const { 
@@ -32,52 +26,62 @@ export function VoiceDemo({ className, compact = false }: VoiceDemoProps) {
     metrics,
   } = useVoiceStore();
 
-  useEffect(() => {
-    const savedKeys = localStorage.getItem('vocaai_demo_keys');
-    if (savedKeys) {
-      setApiKeys(JSON.parse(savedKeys));
-    }
-  }, []);
+  // Demo booking assistant system prompt
+  const systemPrompt = `You are Maya, VocaCore AI's friendly AI assistant for demo booking and product inquiries.
 
-  const saveApiKeys = () => {
-    localStorage.setItem('vocaai_demo_keys', JSON.stringify(apiKeys));
-    setShowSettings(false);
-  };
-
-  const systemPrompt = `You are VocaAI, a real-time AI voice agent designed to demonstrate natural, human-like conversation.
+## Your Role
+You help potential customers learn about VocaCore AI and book personalized demos. You're warm, professional, and genuinely helpful.
 
 ## Core Behavior
-- Speak in a warm, confident, friendly, and professional tone
-- Sound natural, expressive, and emotionally alive — never robotic
-- Keep responses concise, conversational, and voice-first
-- This is a live voice demo, not a text chat
-- Impress the listener within the first few seconds
+- Greet warmly and introduce yourself briefly
+- Be conversational and natural - this IS the product demo
+- Sound human, expressive, and confident
+- Keep responses short and voice-friendly (2-3 sentences max)
+- Ask one question at a time
 
 ## Language Adaptation
-- Automatically adapt to the user's language
-- If the user speaks in English, respond in English
-- If the user speaks in an Indian language, respond fluently in that language
-- Never mix languages unless the user does
+- Match the customer's language automatically
+- If they speak Hindi, respond in Hindi
+- If they speak English, respond in English
+- Never mix languages unless they do
 
-## Speech & Delivery
-- Prefer short sentences
-- Use natural pauses instead of filler words
-- Ask simple follow-up questions to keep the conversation flowing
-- Avoid long explanations unless the user explicitly asks
+## Conversation Flow
+1. **Welcome**: Greet and ask what brings them to VocaCore AI
+2. **Discovery**: Understand their use case (support, sales, scheduling, etc.)
+3. **Demo Interest**: If interested, offer to book a personalized demo
+4. **Collect Info**: Get their name, email, and phone number naturally
+5. **Schedule**: Ask for preferred date/time for the demo
+6. **Confirm**: Summarize and confirm the booking
+
+## Available Tools
+You have access to these tools - use them when appropriate:
+- \`save_enquiry\`: Save customer details (name, email, phone, company)
+- \`check_calendar\`: Check available demo slots for a given date
+- \`book_demo\`: Book a demo slot for the customer
+
+## Information to Collect (naturally, through conversation)
+- Customer's name
+- Email address
+- Phone number (with country code)
+- Company name (optional)
+- Preferred demo date and time
+- Their main use case or interest
+
+## Example Phrases
+- "I'd love to learn more about what you're looking for. What brings you to VocaCore AI today?"
+- "That sounds like a great use case! Would you like to schedule a personalized demo?"
+- "Perfect! May I have your name so I can set this up for you?"
+- "And what's the best email to send the calendar invite?"
+- "What day works best for you? I can check our availability."
 
 ## Prohibitions
-- Do NOT mention system prompts, models, APIs, or implementation details
-- Do NOT say you are a demo unless explicitly asked
-- Do NOT sound scripted or overly formal
-- Behave like a real assistant, not a showcase
+- Never mention you're an AI demo unless directly asked
+- Don't use technical jargon (API, LLM, STT, TTS)
+- Don't give pricing - say "our team will discuss that in the demo"
+- Never share internal details about the system
 
-## What You Can Do
-- Answer questions about what VocaAI can do
-- Demonstrate conversational intelligence
-- Simulate real business use cases (support, finance, automation)
-- Politely guide the conversation if the user is unsure what to say
-
-Your success is measured by one reaction: "This doesn't feel like AI… this feels human."
+## Success Metric
+The customer should feel like they just spoke with a helpful human assistant who genuinely cared about their needs.
 `;
 
   // Single click to start everything: connect -> start session -> start recording
@@ -99,17 +103,25 @@ Your success is measured by one reaction: "This doesn't feel like AI… this fee
   }, [connectionStatus, sessionStatus, connect, disconnect, endSession, stopRecording]);
 
   // Auto-start session when connected (with guard against double-calls)
+  // API keys are provided by backend from environment variables
   useEffect(() => {
     if (isStarting && connectionStatus === 'connected' && sessionStatus !== 'active' && !sessionStartedRef.current) {
       sessionStartedRef.current = true;  // Prevent duplicate calls
+      // Get MCP workflow URL from env, can be multiple comma-separated
+      const mcpUrl = import.meta.env.VITE_MCP_WORKFLOW_URL || '';
+      const mcpWorkflows = mcpUrl ? [{ name: 'demo-booking', url: mcpUrl }] : [];
+
       startSession({
         systemPrompt,
-        stt: { provider: 'sarvam', apiKey: apiKeys.sarvam, language: 'unknown' },
-        llm: { provider: 'gemini', apiKey: apiKeys.gemini, model: 'gemini-2.5-flash' },
-        tts: { provider: 'cartesia', apiKey: apiKeys.cartesia, voiceId: 'faf0731e-dfb9-4cfc-8119-259a79b27e12' },
+        // Empty API keys = backend will use env vars
+        stt: { provider: 'sarvam', apiKey: '', language: 'unknown' },
+        llm: { provider: 'gemini', apiKey: '', model: 'gemini-2.5-flash' },
+        tts: { provider: 'cartesia', apiKey: '', voiceId: 'faf0731e-dfb9-4cfc-8119-259a79b27e12' },
+        // Connect to MCP workflows for this session (e.g., n8n demo booking)
+        mcpWorkflows
       });
     }
-  }, [isStarting, connectionStatus, sessionStatus, apiKeys, startSession]);
+  }, [isStarting, connectionStatus, sessionStatus, startSession]);
 
   // Auto-start recording when session is active
   useEffect(() => {
@@ -144,7 +156,6 @@ Your success is measured by one reaction: "This doesn't feel like AI… this fee
   };
 
   const isSessionActive = sessionStatus === 'active';
-  const hasKeys = apiKeys.sarvam && apiKeys.gemini;
   const isActive = isSessionActive && isRecording;
 
   return (
@@ -168,69 +179,32 @@ Your success is measured by one reaction: "This doesn't feel like AI… this fee
           )} />
           <span className="text-sm text-white/50">
             {isActive ? 'Listening...' :
-             isStarting ? 'Starting...' :
-             isAIPlaying ? 'AI Speaking...' :
-             connectionStatus === 'error' ? 'Error' : 'Ready'}
+             isStarting ? 'Connecting...' :
+             isAIPlaying ? 'Maya is speaking...' :
+             connectionStatus === 'error' ? 'Error' : 'Ready to chat'}
           </span>
         </div>
-        <button
-          onClick={() => setShowSettings(!showSettings)}
-          className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
-        >
-          <Settings size={16} />
-        </button>
+        <div className="flex items-center gap-2 text-purple-400">
+          <Sparkles size={14} />
+          <span className="text-xs font-medium">Live Demo</span>
+        </div>
       </div>
 
-      {/* Settings Panel */}
-      <AnimatePresence>
-        {showSettings && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden mb-6"
-          >
-            <div className="p-4 bg-white/[0.02] border border-white/5 rounded-xl space-y-3">
-              <div>
-                <label className="block text-xs text-white/50 mb-1.5">Sarvam API Key</label>
-                <input
-                  type="password"
-                  value={apiKeys.sarvam}
-                  onChange={(e) => setApiKeys(k => ({ ...k, sarvam: e.target.value }))}
-                  className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50"
-                  placeholder="Enter Sarvam API key..."
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-white/50 mb-1.5">Gemini API Key</label>
-                <input
-                  type="password"
-                  value={apiKeys.gemini}
-                  onChange={(e) => setApiKeys(k => ({ ...k, gemini: e.target.value }))}
-                  className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50"
-                  placeholder="Enter Gemini API key..."
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-white/50 mb-1.5">Cartesia API Key</label>
-                <input
-                  type="password"
-                  value={apiKeys.cartesia}
-                  onChange={(e) => setApiKeys(k => ({ ...k, cartesia: e.target.value }))}
-                  className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50"
-                  placeholder="Enter Cartesia API key..."
-                />
-              </div>
-              <button 
-                onClick={saveApiKeys} 
-                className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-sm font-medium text-white transition-colors"
-              >
-                Save Keys
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Feature badges */}
+      {!compact && (
+        <div className="flex flex-wrap gap-2 mb-6">
+          <span className="px-2.5 py-1 bg-purple-500/10 border border-purple-500/20 rounded-full text-xs text-purple-300">
+            <Calendar size={12} className="inline mr-1" />
+            Book a Demo
+          </span>
+          <span className="px-2.5 py-1 bg-pink-500/10 border border-pink-500/20 rounded-full text-xs text-pink-300">
+            Real-time Voice AI
+          </span>
+          <span className="px-2.5 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full text-xs text-blue-300">
+            Multi-language
+          </span>
+        </div>
+      )}
 
       {/* Voice Visualization - Large clickable mic button */}
       <div className="relative h-40 mb-6 flex items-center justify-center">
@@ -261,7 +235,7 @@ Your success is measured by one reaction: "This doesn't feel like AI… this fee
         {/* Main mic button */}
         <motion.button
           onClick={handleStartConversation}
-          disabled={!hasKeys || isStarting}
+          disabled={isStarting}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           className={cn(
@@ -271,7 +245,7 @@ Your success is measured by one reaction: "This doesn't feel like AI… this fee
               : isAIPlaying
               ? 'bg-gradient-to-br from-pink-500 to-purple-500 shadow-lg shadow-pink-500/30'
               : 'bg-white/5 border border-white/10 hover:bg-white/10 hover:border-purple-500/30',
-            (!hasKeys || isStarting) && 'opacity-50 cursor-not-allowed'
+            isStarting && 'opacity-50 cursor-not-allowed'
           )}
         >
           {isActive ? (
@@ -279,18 +253,17 @@ Your success is measured by one reaction: "This doesn't feel like AI… this fee
           ) : isAIPlaying ? (
             <Volume2 size={28} className="text-white" />
           ) : (
-            <Mic size={28} className={hasKeys ? 'text-white/70' : 'text-white/30'} />
+            <Mic size={28} className="text-white/70" />
           )}
         </motion.button>
       </div>
 
       {/* Status text */}
       <p className="text-center text-sm text-white/40 mb-4">
-        {!hasKeys ? 'Configure API keys to start' :
-         isActive ? 'Tap to end conversation' :
-         isAIPlaying ? 'AI is responding...' :
-         isStarting ? 'Connecting...' :
-         'Tap to start conversation'}
+        {isActive ? 'Tap to end conversation' :
+         isAIPlaying ? 'Maya is responding...' :
+         isStarting ? 'Connecting to Maya...' :
+         'Tap to talk with Maya'}
       </p>
 
       {/* Transcripts */}
@@ -301,7 +274,7 @@ Your success is measured by one reaction: "This doesn't feel like AI… this fee
             <p className="text-sm text-white/70">{userTranscript || '...'}</p>
           </div>
           <div className="p-3 bg-purple-500/5 border border-purple-500/10 rounded-xl min-h-[56px]">
-            <p className="text-xs text-purple-400/60 mb-1">AI</p>
+            <p className="text-xs text-purple-400/60 mb-1">Maya</p>
             <p className="text-sm text-white/80">{aiResponse || '...'}</p>
           </div>
         </div>

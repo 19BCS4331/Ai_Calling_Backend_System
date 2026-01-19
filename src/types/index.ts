@@ -468,10 +468,12 @@ export interface LatencyOptimizationConfig {
 
 export const DEFAULT_LATENCY_CONFIG: LatencyOptimizationConfig = {
   turnDetection: {
-    silenceThresholdMs: 300,
-    maxWaitAfterSilenceMs: 500,
-    minTranscriptLength: 2,
-    usePunctuationEndpoint: true,
+    // Phase 4.1: Further increased thresholds for more natural conversation
+    // Users need time to pause and think without AI interrupting
+    silenceThresholdMs: 1200,       // Base wait time after silence (increased from 700)
+    maxWaitAfterSilenceMs: 1800,    // Max wait for short/incomplete utterances (increased from 1000)
+    minTranscriptLength: 8,         // Min chars before processing (increased from 5)
+    usePunctuationEndpoint: true,   // Use punctuation as turn completion signal
     suppressEchoDuringPlayback: true
   },
   fillers: {

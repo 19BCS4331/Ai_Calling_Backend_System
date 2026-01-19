@@ -1,4 +1,4 @@
-# 🎙️ VocaAI - AI Voice Calling Platform
+# 🎙️ VocaCore AI - AI Voice Calling Platform
 
 A **production-grade, multi-tenant SaaS platform** for AI voice agents with pluggable STT/LLM/TTS providers, real-time telephony, and comprehensive billing.
 

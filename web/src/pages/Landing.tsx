@@ -229,7 +229,7 @@ export function Landing() {
               Get a hands-on experience by trying a free demo call. Fill in your details, and our AI representative will call you instantly.
             </p>
             <p className="text-white/40 text-sm">
-              Agent is trained to discuss about VocaAI services and book appointments.
+              Agent is trained to discuss about VocaCore AI services and book appointments.
             </p>
           </motion.div>
 
@@ -664,7 +664,7 @@ export function Landing() {
               </h2>
               
               <p className="text-xl text-white/50 mb-10 max-w-2xl mx-auto">
-                Join 500+ businesses already using VocaAI to handle millions of customer calls with AI that sounds human.
+                Join 500+ businesses already using VocaCore AI to handle millions of customer calls with AI that sounds human.
               </p>
 
               {/* CTA Buttons */}
@@ -712,7 +712,7 @@ export function Landing() {
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center">
                   <Zap size={16} className="text-white" />
                 </div>
-                <span className="font-bold text-white">VocaAI</span>
+                <span className="font-bold text-white">VocaCore AI</span>
               </div>
               <p className="text-white/40 text-sm">
                 The first voice AI platform that lets you duplicate yourself at scale.
@@ -747,7 +747,7 @@ export function Landing() {
           </div>
           <div className="pt-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-white/40 text-sm">
-              © 2026 VocaAI. All rights reserved.
+              © 2026 VocaCore AI. All rights reserved.
             </p>
             <div className="flex items-center gap-4">
               <a href="#" className="text-white/40 hover:text-white transition-colors">

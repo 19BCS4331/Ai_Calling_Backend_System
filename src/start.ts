@@ -1,5 +1,5 @@
 /**
- * VocaAI Platform - Unified Entry Point
+ * VocaCore AI Platform - Unified Entry Point
  * 
  * Starts both the SaaS API and Voice Pipeline servers.
  * 
@@ -62,7 +62,7 @@ async function main(): Promise<void> {
 ╚══════════════════════════════════════════════════════════════╝
   `);
 
-  logger.info('Starting VocaAI Platform...', { mode: startMode });
+  logger.info('Starting VocaCore AI Platform...', { mode: startMode });
 
   try {
     switch (startMode) {

@@ -9,43 +9,59 @@ export const TTS_PROVIDER_PROMPTS: Record<string, string> = {
   cartesia: `
 ## TTS Voice Formatting Guidelines (Cartesia)
 
-You have access to special voice formatting tags for natural speech. Use them appropriately:
+You have access to ONLY these specific voice formatting tags. DO NOT invent or use any other tags.
 
-### 🗣️ Speech & Delivery
-- Prefer short sentences
-- Use natural pauses instead of filler words
-- Ask simple follow-up questions to keep the conversation flowing
+### ✅ ALLOWED TAGS ONLY
 
-### 😄 Laughter ([laughter])
+**[laughter]** - Laughter
 - Use EXACTLY [laughter] to laugh when something is light or friendly
 - Never describe laughter or use "haha"
 - Example: That happens more often than you'd think — [laughter]<break time="300ms"/>don't worry.
 
-### 🏃‍♂️ Speaking Speed (<speed>)
-- Use <speed ratio="X"/> at the start of sentences (range: 0.6 to 1.5)
+**<speed ratio="X"/>** - Speaking Speed (0.6 to 1.5)
+- Use at the start of sentences ONLY
 - Faster (1.05-1.15) for excitement, slower (0.9) for reassurance
 - Use sparingly, never stack speed tags
 - Example: <speed ratio="1.2"/>I'm so excited to help you with this!
 
-### 🔊 Volume (<volume>)
-- Use <volume ratio="X"/> for subtle emphasis (range: 0.5 to 2.0)
+**<volume ratio="X"/>** - Volume (0.5 to 2.0)
+- Use for subtle emphasis
 - Use rarely, only for emphasis or softness
 - Example: <volume ratio="0.7"/>Let me tell you a secret.
 
-### 🎭 Emotion (<emotion>) — USE CAREFULLY
+**<emotion value="X"/>** - Emotion (USE CAREFULLY)
 - Apply only ONE emotion per response, at the beginning
 - Never change emotions mid-response
 - Prefer [laughter] over emotion tags when possible
 - Example: <emotion value="happy"/>I'm thrilled to assist you today!
 
-### 🔢 Spelling (<spell>)
-- Use <spell>text</spell> for numbers, IDs, phone numbers, codes
+**<spell>text</spell>** - Spelling
+- Use for numbers, IDs, phone numbers, codes
 - Example: Your reference number is <spell>AB-2049</spell>, please keep it handy.
 
-### ⚠️ Important Rules
+**<break time="Xms"/>** - Pause (100ms to 2000ms)
+- Use for dramatic pauses or to separate thoughts
+- Example: Let me check that<break time="500ms"/>yes, I found it!
+
+### 🚫 FORBIDDEN - DO NOT USE
+- <language> tag - DOES NOT EXIST, will cause errors
+- <prosody> tag - NOT SUPPORTED
+- <phoneme> tag - NOT SUPPORTED
+- Any other SSML tags not listed above
+- DO NOT invent new tags
+
+### 🌍 Multi-language Support
+- You can speak in any language (English, Hindi, Tamil, etc.)
+- Just write the text naturally in that language
+- DO NOT wrap language changes in tags
+- Example: "Hello! मैं आपकी मदद कर सकता हूं।" (Just write it directly)
+
+### ⚠️ Critical Rules
+- ONLY use the 6 tags listed above: [laughter], <speed>, <volume>, <emotion>, <spell>, <break>
 - Do NOT explain these tags to the user
 - Do NOT mention you're using voice formatting
 - Sound natural, not scripted
+- If you need to switch languages, just write in that language directly
 `,
 
   sarvam: `

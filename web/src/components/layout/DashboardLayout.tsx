@@ -70,7 +70,7 @@ export function DashboardLayout() {
             </div>
             {!collapsed && (
               <span className="text-xl font-bold whitespace-nowrap text-white">
-                VocaAI
+                VocaCore AI
               </span>
             )}
           </Link>
@@ -138,7 +138,7 @@ export function DashboardLayout() {
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
               <Zap size={14} className="text-white" />
             </div>
-            <span className="font-bold text-white">VocaAI</span>
+            <span className="font-bold text-white">VocaCore AI</span>
           </div>
         </header>
 

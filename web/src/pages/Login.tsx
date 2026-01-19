@@ -79,7 +79,7 @@ export function Login() {
             <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/30">
               <Zap size={24} className="text-white" />
             </div>
-            <span className="text-2xl font-bold text-white">VocaAI</span>
+            <span className="text-2xl font-bold text-white">VocaCore AI</span>
           </Link>
 
           <h1 className="text-4xl font-bold text-white mb-4">
@@ -118,7 +118,7 @@ export function Login() {
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
               <Zap size={20} className="text-white" />
             </div>
-            <span className="text-xl font-bold text-white">VocaAI</span>
+            <span className="text-xl font-bold text-white">VocaCore AI</span>
           </Link>
 
           {/* Card */}

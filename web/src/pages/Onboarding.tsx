@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Building2, Zap, Check, ArrowRight, ArrowLeft } from 'lucide-react';
@@ -9,7 +9,7 @@ import { useOrganizationStore } from '../store/organization';
 export function Onboarding() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { fetchUserOrganizations } = useOrganizationStore();
+  const { fetchUserOrganizations, organizations } = useOrganizationStore();
   
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
@@ -17,6 +17,24 @@ export function Onboarding() {
   
   const [orgName, setOrgName] = useState('');
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+
+  // Check if user already has an organization and redirect to dashboard
+  useEffect(() => {
+    const checkExistingOrganization = async () => {
+      if (!user?.id) return;
+      
+      await fetchUserOrganizations();
+    };
+
+    checkExistingOrganization();
+  }, [user?.id, fetchUserOrganizations]);
+
+  // Redirect if user already has organizations
+  useEffect(() => {
+    if (organizations.length > 0) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [organizations, navigate]);
 
   const plans = [
     {
@@ -148,7 +166,7 @@ export function Onboarding() {
                 </div>
                 <div>
                   <h1 className="text-2xl font-bold text-white">Create your organization</h1>
-                  <p className="text-white/50">Let's get you set up with VocaAI</p>
+                  <p className="text-white/50">Let's get you set up with VocaCore AI</p>
                 </div>
               </div>
 
