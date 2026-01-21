@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Save, X, Bot, MessageSquare, Settings, Zap, Clock, Phone } from 'lucide-react';
+import { Save, X, Bot, MessageSquare, Settings, Zap, Clock, Phone, Wrench } from 'lucide-react';
 import type { Agent, CreateAgentRequest } from '../../lib/supabase-types';
 import { useProviders } from '../../hooks/useProviders';
 import { Select } from '../ui/Select';
+import { AgentToolsManager } from './AgentToolsManager';
 
 interface AgentFormProps {
   agent?: Agent;
@@ -36,7 +37,7 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
     tools_config: agent?.tools_config || [],
   });
 
-  const [activeTab, setActiveTab] = useState<'basic' | 'providers' | 'behavior' | 'advanced'>('basic');
+  const [activeTab, setActiveTab] = useState<'basic' | 'providers' | 'behavior' | 'tools' | 'advanced'>('basic');
   const [endCallPhrase, setEndCallPhrase] = useState('');
 
   // Check if form has changes
@@ -90,6 +91,7 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
     { id: 'basic' as const, label: 'Basic Info', icon: Bot },
     { id: 'providers' as const, label: 'AI Providers', icon: Zap },
     { id: 'behavior' as const, label: 'Behavior', icon: MessageSquare },
+    { id: 'tools' as const, label: 'Tools', icon: Wrench, requiresAgent: true },
     { id: 'advanced' as const, label: 'Advanced', icon: Settings },
   ];
 
@@ -452,6 +454,28 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
                 <span>More sensitive</span>
               </div>
             </div>
+          </motion.div>
+        )}
+
+        {/* Tools Tab */}
+        {activeTab === 'tools' && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-5"
+          >
+            {agent ? (
+              <AgentToolsManager agentId={agent.id} />
+            ) : (
+              <div className="text-center py-12">
+                <Wrench size={48} className="text-white/20 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-white mb-2">Save Agent First</h3>
+                <p className="text-white/50 max-w-md mx-auto">
+                  You need to create and save the agent before you can configure tools.
+                  Complete the basic setup first, then come back to add tools.
+                </p>
+              </div>
+            )}
           </motion.div>
         )}
 

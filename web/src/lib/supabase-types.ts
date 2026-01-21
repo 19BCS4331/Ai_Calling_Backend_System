@@ -235,3 +235,254 @@ export interface AgentVersion {
   published_by: string | null;
   created_at: string;
 }
+
+// ============================================
+// Tool Types
+// ============================================
+
+export type ToolType = 'function' | 'api_request' | 'mcp' | 'builtin';
+export type ToolStatus = 'active' | 'inactive' | 'error';
+export type McpTransport = 'sse' | 'stdio' | 'websocket';
+
+// Authentication Types (shared between API Request and MCP)
+export type AuthType = 'none' | 'bearer' | 'api_key' | 'basic' | 'oauth2' | 'hmac';
+
+export interface BearerAuthConfig {
+  token: string;
+}
+
+export interface ApiKeyAuthConfig {
+  key: string;
+  header_name: string;  // Default: X-API-Key
+  location: 'header' | 'query';  // Default: header
+}
+
+export interface BasicAuthConfig {
+  username: string;
+  password: string;
+}
+
+export interface OAuth2AuthConfig {
+  client_id: string;
+  client_secret: string;
+  token_url: string;
+  scope?: string;
+}
+
+export interface HmacAuthConfig {
+  secret_key: string;
+  algorithm: 'sha256' | 'sha512';
+  header_name: string;  // e.g., X-Signature
+  timestamp_header?: string;  // e.g., X-Timestamp
+}
+
+export type AuthConfig = BearerAuthConfig | ApiKeyAuthConfig | BasicAuthConfig | OAuth2AuthConfig | HmacAuthConfig | Record<string, never>;
+
+// Key-Value pair for headers
+export interface KeyValuePair {
+  id: string;
+  key: string;
+  value: string;
+}
+
+// Body parameter types for visual builder
+export type ParameterType = 'string' | 'number' | 'boolean' | 'array' | 'object';
+
+export interface BodyParameter {
+  id: string;
+  key: string;
+  type: ParameterType;
+  description?: string;
+  required: boolean;
+  default_value?: any;
+  enum_values?: string[];  // For string enums
+  items_type?: ParameterType;  // For array items
+  properties?: BodyParameter[];  // For nested objects
+}
+
+// Built-in tool types
+export type BuiltinToolType = 
+  | 'end_call' 
+  | 'transfer_call' 
+  | 'dial_keypad' 
+  | 'hold_call' 
+  | 'record_call' 
+  | 'send_sms' 
+  | 'get_call_info'
+  | 'send_email'
+  | 'schedule_callback';
+
+export interface BuiltinConfigField {
+  key: string;
+  label: string;
+  type: 'text' | 'phone' | 'url' | 'email' | 'boolean' | 'select' | 'number';
+  required: boolean;
+  options?: { value: string; label: string }[];
+  placeholder?: string;
+  description?: string;
+  default_value?: any;
+}
+
+export interface BuiltinToolDefinition {
+  type: BuiltinToolType;
+  name: string;
+  description: string;
+  icon: string;
+  configFields: BuiltinConfigField[];
+}
+
+export interface ToolMessages {
+  request_start?: string | null;
+  request_complete?: string | null;
+  request_failed?: string | null;
+  request_delayed?: string | null;
+}
+
+export interface ToolRetryConfig {
+  max_retries: number;
+  retry_delay_ms: number;
+}
+
+export interface Tool {
+  id: string;
+  organization_id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  type: ToolType;
+  status: ToolStatus;
+  
+  // API Request (formerly function) tool config
+  function_server_url: string | null;
+  function_method: string;
+  function_timeout_ms: number;
+  function_headers: Record<string, string>;
+  function_parameters: Record<string, any>;
+  function_auth_type: AuthType;
+  function_auth_config: Record<string, any>;
+  function_body_type: 'json' | 'form' | 'raw';
+  
+  // MCP tool config
+  mcp_server_url: string | null;
+  mcp_transport: McpTransport;
+  mcp_timeout_ms: number;
+  mcp_auth_type: AuthType;
+  mcp_auth_config: Record<string, any>;
+  mcp_settings: Record<string, any>;
+  
+  // Builtin tool config
+  builtin_type: BuiltinToolType | null;
+  builtin_config: Record<string, any>;
+  builtin_custom_name: string | null;
+  builtin_custom_description: string | null;
+  
+  // Messages
+  messages: ToolMessages;
+  
+  // Advanced settings
+  async_mode: boolean;
+  retry_config: ToolRetryConfig;
+  
+  // Validation
+  last_validated_at: string | null;
+  validation_error: string | null;
+  
+  // Metadata
+  metadata: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+}
+
+export interface CreateToolRequest {
+  name: string;
+  slug?: string;
+  description?: string;
+  type: ToolType;
+  
+  // API Request (formerly function) tool config
+  function_server_url?: string;
+  function_method?: string;
+  function_timeout_ms?: number;
+  function_headers?: Record<string, string>;
+  function_parameters?: Record<string, any>;
+  function_auth_type?: AuthType;
+  function_auth_config?: Record<string, any>;
+  function_body_type?: 'json' | 'form' | 'raw';
+  
+  // MCP tool config
+  mcp_server_url?: string;
+  mcp_transport?: McpTransport;
+  mcp_timeout_ms?: number;
+  mcp_auth_type?: AuthType;
+  mcp_auth_config?: Record<string, any>;
+  mcp_settings?: Record<string, any>;
+  
+  // Builtin tool config
+  builtin_type?: BuiltinToolType;
+  builtin_config?: Record<string, any>;
+  builtin_custom_name?: string;
+  builtin_custom_description?: string;
+  
+  // Messages
+  messages?: ToolMessages;
+  
+  // Advanced settings
+  async_mode?: boolean;
+  retry_config?: ToolRetryConfig;
+}
+
+export interface UpdateToolRequest extends Partial<CreateToolRequest> {
+  status?: ToolStatus;
+}
+
+export interface AgentTool {
+  id: string;
+  agent_id: string;
+  tool_id: string;
+  config_overrides: Record<string, any>;
+  messages_overrides: ToolMessages;
+  sort_order: number;
+  is_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentToolWithDetails extends AgentTool {
+  tool: Tool;
+}
+
+export interface CreateAgentToolRequest {
+  agent_id: string;
+  tool_id: string;
+  config_overrides?: Record<string, any>;
+  messages_overrides?: ToolMessages;
+  sort_order?: number;
+  is_enabled?: boolean;
+}
+
+export interface UpdateAgentToolRequest {
+  config_overrides?: Record<string, any>;
+  messages_overrides?: ToolMessages;
+  sort_order?: number;
+  is_enabled?: boolean;
+}
+
+export interface ToolExecution {
+  id: string;
+  organization_id: string;
+  agent_id: string | null;
+  tool_id: string | null;
+  call_id: string | null;
+  tool_name: string;
+  tool_type: ToolType;
+  input_parameters: Record<string, any> | null;
+  output_result: Record<string, any> | null;
+  started_at: string;
+  completed_at: string | null;
+  duration_ms: number | null;
+  status: 'pending' | 'success' | 'error' | 'timeout';
+  error_message: string | null;
+  metadata: Record<string, any>;
+  created_at: string;
+}

@@ -100,6 +100,11 @@ export class VoicePipeline extends EventEmitter {
   private lastSpeechTime: number = 0;             // Track when user last spoke
   private isSpeaking: boolean = false;            // Track if user is currently speaking
 
+  // Phase 5: Speculative LLM Triggering
+  // Start LLM early for high-confidence turns, abort if user continues
+  private speculativeAbortController: AbortController | null = null;
+  private isSpeculativeExecution: boolean = false;
+
   constructor(
     session: CallSession,
     sttProvider: STTProvider,
@@ -137,17 +142,25 @@ export class VoicePipeline extends EventEmitter {
    */
   async start(): Promise<void> {
     this.isActive = true;
-    this.logger.info('Voice pipeline started');
+    this.logger.info('Voice pipeline starting - initializing providers');
     
     // Initialize all providers
-    await Promise.all([
-      this.sttProvider.initialize(),
-      this.llmProvider.initialize(),
-      this.ttsProvider.initialize()
-    ]);
+    this.logger.debug('Initializing STT provider');
+    await this.sttProvider.initialize();
+    this.logger.debug('STT provider initialized');
+    
+    this.logger.debug('Initializing LLM provider');
+    await this.llmProvider.initialize();
+    this.logger.debug('LLM provider initialized');
+    
+    this.logger.debug('Initializing TTS provider');
+    await this.ttsProvider.initialize();
+    this.logger.debug('TTS provider initialized');
 
     // Start STT streaming session
+    this.logger.debug('Starting STT streaming session');
     await this.startSTTSession();
+    this.logger.info('Voice pipeline started successfully');
   }
 
   private bargeInThreshold: number = 600;  // Audio level threshold for barge-in (tuned: 1000+ = speech, 200-500 = noise)
@@ -289,6 +302,14 @@ export class VoicePipeline extends EventEmitter {
             clearTimeout(this.silenceDebounceTimer);
             this.silenceDebounceTimer = null;
           }
+          
+          // Phase 5: Abort speculative LLM execution if user continues speaking
+          if (this.isSpeculativeExecution && this.speculativeAbortController) {
+            this.logger.debug('Aborting speculative LLM - user continued speaking');
+            this.speculativeAbortController.abort();
+            this.speculativeAbortController = null;
+            this.isSpeculativeExecution = false;
+          }
         },
 
         onFinalTranscript: async (result: TranscriptionResult) => {
@@ -361,73 +382,98 @@ export class VoicePipeline extends EventEmitter {
   }
 
   /**
-   * Phase 4.1: Calculate how long to wait for silence based on transcript characteristics
-   * Prioritizes waiting longer to avoid interrupting users mid-thought
-   * Only reduces wait time when there's strong evidence of turn completion
+   * Phase 5: Smart Balanced - Confidence-based dynamic silence thresholds
+   * Based on industry research (Cresta, AssemblyAI, Twilio):
+   * - HIGH confidence (punctuation + complete): 200-250ms (like AssemblyAI's 160ms min)
+   * - MEDIUM confidence: 450ms base
+   * - LOW confidence (incomplete): up to 900ms max
+   * Target: sub-500ms median, sub-800ms P95
    */
   private calculateSilenceWait(transcript: string): number {
     const turnConfig = this.config.latencyOptimization.turnDetection;
-    const baseWait = turnConfig.silenceThresholdMs;
-    const maxWait = turnConfig.maxWaitAfterSilenceMs;
+    const baseWait = turnConfig.silenceThresholdMs;  // 450ms
+    const maxWait = turnConfig.maxWaitAfterSilenceMs;  // 900ms
     
     const trimmed = transcript.trim();
+    const length = trimmed.length;
+    
+    // === HIGH CONFIDENCE SIGNALS (Fast-track: 200-300ms) ===
     
     // Check for sentence-ending punctuation
     const endsWithPunctuation = /[.!?।॥]$/.test(trimmed);
+    const isQuestion = /\?$/.test(trimmed);
     
-    // Check for common turn-ending phrases (must be at the end)
-    const turnEndingPhrases = /\b(thanks|thank you|okay|ok|bye|goodbye|done|that's it|that's all|please proceed|go ahead)\s*[.!?]?$/i;
+    // Turn-ending social phrases (very high confidence)
+    const turnEndingPhrases = /\b(thanks|thank you|okay|ok|bye|goodbye|done|that's it|that's all|please proceed|go ahead|yes|no|sure|alright|got it)\s*[.!?]?$/i;
     const hasTurnEndingPhrase = turnEndingPhrases.test(trimmed);
     
-    // Check for MID-THOUGHT indicators - user is likely to continue
-    // These patterns suggest incomplete thoughts that need more time
+    // === LOW CONFIDENCE SIGNALS (Wait longer: 700-900ms) ===
+    
+    // Mid-thought indicators - user is likely to continue
     const midThoughtPatterns = [
-      /\b(and|but|or|so|because|however|although|though|since|while|if|when|where|which|that|um|uh|like|you know|I mean)\s*$/i,
+      /\b(and|but|or|so|because|however|although|though|since|while|if|when|where|which|um|uh|like|you know|I mean)\s*$/i,
       /,\s*$/,                                           // Ends with comma
-      /\b(I|we|you|they|he|she|it)\s*$/i,               // Ends with pronoun
-      /\b(is|are|was|were|will|would|could|should|can|have|has|had)\s*$/i,  // Ends with auxiliary verb
+      /\b(I|we|you|they|he|she|it)\s*$/i,               // Ends with pronoun (alone)
+      /\b(is|are|was|were|will|would|could|should|can|have|has|had)\s*$/i,  // Ends with auxiliary
       /\b(the|a|an|this|that|these|those|my|your|our)\s*$/i,  // Ends with determiner
-      /\b(want|need|would like|am looking|am thinking|was wondering)\s*$/i,  // Ends with intent verb
+      /\b(want|need|would like|am looking|am thinking|was wondering)\s*$/i,
       /\b(about|for|to|with|from|in|on|at)\s*$/i,       // Ends with preposition
     ];
     const isMidThought = midThoughtPatterns.some(p => p.test(trimmed));
     
-    // Questions ending with ? can be processed faster
-    const isQuestion = /\?$/.test(trimmed);
+    // === CALCULATE WAIT TIME ===
+    let waitMs: number;
+    let confidence: 'high' | 'medium' | 'low';
     
-    // Calculate wait time based on characteristics
-    let waitMs = baseWait;
-    
-    // MID-THOUGHT: User is clearly not done - wait maximum time
+    // PRIORITY 1: Mid-thought detection (LOW confidence - wait longer)
     if (isMidThought) {
-      waitMs = maxWait;
-      this.logger.debug('Mid-thought detected, using max wait', { 
-        transcript: trimmed.slice(-30),
-        waitMs 
-      });
+      waitMs = maxWait;  // 900ms
+      confidence = 'low';
     }
-    // CLEAR ENDING: Strong signals of turn completion
-    else if (endsWithPunctuation && hasTurnEndingPhrase) {
-      // Very clear ending - can respond faster
-      waitMs = Math.min(baseWait * 0.5, 600);
-    } else if (isQuestion) {
-      // Questions with ? usually indicate turn completion
-      waitMs = Math.min(baseWait * 0.6, 700);
-    } else if (endsWithPunctuation && trimmed.length > 20) {
-      // Sentence with punctuation and decent length
-      waitMs = Math.min(baseWait * 0.75, 900);
-    } 
-    // UNCERTAIN: Need to wait longer
-    else if (trimmed.length < 20) {
-      // Short utterance without punctuation - wait max
-      waitMs = maxWait;
-    } else if (trimmed.length < 40) {
-      // Medium utterance without clear ending
-      waitMs = Math.max(baseWait, 1200);
-    } else {
-      // Long utterance but no punctuation - still wait base time
-      waitMs = baseWait;
+    // PRIORITY 2: Clear turn-ending phrase (HIGH confidence - respond fast!)
+    else if (hasTurnEndingPhrase) {
+      waitMs = 200;  // Very fast - clear social signal
+      confidence = 'high';
     }
+    // PRIORITY 3: Question with ? (HIGH confidence)
+    else if (isQuestion && length > 10) {
+      waitMs = 250;  // Questions are usually complete
+      confidence = 'high';
+    }
+    // PRIORITY 4: Complete sentence with punctuation (HIGH confidence)
+    else if (endsWithPunctuation && length > 15) {
+      waitMs = 250;  // Complete thought with punctuation
+      confidence = 'high';
+    }
+    // PRIORITY 5: Short punctuated (MEDIUM-HIGH confidence)
+    else if (endsWithPunctuation && length > 5) {
+      waitMs = 350;  // Short but complete
+      confidence = 'medium';
+    }
+    // PRIORITY 6: Very short without punctuation (LOW confidence)
+    else if (length < 15) {
+      waitMs = maxWait;  // 900ms - might be incomplete
+      confidence = 'low';
+    }
+    // PRIORITY 7: Medium length without punctuation (MEDIUM confidence)
+    else if (length < 40) {
+      waitMs = 600;  // Wait a bit more
+      confidence = 'medium';
+    }
+    // DEFAULT: Longer text without clear ending (MEDIUM confidence)
+    else {
+      waitMs = baseWait;  // 450ms
+      confidence = 'medium';
+    }
+    
+    this.logger.debug('Silence wait calculated', { 
+      confidence,
+      waitMs,
+      length,
+      endsWithPunctuation,
+      isMidThought,
+      transcript: trimmed.slice(-40)
+    });
     
     return waitMs;
   }
@@ -691,14 +737,14 @@ export class VoicePipeline extends EventEmitter {
     
     // Wait briefly for TTS session if not ready yet
     if (!this.ttsSessionReady || !this.ttsSession?.isSessionActive()) {
-      // Retry after short delay
+      // Retry after short delay (reduced from 50ms for lower latency)
       setTimeout(() => {
         if (this.ttsSession?.isSessionActive()) {
           this.logger.debug('Streaming sentence to TTS', { length: sentence.length });
           this.ttsSession.sendText(sentence);
           this.ttsSentText = true;
         }
-      }, 50);
+      }, 20);
       return;
     }
     

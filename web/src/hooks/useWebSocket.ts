@@ -10,12 +10,19 @@ interface MCPWorkflow {
 }
 
 interface SessionConfig {
+  agentId?: string;  // Agent ID to retrieve tools and configuration
   language?: string;
   systemPrompt: string;
   stt: { provider: string; apiKey: string; language?: string };
-  llm: { provider: string; apiKey: string; model: string };
+  llm: { provider: string; apiKey: string; model: string; temperature?: number };
   tts: { provider: string; apiKey: string; voiceId: string; language?: string };
   mcpWorkflows?: MCPWorkflow[];  // Array of MCP workflows to connect for this session
+  firstMessage?: string | null;  // Agent's first message
+  endCallPhrases?: string[];  // Phrases that trigger call end
+  interruptionSensitivity?: number;  // Interruption sensitivity
+  silenceTimeoutMs?: number;  // Silence timeout
+  maxCallDurationSeconds?: number;  // Max call duration
+  context?: Record<string, any>;  // Additional context
 }
 
 export function useWebSocket() {

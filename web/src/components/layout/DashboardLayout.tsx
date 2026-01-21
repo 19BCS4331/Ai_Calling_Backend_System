@@ -2,7 +2,7 @@ import { Link, useLocation, Outlet, Navigate, useNavigate } from 'react-router-d
 import { motion } from 'framer-motion';
 import { 
   Zap, LayoutDashboard, Phone, Settings, BarChart3, 
-  Bot, LogOut, ChevronLeft, Menu
+  Bot, LogOut, ChevronLeft, Menu, Wrench
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '../../store/auth';
@@ -13,6 +13,7 @@ const navItems = [
   { icon: LayoutDashboard, label: 'Overview', href: '/dashboard' },
   { icon: Phone, label: 'Calls', href: '/dashboard/calls' },
   { icon: Bot, label: 'Voice Agents', href: '/dashboard/agents' },
+  { icon: Wrench, label: 'Tools', href: '/dashboard/tools' },
   { icon: BarChart3, label: 'Analytics', href: '/dashboard/analytics' },
   { icon: Settings, label: 'Settings', href: '/dashboard/settings' },
 ];

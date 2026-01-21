@@ -468,12 +468,16 @@ export interface LatencyOptimizationConfig {
 
 export const DEFAULT_LATENCY_CONFIG: LatencyOptimizationConfig = {
   turnDetection: {
-    // Phase 4.1: Further increased thresholds for more natural conversation
-    // Users need time to pause and think without AI interrupting
-    silenceThresholdMs: 1200,       // Base wait time after silence (increased from 700)
-    maxWaitAfterSilenceMs: 1800,    // Max wait for short/incomplete utterances (increased from 1000)
-    minTranscriptLength: 8,         // Min chars before processing (increased from 5)
-    usePunctuationEndpoint: true,   // Use punctuation as turn completion signal
+    // Phase 5: Smart Balanced - Confidence-based dynamic thresholds
+    // Based on industry research (Cresta, AssemblyAI, Twilio):
+    // - Complete sentences with punctuation: 200-250ms (fast-tracked)
+    // - Medium confidence: 450ms base
+    // - Incomplete thoughts: up to 900ms max
+    // Target: sub-500ms median, sub-800ms P95
+    silenceThresholdMs: 450,        // Base wait - balanced between speed and accuracy
+    maxWaitAfterSilenceMs: 900,     // Max wait for incomplete utterances (reduced from 1800)
+    minTranscriptLength: 4,         // Process shorter inputs for responsiveness
+    usePunctuationEndpoint: true,   // Critical: fast-track complete sentences
     suppressEchoDuringPlayback: true
   },
   fillers: {

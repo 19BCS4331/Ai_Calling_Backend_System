@@ -539,7 +539,10 @@ export class APIServer {
     ws: WebSocket, 
     message: any
   ): Promise<void> {
+    this.logger.info('=== handleStartSession ENTRY ===', { connectionId });
+    
     const { tenantId, config } = message;
+    const agentId = config.agentId; // Agent ID from client config
 
     // Resolve API keys: use client-provided or fall back to environment variables
     // This enables "demo mode" where the web app doesn't need to send API keys
@@ -585,8 +588,16 @@ export class APIServer {
       ttsProviderType
     );
 
+    // Normalize LLM provider type - map variants to base provider
+    let llmProviderType = config.llm?.provider || 'gemini';
+    if (llmProviderType.startsWith('gemini')) {
+      llmProviderType = 'gemini';
+    } else if (llmProviderType.startsWith('gpt') || llmProviderType.startsWith('openai')) {
+      llmProviderType = 'openai';
+    }
+    
     const llmConfig: LLMConfig = {
-      type: config.llm?.provider || 'gemini',
+      type: llmProviderType,
       credentials: { apiKey: llmApiKey },
       model: config.llm?.model || 'gemini-2.5-flash',
       systemPrompt: mergedSystemPrompt,
@@ -604,6 +615,37 @@ export class APIServer {
       audioQuality: config.tts?.audioQuality || 'web'  // 'web' or 'telephony' for Cartesia
     };
 
+    // Retrieve agent tools if agentId is provided
+    let agentTools: any[] = [];
+    if (agentId) {
+      try {
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        
+        if (supabaseUrl && supabaseKey) {
+          const { createClient } = await import('@supabase/supabase-js');
+          const supabase = createClient(supabaseUrl, supabaseKey);
+          
+          const { data, error } = await supabase.rpc('get_agent_tools', { 
+            p_agent_id: agentId 
+          });
+          
+          if (!error && data) {
+            agentTools = data;
+            this.logger.info('Retrieved agent tools', { 
+              agentId, 
+              toolCount: agentTools.length 
+            });
+          }
+        }
+      } catch (error) {
+        this.logger.warn('Failed to retrieve agent tools', {
+          agentId,
+          error: (error as Error).message
+        });
+      }
+    }
+
     // Create session
     const session = await this.sessionManager.createSession({
       tenantId,
@@ -615,10 +657,22 @@ export class APIServer {
       context: config.context || {}
     });
 
+    this.logger.info('Creating providers', { sessionId: session.sessionId });
+
     // Create providers
+    this.logger.info('Creating STT provider', { type: sttConfig.type });
     const sttProvider = STTProviderFactory.create(sttConfig, this.logger);
+    this.logger.info('STT provider created');
+    
+    this.logger.info('Creating LLM provider', { type: llmConfig.type });
     const llmProvider = LLMProviderFactory.create(llmConfig, this.logger);
+    this.logger.info('LLM provider created');
+    
+    this.logger.info('Creating TTS provider', { type: ttsConfig.type });
     const ttsProvider = TTSProviderFactory.create(ttsConfig, this.logger);
+    this.logger.info('TTS provider created');
+
+    this.logger.info('Providers created', { sessionId: session.sessionId });
 
     // Build latency optimization config from client request
     const latencyConfig: LatencyOptimizationConfig = this.buildLatencyConfig(config.latencyOptimization);
@@ -627,6 +681,144 @@ export class APIServer {
     if (latencyConfig.audioCaching.enabled && !this.audioCache.isReady()) {
       this.audioCache.initialize(ttsProvider, latencyConfig.audioCaching.preloadLanguages)
         .catch(err => this.logger.warn('Audio cache init failed', { error: err.message }));
+    }
+
+    // Log all tool types for debugging
+    this.logger.info('Agent tools by type', {
+      sessionId: session.sessionId,
+      toolTypes: agentTools.map((t: any) => ({ name: t.tool_name, type: t.tool_type }))
+    });
+
+    // Register function and api_request tools from agent configuration
+    const httpTools = agentTools.filter((t: any) => 
+      t.tool_type === 'function' || t.tool_type === 'api_request'
+    );
+    this.logger.info('HTTP tools found', { count: httpTools.length });
+    
+    for (const tool of httpTools) {
+      try {
+        const toolConfig = tool.tool_config || {};
+        
+        // Log tool config for debugging
+        this.logger.info('HTTP tool config', {
+          sessionId: session.sessionId,
+          toolName: tool.tool_name,
+          toolConfig: JSON.stringify(toolConfig)
+        });
+        
+        // Determine URL from various possible field names
+        const url = toolConfig.server_url || toolConfig.endpoint_url || 
+                    toolConfig.function_server_url || toolConfig.url;
+        
+        if (!url) {
+          this.logger.warn('HTTP tool missing URL', {
+            sessionId: session.sessionId,
+            toolName: tool.tool_name,
+            availableFields: Object.keys(toolConfig)
+          });
+          continue;
+        }
+        
+        this.toolRegistry.register({
+          definition: {
+            name: tool.tool_slug,
+            description: tool.tool_description || tool.tool_name,
+            parameters: toolConfig.parameters || { type: 'object', properties: {} }
+          },
+          handler: async (params: any) => {
+            // Build request headers
+            const headers: Record<string, string> = {
+              'Content-Type': 'application/json',
+              ...toolConfig.headers
+            };
+            
+            // Handle authentication
+            if (toolConfig.auth_config) {
+              const auth = toolConfig.auth_config;
+              if (auth.type === 'bearer' && auth.token) {
+                headers['Authorization'] = `Bearer ${auth.token}`;
+              } else if (auth.type === 'api_key' && auth.key) {
+                headers[auth.header_name || 'X-API-Key'] = auth.key;
+              } else if (auth.type === 'basic' && auth.username && auth.password) {
+                const credentials = Buffer.from(`${auth.username}:${auth.password}`).toString('base64');
+                headers['Authorization'] = `Basic ${credentials}`;
+              }
+            }
+            
+            // Call the API endpoint
+            const response = await fetch(url, {
+              method: toolConfig.method || 'GET',
+              headers,
+              ...(toolConfig.method !== 'GET' && toolConfig.method !== 'HEAD' ? {
+                body: JSON.stringify(toolConfig.body_template ? 
+                  this.interpolateBody(toolConfig.body_template, params) : 
+                  params
+                )
+              } : {}),
+              signal: AbortSignal.timeout(toolConfig.timeout_ms || 30000)
+            });
+
+            if (!response.ok) {
+              throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+            }
+
+            const result: any = await response.json();
+            return result;
+          }
+        });
+        
+        this.logger.info('Registered agent HTTP tool', {
+          sessionId: session.sessionId,
+          agentId,
+          toolName: tool.tool_name,
+          toolSlug: tool.tool_slug,
+          toolType: tool.tool_type
+        });
+      } catch (error) {
+        this.logger.warn('Failed to register agent HTTP tool', {
+          sessionId: session.sessionId,
+          agentId,
+          toolName: tool.tool_name,
+          error: (error as Error).message
+        });
+      }
+    }
+
+    // Register builtin tools from agent configuration
+    const builtinTools = agentTools.filter((t: any) => t.tool_type === 'builtin');
+    for (const tool of builtinTools) {
+      try {
+        const toolConfig = tool.tool_config || {};
+        const builtinType = toolConfig.builtin_type || tool.tool_slug;
+        
+        // Handle different builtin tool types
+        if (builtinType === 'end_call' || tool.tool_name === 'End Call') {
+          this.toolRegistry.register({
+            definition: {
+              name: 'end_call',
+              description: tool.tool_description || 'End the current call',
+              parameters: { type: 'object', properties: {} }
+            },
+            handler: async () => {
+              // Signal to end the call
+              this.logger.info('End call tool invoked', { sessionId: session.sessionId });
+              return { action: 'end_call', message: 'Call ended by agent' };
+            }
+          });
+          
+          this.logger.info('Registered builtin tool', {
+            sessionId: session.sessionId,
+            toolName: 'end_call'
+          });
+        }
+        // Add more builtin tool handlers here as needed
+      } catch (error) {
+        this.logger.warn('Failed to register builtin tool', {
+          sessionId: session.sessionId,
+          toolName: tool.tool_name,
+          error: (error as Error).message
+        });
+      }
     }
 
     // Create pipeline with latency optimization config and audio cache
@@ -644,44 +836,107 @@ export class APIServer {
     // Set up pipeline events
     this.setupPipelineEvents(pipeline, ws, session.sessionId);
 
+    this.logger.info('Pipeline created, cleaning up old sessions', { sessionId: session.sessionId });
+
     // Clean up any existing sessions for this connection before creating new one
     await this.cleanupConnectionSessions(connectionId);
 
-    // Connect to per-session MCP workflows if specified
-    // config.mcpWorkflows can be an array of { name, url, apiKey? } objects
+    this.logger.info('Old sessions cleaned up, connecting MCP tools', { sessionId: session.sessionId });
+
+    // Connect to MCP tools from agent configuration - PARALLELIZED for speed
     const connectedMcpClients: string[] = [];
+    const mcpTools = agentTools.filter((t: any) => t.tool_type === 'mcp');
+    
+    // Build all MCP connection promises
+    const mcpConnectionPromises: Promise<{ name: string; success: boolean; toolName: string }>[] = [];
+    
+    for (const tool of mcpTools) {
+      const toolConfig = tool.tool_config || {};
+      const clientName = `agent_${agentId}_${tool.tool_slug}_${session.sessionId.slice(0, 8)}`;
+      
+      const connectionPromise = this.mcpClientManager.addServer({
+        name: clientName,
+        transport: toolConfig.transport || 'sse',
+        url: toolConfig.server_url,
+        apiKey: toolConfig.auth_config?.token || toolConfig.auth_config?.key,
+        timeout: toolConfig.timeout_ms || 30000
+      }).then(() => ({ name: clientName, success: true, toolName: tool.tool_name }))
+        .catch((error: Error) => {
+          this.logger.warn('Failed to connect to agent MCP tool', {
+            sessionId: session.sessionId,
+            agentId,
+            toolName: tool.tool_name,
+            error: error.message
+          });
+          return { name: clientName, success: false, toolName: tool.tool_name };
+        });
+      
+      mcpConnectionPromises.push(connectionPromise);
+    }
+    
+    // Connect to per-session MCP workflows if specified (legacy support)
+    // config.mcpWorkflows can be an array of { name, url, apiKey? } objects
     if (config.mcpWorkflows && Array.isArray(config.mcpWorkflows)) {
       for (const workflow of config.mcpWorkflows) {
         if (workflow.url) {
-          try {
-            // Use a unique name per session to avoid conflicts
-            const clientName = `${workflow.name || 'n8n'}_${session.sessionId.slice(0, 8)}`;
-            await this.mcpClientManager.addServer({
-              name: clientName,
-              transport: 'sse',
-              url: workflow.url,
-              apiKey: workflow.apiKey,
-              timeout: 30000
+          const clientName = `${workflow.name || 'n8n'}_${session.sessionId.slice(0, 8)}`;
+          
+          const connectionPromise = this.mcpClientManager.addServer({
+            name: clientName,
+            transport: 'sse',
+            url: workflow.url,
+            apiKey: workflow.apiKey,
+            timeout: 30000
+          }).then(() => ({ name: clientName, success: true, toolName: workflow.name || 'n8n' }))
+            .catch((error: Error) => {
+              this.logger.warn('Failed to connect to MCP workflow', {
+                sessionId: session.sessionId,
+                workflow: workflow.name,
+                error: error.message
+              });
+              return { name: clientName, success: false, toolName: workflow.name || 'n8n' };
             });
-            connectedMcpClients.push(clientName);
-            this.logger.info('Connected to session MCP workflow', { 
+          
+          mcpConnectionPromises.push(connectionPromise);
+        }
+      }
+    }
+    
+    // Wait for all MCP connections in parallel (non-blocking for session start)
+    if (mcpConnectionPromises.length > 0) {
+      this.logger.info('Waiting for MCP connections', { 
+        sessionId: session.sessionId, 
+        count: mcpConnectionPromises.length 
+      });
+      
+      try {
+        const results = await Promise.all(mcpConnectionPromises);
+        this.logger.info('MCP connections completed', { 
+          sessionId: session.sessionId, 
+          successful: results.filter(r => r.success).length,
+          failed: results.filter(r => !r.success).length
+        });
+        
+        for (const result of results) {
+          if (result.success) {
+            connectedMcpClients.push(result.name);
+            this.logger.info('Connected to MCP tool', {
               sessionId: session.sessionId,
-              workflow: workflow.name,
-              url: workflow.url
-            });
-          } catch (error) {
-            this.logger.warn('Failed to connect to MCP workflow', {
-              sessionId: session.sessionId,
-              workflow: workflow.name,
-              error: (error as Error).message
+              toolName: result.toolName
             });
           }
         }
+      } catch (error) {
+        this.logger.error('MCP connection error', {
+          sessionId: session.sessionId,
+          error: (error as Error).message
+        });
       }
-      // Track which MCP clients belong to this session for cleanup
-      if (connectedMcpClients.length > 0) {
-        this.sessionMcpClients.set(session.sessionId, connectedMcpClients);
-      }
+    }
+    
+    // Track which MCP clients belong to this session for cleanup
+    if (connectedMcpClients.length > 0) {
+      this.sessionMcpClients.set(session.sessionId, connectedMcpClients);
     }
     
     // Store and start pipeline
@@ -693,7 +948,9 @@ export class APIServer {
     }
     this.connectionSessions.get(connectionId)!.add(session.sessionId);
     
+    this.logger.info('Starting voice pipeline', { sessionId: session.sessionId });
     await pipeline.start();
+    this.logger.info('Voice pipeline started successfully', { sessionId: session.sessionId });
 
     // Update session status
     await this.sessionManager.updateStatus(session.sessionId, 'active');
@@ -726,6 +983,27 @@ export class APIServer {
       sessionId: session.sessionId, 
       tenantId 
     });
+  }
+
+  /**
+   * Interpolate body template with parameters
+   * Replaces {{param}} placeholders with actual values
+   */
+  private interpolateBody(template: any, params: Record<string, any>): any {
+    if (typeof template === 'string') {
+      return template.replace(/\{\{(\w+)\}\}/g, (_, key) => params[key] ?? '');
+    }
+    if (Array.isArray(template)) {
+      return template.map(item => this.interpolateBody(item, params));
+    }
+    if (typeof template === 'object' && template !== null) {
+      const result: Record<string, any> = {};
+      for (const [key, value] of Object.entries(template)) {
+        result[key] = this.interpolateBody(value, params);
+      }
+      return result;
+    }
+    return template;
   }
 
   /**

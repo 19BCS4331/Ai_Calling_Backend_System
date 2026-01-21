@@ -11,6 +11,9 @@ import { Calls } from './pages/dashboard/Calls';
 import { Agents } from './pages/dashboard/Agents';
 import { AgentNew } from './pages/dashboard/AgentNew';
 import { AgentDetail } from './pages/dashboard/AgentDetail';
+import { Tools } from './pages/dashboard/Tools';
+import { ToolNew } from './pages/dashboard/ToolNew';
+import { ToolDetail } from './pages/dashboard/ToolDetail';
 import { Analytics } from './pages/dashboard/Analytics';
 import { Settings } from './pages/dashboard/Settings';
 import { useAuthStore } from './store/auth';
@@ -47,6 +50,9 @@ function App() {
           <Route path="agents" element={<Agents />} />
           <Route path="agents/new" element={<AgentNew />} />
           <Route path="agents/:id" element={<AgentDetail />} />
+          <Route path="tools" element={<Tools />} />
+          <Route path="tools/new" element={<ToolNew />} />
+          <Route path="tools/:id" element={<ToolDetail />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="settings" element={<Settings />} />
         </Route>

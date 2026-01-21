@@ -205,15 +205,54 @@ export class GeminiLLMProvider extends LLMProvider {
   }
 
   private convertTools(tools: ToolDefinition[]): any[] {
-    return tools.map(tool => ({
-      name: tool.name,
-      description: tool.description,
-      parameters: {
-        type: Type.OBJECT,
-        properties: this.convertProperties(tool.parameters.properties),
-        required: tool.parameters.required || []
+    // Deduplicate tools by sanitized name to avoid Gemini API errors
+    const seenNames = new Set<string>();
+    const uniqueTools: any[] = [];
+    
+    for (const tool of tools) {
+      const sanitizedName = this.sanitizeToolName(tool.name);
+      
+      // Skip duplicate tool names
+      if (seenNames.has(sanitizedName)) {
+        continue;
       }
-    }));
+      
+      seenNames.add(sanitizedName);
+      uniqueTools.push({
+        name: sanitizedName,
+        description: tool.description,
+        parameters: {
+          type: Type.OBJECT,
+          properties: this.convertProperties(tool.parameters.properties),
+          required: tool.parameters.required || []
+        }
+      });
+    }
+    
+    return uniqueTools;
+  }
+
+  /**
+   * Sanitize tool name to conform to Gemini's requirements:
+   * - Must start with a letter or underscore
+   * - Must be alphanumeric (a-z, A-Z, 0-9), underscores (_), dots (.), colons (:), or dashes (-)
+   * - Maximum length of 64 characters
+   */
+  private sanitizeToolName(name: string): string {
+    // Replace invalid characters with underscores
+    let sanitized = name.replace(/[^a-zA-Z0-9_.\-:]/g, '_');
+    
+    // Ensure it starts with a letter or underscore
+    if (!/^[a-zA-Z_]/.test(sanitized)) {
+      sanitized = '_' + sanitized;
+    }
+    
+    // Truncate to 64 characters max
+    if (sanitized.length > 64) {
+      sanitized = sanitized.substring(0, 64);
+    }
+    
+    return sanitized;
   }
 
   private convertProperties(properties: Record<string, any>): Record<string, any> {

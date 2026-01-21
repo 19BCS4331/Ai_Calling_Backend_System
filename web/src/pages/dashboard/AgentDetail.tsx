@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Loader, History, Play, Pause, X } from 'lucide-react';
+import { ArrowLeft, Loader, History, Play, Pause, X, Phone } from 'lucide-react';
 import { AgentForm } from '../../components/agents/AgentForm';
 import { VersionHistory } from '../../components/agents/VersionHistory';
+import { AgentTestCall } from '../../components/agents/AgentTestCall';
 import { useAgents } from '../../hooks/useAgents';
 import { supabase } from '../../lib/supabase';
 import { useOrganizationStore } from '../../store/organization';
@@ -18,7 +19,7 @@ export function AgentDetail() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'edit' | 'versions'>('edit');
+  const [activeTab, setActiveTab] = useState<'edit' | 'test' | 'versions'>('edit');
   const [showPublishDialog, setShowPublishDialog] = useState(false);
   const [changeSummary, setChangeSummary] = useState('');
   const [isPublishing, setIsPublishing] = useState(false);
@@ -193,6 +194,17 @@ export function AgentDetail() {
           Edit Configuration
         </button>
         <button
+          onClick={() => setActiveTab('test')}
+          className={`px-4 py-3 font-medium transition-all flex items-center gap-2 border-b-2 ${
+            activeTab === 'test'
+              ? 'text-purple-400 border-purple-500'
+              : 'text-white/50 border-transparent hover:text-white/70'
+          }`}
+        >
+          <Phone size={18} />
+          Test Call
+        </button>
+        <button
           onClick={() => setActiveTab('versions')}
           className={`px-4 py-3 font-medium transition-all flex items-center gap-2 border-b-2 ${
             activeTab === 'versions'
@@ -216,6 +228,8 @@ export function AgentDetail() {
             onCancel={handleCancel}
             isLoading={isSaving}
           />
+        ) : activeTab === 'test' ? (
+          <AgentTestCall agent={agent} />
         ) : (
           <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-6">
             <h3 className="text-lg font-semibold text-white mb-4">Version History</h3>
