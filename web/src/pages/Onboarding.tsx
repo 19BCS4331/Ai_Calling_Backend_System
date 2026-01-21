@@ -101,7 +101,7 @@ export function Onboarding() {
         .replace(/^-|-$/g, '') + '-' + Math.random().toString(36).substring(2, 10);
 
       // Call the database function to create organization with subscription
-      const { data, error } = await supabase.rpc('create_organization_with_subscription', {
+      const { data: _data, error } = await supabase.rpc('create_organization_with_subscription', {
         p_user_id: user.id,
         p_org_name: orgName,
         p_org_slug: slug,

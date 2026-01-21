@@ -28,7 +28,7 @@ export function Overview() {
   const { currentSubscription } = useOrganizationStore();
   const { calls } = useCalls();
   const { currentUsage } = useUsage();
-  const { agents } = useAgents();
+  const { agents: _agents } = useAgents();
   
   const [stats, setStats] = useState<DashboardStats>({
     totalCalls: 0,
