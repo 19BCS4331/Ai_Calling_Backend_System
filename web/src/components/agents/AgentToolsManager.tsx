@@ -113,29 +113,42 @@ export function AgentToolsManager({ agentId }: AgentToolsManagerProps) {
   };
 
   const handleSaveToolConfig = async (configs: any[]) => {
-    if (!configuringTool || !currentOrganization) return;
+    if (!configuringTool || !currentOrganization) {
+      console.error('Missing configuringTool or currentOrganization');
+      return;
+    }
 
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SAAS_API_URL || 'http://localhost:3001'}/api/v1/orgs/${currentOrganization.id}/agents/${agentId}/tool-configs`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${(await import('../../lib/supabase').then(m => m.supabase.auth.getSession())).data.session?.access_token}`
-          },
-          body: JSON.stringify({ configs })
-        }
-      );
+      const url = `${import.meta.env.VITE_SAAS_API_URL || 'http://localhost:3001'}/api/v1/orgs/${currentOrganization.id}/agents/${agentId}/tool-configs`;
+      console.log('Saving to URL:', url);
+      console.log('Configs payload:', configs);
+
+      const { data: { session } } = await import('../../lib/supabase').then(m => m.supabase.auth.getSession());
+      if (!session) {
+        throw new Error('Not authenticated');
+      }
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ configs })
+      });
+
+      const responseData = await response.json();
+      console.log('Response:', response.status, responseData);
 
       if (!response.ok) {
-        throw new Error('Failed to save tool configuration');
+        throw new Error(responseData.message || 'Failed to save tool configuration');
       }
 
       // Refresh agent tools
       window.location.reload();
     } catch (error) {
       console.error('Failed to save tool config:', error);
+      alert('Failed to save configuration: ' + (error instanceof Error ? error.message : 'Unknown error'));
       throw error;
     }
   };

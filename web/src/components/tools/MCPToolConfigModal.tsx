@@ -94,14 +94,17 @@ export function MCPToolConfigModal({
         tool_id: toolId,
         mcp_function_name: fn.name,
         enabled: fn.enabled,
-        custom_name: fn.customName,
-        custom_description: fn.customDescription,
+        custom_name: fn.customName || null,
+        custom_description: fn.customDescription || null,
         display_order: index
       }));
 
+      console.log('Saving MCP tool configs:', configs);
       await onSave(configs);
+      console.log('MCP tool configs saved successfully');
       onClose();
     } catch (err) {
+      console.error('Failed to save MCP tool configs:', err);
       setError(err instanceof Error ? err.message : 'Failed to save configurations');
     } finally {
       setIsSaving(false);
