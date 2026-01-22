@@ -199,7 +199,10 @@ export async function startCallWithValidation(
     
     stt: {
       provider: sttProvider,
-      config: agent.stt_config
+      config: {
+        ...agent.stt_config,
+        language: 'unknown' // Sarvam STT supports multi-language auto-detect
+      }
     },
     llm: {
       provider: llmProvider,
@@ -207,12 +210,15 @@ export async function startCallWithValidation(
     },
     tts: {
       provider: ttsProvider,
-      config: agent.tts_config
+      config: {
+        ...agent.tts_config,
+        language: agent.language // Language is only for TTS
+      }
     },
     
     system_prompt: agent.system_prompt || '',
     first_message: agent.first_message,
-    language: agent.language,
+    language: agent.language, // Keep for backward compatibility
     voice_id: agent.voice_id,
     
     max_duration_seconds: agent.max_call_duration_seconds,

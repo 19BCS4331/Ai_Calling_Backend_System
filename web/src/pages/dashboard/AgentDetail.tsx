@@ -62,7 +62,9 @@ export function AgentDetail() {
       setIsSaving(true);
       // Create snapshot when updating to track version history
       await updateAgent(id, data, true);
-      navigate('/dashboard/agents');
+      // Stay on the same page after successful update
+      fetchAgent();
+      setIsSaving(false);
     } catch (err) {
       console.error('Failed to update agent:', err);
       setError(err instanceof Error ? err.message : 'Failed to update agent');

@@ -22,6 +22,7 @@ import { ConfirmDialog } from './components/ui/ConfirmDialog';
 import { ToastContainer } from './components/ui/Toast';
 import { useAlertStore, useConfirmStore } from './hooks/useAlert';
 import { useToastStore } from './hooks/useToast';
+import { ScrollToTop } from './components/ScrollToTop';
 
 function App() {
   const { initialize, isLoading } = useAuthStore();
@@ -66,6 +67,7 @@ function App() {
       />
       <ToastContainer toasts={toasts} onClose={removeToast} />
       <BrowserRouter>
+        <ScrollToTop />
         <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />

@@ -548,7 +548,11 @@ export class APIServer {
     // This enables "demo mode" where the web app doesn't need to send API keys
     const sttApiKey = config.stt?.apiKey || process.env.SARVAM_API_KEY || '';
     const llmApiKey = config.llm?.apiKey || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || '';
-    const ttsApiKey = config.tts?.apiKey || process.env.CARTESIA_API_KEY || '';
+    
+    // TTS API key depends on provider
+    const ttsProviderType = config.tts?.provider || 'sarvam';
+    const ttsApiKey = config.tts?.apiKey || 
+      (ttsProviderType === 'cartesia' ? process.env.CARTESIA_API_KEY : process.env.SARVAM_API_KEY) || '';
 
     // Log API key resolution for debugging (only shows if keys are present, not the actual keys)
     this.logger.info('API keys resolved', {
@@ -571,16 +575,14 @@ export class APIServer {
     }
 
     // Create provider configs from dynamic credentials
-    // STT language: use 'unknown' for auto-detect (default), or specific language
+    // STT language: always use 'unknown' for multi-language auto-detect (Sarvam supports this)
     // TTS language: must be specific (e.g., 'en-IN') - Sarvam TTS doesn't support 'unknown'
     const sttConfig: STTConfig = {
       type: config.stt?.provider || 'sarvam',
       credentials: { apiKey: sttApiKey },
-      language: config.stt?.language || config.language || 'unknown',
+      language: config.stt?.config?.language || 'unknown', // Use explicit STT config language or default to 'unknown'
       sampleRateHertz: config.sampleRate || 16000
     };
-
-    const ttsProviderType = config.tts?.provider || 'sarvam';
     
     // Build merged system prompt: behavioral prompt + TTS-specific guidelines
     const mergedSystemPrompt = buildSystemPrompt(

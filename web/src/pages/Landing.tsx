@@ -9,6 +9,7 @@ import { Link } from 'react-router-dom';
 import { Navbar } from '../components/layout/Navbar';
 import { VoiceDemo } from '../components/voice/VoiceDemo';
 import { GlowingEffect } from '../components/ui/GlowingEffect';
+import VocaCoreAILogo from '../assets/VocaCore-final-square.png';
 
 const fadeInUp = {
   initial: { opacity: 0, y: 30 },
@@ -710,7 +711,11 @@ export function Landing() {
             <div>
               <div className="flex items-center gap-2 mb-4">
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center">
-                  <Zap size={16} className="text-white" />
+                  <img 
+                src={VocaCoreAILogo} 
+                alt="VocaCore AI" 
+                className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg object-contain group-hover:shadow-lg group-hover:shadow-purple-500/25 transition-shadow"
+              />
                 </div>
                 <span className="font-bold text-white">VocaCore AI</span>
               </div>

@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Menu, X, Zap } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import { useAuthStore } from '../../store/auth';
 import { GlowingEffect } from '../ui/GlowingEffect';
+import VocaCoreAILogo from '../../assets/VocaCore-final-square.png';
 
 export function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -37,10 +38,11 @@ export function Navbar() {
           <div className="flex items-center justify-between">
             {/* Logo */}
             <Link to="/" className="flex items-center gap-2 group">
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center group-hover:shadow-lg group-hover:shadow-purple-500/25 transition-shadow">
-                <Zap size={14} className="sm:hidden text-white" />
-                <Zap size={16} className="hidden sm:block text-white" />
-              </div>
+              <img 
+                src={VocaCoreAILogo} 
+                alt="VocaCore AI" 
+                className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg object-contain group-hover:shadow-lg group-hover:shadow-purple-500/25 transition-shadow"
+              />
               <span className="text-base sm:text-lg font-semibold text-white">VocaCore AI</span>
             </Link>
 

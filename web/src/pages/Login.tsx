@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Zap, Mail, Lock, ArrowRight, Check } from 'lucide-react';
+import { Mail, Lock, ArrowRight, Check } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
 import { useToast } from '../hooks/useToast';
+import VocaCoreAILogo from '../assets/VocaCore-final-square.png';
 
 export function Login() {
   const [email, setEmail] = useState('');
@@ -76,9 +77,11 @@ export function Login() {
         <div className="relative z-10 flex flex-col justify-center px-16">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-3 mb-12">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/30">
-              <Zap size={24} className="text-white" />
-            </div>
+            <img 
+              src={VocaCoreAILogo} 
+              alt="VocaCore AI" 
+              className="w-12 h-12 rounded-xl shadow-lg shadow-purple-500/30 object-contain"
+            />
             <span className="text-2xl font-bold text-white">VocaCore AI</span>
           </Link>
 
@@ -94,7 +97,7 @@ export function Login() {
 
           {/* Features */}
           <div className="space-y-4">
-            {['Sub-500ms response time', '10+ languages supported', 'Enterprise-grade security'].map((feature) => (
+            {['Sub-800ms response time', '10+ Indian languages supported', 'Enterprise-grade security'].map((feature) => (
               <div key={feature} className="flex items-center gap-3">
                 <div className="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center">
                   <Check size={14} className="text-purple-400" />
@@ -115,9 +118,11 @@ export function Login() {
         >
           {/* Mobile Logo */}
           <Link to="/" className="flex lg:hidden items-center justify-center gap-2 mb-8">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-              <Zap size={20} className="text-white" />
-            </div>
+            <img 
+              src={VocaCoreAILogo} 
+              alt="VocaCore AI" 
+              className="w-10 h-10 rounded-xl object-contain"
+            />
             <span className="text-xl font-bold text-white">VocaCore AI</span>
           </Link>
 

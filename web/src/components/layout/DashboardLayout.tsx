@@ -1,13 +1,15 @@
 import { Link, useLocation, Outlet, Navigate, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Zap, LayoutDashboard, Phone, Settings, BarChart3, 
-  Bot, LogOut, ChevronLeft, Menu, Wrench
+  Bot, LogOut, ChevronLeft, Menu, Wrench, X
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '../../store/auth';
 import { useOrganizationStore } from '../../store/organization';
 import { cn } from '../../lib/utils';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import VocaCoreAILogo from '../../assets/VocaCore-final-square.png';
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Overview', href: '/dashboard' },
@@ -21,6 +23,7 @@ const navItems = [
 export function DashboardLayout() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const location = useLocation();
   const { user, isAuthenticated, logout } = useAuthStore();
   const { currentOrganization, isLoading: orgLoading } = useOrganizationStore();
@@ -39,52 +42,86 @@ export function DashboardLayout() {
     }
   }, [isAuthenticated, orgLoading, currentOrganization, navigate]);
 
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
+
+  // Prevent body scroll when mobile menu is open
+  useEffect(() => {
+    if (mobileOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [mobileOpen]);
+
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
-  return (
-    <div className="min-h-screen bg-[#0a0a0f] flex">
-      {/* Mobile overlay */}
-      {mobileOpen && (
-        <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
+  const sidebarWidth = collapsed ? 80 : 260;
 
-      {/* Sidebar */}
+  return (
+    <div className="min-h-screen bg-[#0a0a0f]">
+      {/* Mobile overlay */}
+      <AnimatePresence>
+        {mobileOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 lg:hidden"
+            onClick={() => setMobileOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Desktop Sidebar - Fixed */}
       <motion.aside
         initial={false}
-        animate={{ width: collapsed ? 80 : 260 }}
-        className={cn(
-          'fixed lg:relative h-screen bg-[#0d0d12]/95 backdrop-blur-xl border-r border-white/5 z-50 flex flex-col',
-          'transition-transform duration-300',
-          mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-        )}
+        animate={{ width: sidebarWidth }}
+        transition={{ duration: 0.2, ease: 'easeInOut' }}
+        className="hidden lg:flex fixed left-0 top-0 h-screen flex-col z-50 bg-gradient-to-b from-[#0d0d14] to-[#0a0a0f] border-r border-white/[0.06]"
       >
         {/* Logo */}
-        <div className="p-4 flex items-center justify-between border-b border-white/5">
-          <Link to="/dashboard" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/25 flex-shrink-0">
-              <Zap size={20} className="text-white" />
-            </div>
-            {!collapsed && (
-              <span className="text-xl font-bold whitespace-nowrap text-white">
-                VocaCore AI
-              </span>
-            )}
+        <div className="h-16 flex items-center justify-between px-4 border-b border-white/[0.06]">
+          <Link to="/dashboard" className="flex items-center gap-3 group">
+            {/* <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 via-purple-600 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/20 group-hover:shadow-purple-500/30 transition-shadow flex-shrink-0"> */}
+              <img 
+                src={VocaCoreAILogo} 
+                alt="VocaCore AI" 
+                className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg object-contain group-hover:shadow-lg group-hover:shadow-purple-500/25 transition-shadow"
+              />
+            {/* </div> */}
+            <AnimatePresence mode="wait">
+              {!collapsed && (
+                <motion.span
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  transition={{ duration: 0.15 }}
+                  className="text-lg font-bold whitespace-nowrap bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent"
+                >
+                  VocaCore AI
+                </motion.span>
+              )}
+            </AnimatePresence>
           </Link>
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="hidden lg:flex p-2 text-white/60 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+            className="p-2 text-white/40 hover:text-white/80 hover:bg-white/[0.06] rounded-lg transition-all duration-200"
           >
-            <ChevronLeft size={18} className={cn('transition-transform', collapsed && 'rotate-180')} />
+            <ChevronLeft size={18} className={cn('transition-transform duration-200', collapsed && 'rotate-180')} />
           </button>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 p-3 space-y-1">
+        {/* Navigation - Scrollable */}
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden py-4 px-3 space-y-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
           {navItems.map((item) => {
             const isActive = location.pathname === item.href || 
               (item.href !== '/dashboard' && location.pathname.startsWith(item.href));
@@ -92,62 +129,222 @@ export function DashboardLayout() {
               <Link
                 key={item.href}
                 to={item.href}
-                onClick={() => setMobileOpen(false)}
                 className={cn(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all',
+                  'group relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200',
                   isActive 
-                    ? 'bg-purple-500/10 text-purple-400 border border-purple-500/30' 
-                    : 'text-white/60 hover:text-white hover:bg-white/5'
+                    ? 'bg-purple-500/15 text-white' 
+                    : 'text-white/50 hover:text-white/90 hover:bg-white/[0.04]'
                 )}
               >
-                <item.icon size={20} className="flex-shrink-0" />
-                {!collapsed && <span className="font-medium">{item.label}</span>}
+                {/* Active indicator */}
+                {isActive && (
+                  <motion.div
+                    layoutId="activeTab"
+                    className="absolute left-0 top-0 bottom-0 w-1 my-auto h-[calc(100%-8px)] bg-gradient-to-b from-purple-400 to-purple-600 rounded-full"
+                    transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                  />
+                )}
+                <item.icon 
+                  size={20} 
+                  className={cn(
+                    'flex-shrink-0 transition-colors duration-200',
+                    isActive ? 'text-purple-400' : 'group-hover:text-white/80'
+                  )} 
+                />
+                <AnimatePresence mode="wait">
+                  {!collapsed && (
+                    <motion.span
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -10 }}
+                      transition={{ duration: 0.15 }}
+                      className={cn(
+                        'font-medium text-sm whitespace-nowrap',
+                        isActive && 'text-white'
+                      )}
+                    >
+                      {item.label}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
               </Link>
             );
           })}
         </nav>
 
-        {/* User */}
-        <div className="p-3 border-t border-white/5">
-          {!collapsed && (
-            <div className="px-3 py-2 mb-2">
-              <p className="text-sm font-medium text-white truncate">{user?.name}</p>
-              <p className="text-xs text-white/50 truncate">{user?.email}</p>
-            </div>
-          )}
+        {/* User section */}
+        <div className="p-3 border-t border-white/[0.06]">
+          <AnimatePresence mode="wait">
+            {!collapsed && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="px-3 py-2.5 mb-2 rounded-xl bg-white/[0.02]"
+              >
+                <p className="text-sm font-medium text-white/90 truncate">{user?.name}</p>
+                <p className="text-xs text-white/40 truncate">{user?.email}</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
           <button
-            onClick={logout}
-            className="flex items-center gap-3 px-3 py-2.5 w-full rounded-xl text-white/60 hover:text-red-400 hover:bg-red-500/10 transition-all"
+            onClick={() => setShowLogoutConfirm(true)}
+            className={cn(
+              'group flex items-center gap-3 px-3 py-2.5 w-full rounded-xl transition-all duration-200',
+              'text-white/50 hover:text-red-400 hover:bg-red-500/10'
+            )}
           >
-            <LogOut size={20} className="flex-shrink-0" />
-            {!collapsed && <span className="font-medium">Logout</span>}
+            <LogOut size={20} className="flex-shrink-0 group-hover:text-red-400 transition-colors" />
+            <AnimatePresence mode="wait">
+              {!collapsed && (
+                <motion.span
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  transition={{ duration: 0.15 }}
+                  className="font-medium text-sm"
+                >
+                  Logout
+                </motion.span>
+              )}
+            </AnimatePresence>
           </button>
         </div>
       </motion.aside>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col min-h-screen">
+      {/* Mobile Sidebar - Slide in */}
+      <AnimatePresence>
+        {mobileOpen && (
+          <motion.aside
+            initial={{ x: '-100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '-100%' }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            className="lg:hidden fixed left-0 top-0 h-full w-[280px] z-50 bg-gradient-to-b from-[#0d0d14] to-[#0a0a0f] border-r border-white/[0.06] flex flex-col"
+          >
+            {/* Mobile Header */}
+            <div className="h-16 flex items-center justify-between px-4 border-b border-white/[0.06]">
+              <Link to="/dashboard" className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 via-purple-600 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/20">
+                  <Zap size={20} className="text-white" />
+                </div>
+                <span className="text-lg font-bold bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent">
+                  VocaCore AI
+                </span>
+              </Link>
+              <button
+                onClick={() => setMobileOpen(false)}
+                className="p-2 text-white/40 hover:text-white/80 hover:bg-white/[0.06] rounded-lg transition-all"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Mobile Navigation */}
+            <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+              {navItems.map((item, index) => {
+                const isActive = location.pathname === item.href || 
+                  (item.href !== '/dashboard' && location.pathname.startsWith(item.href));
+                return (
+                  <motion.div
+                    key={item.href}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                  >
+                    <Link
+                      to={item.href}
+                      className={cn(
+                        'group relative flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200',
+                        isActive 
+                          ? 'bg-purple-500/15 text-white' 
+                          : 'text-white/50 hover:text-white/90 hover:bg-white/[0.04]'
+                      )}
+                    >
+                      {isActive && (
+                        <div className="absolute left-0 top-0 bottom-0 w-1 my-auto h-[calc(100%-8px)] bg-gradient-to-b from-purple-400 to-purple-600 rounded-full" />
+                      )}
+                      <item.icon 
+                        size={22} 
+                        className={cn(
+                          'flex-shrink-0',
+                          isActive ? 'text-purple-400' : ''
+                        )} 
+                      />
+                      <span className={cn('font-medium', isActive && 'text-white')}>
+                        {item.label}
+                      </span>
+                    </Link>
+                  </motion.div>
+                );
+              })}
+            </nav>
+
+            {/* Mobile User Section */}
+            <div className="p-3 border-t border-white/[0.06]">
+              <div className="px-4 py-3 mb-2 rounded-xl bg-white/[0.02]">
+                <p className="text-sm font-medium text-white/90 truncate">{user?.name}</p>
+                <p className="text-xs text-white/40 truncate">{user?.email}</p>
+              </div>
+              <button
+                onClick={() => setShowLogoutConfirm(true)}
+                className="group flex items-center gap-3 px-4 py-3 w-full rounded-xl text-white/50 hover:text-red-400 hover:bg-red-500/10 transition-all"
+              >
+                <LogOut size={22} className="flex-shrink-0 group-hover:text-red-400" />
+                <span className="font-medium">Logout</span>
+              </button>
+            </div>
+          </motion.aside>
+        )}
+      </AnimatePresence>
+
+      {/* Main Content Area */}
+      <div 
+        className="min-h-screen transition-all duration-200"
+        style={{ marginLeft: collapsed ? 80 : 260 }}
+      >
         {/* Mobile header */}
-        <header className="lg:hidden sticky top-0 z-30 bg-[#0d0d12]/90 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center gap-4">
+        <header className="lg:hidden sticky top-0 z-30 bg-[#0a0a0f]/95 backdrop-blur-xl border-b border-white/[0.06] px-4 h-14 flex items-center gap-4">
           <button
             onClick={() => setMobileOpen(true)}
-            className="p-2 text-white/60 hover:text-white"
+            className="p-2 -ml-2 text-white/60 hover:text-white hover:bg-white/[0.06] rounded-lg transition-all"
           >
-            <Menu size={24} />
+            <Menu size={22} />
           </button>
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-              <Zap size={14} className="text-white" />
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+              <Zap size={16} className="text-white" />
             </div>
             <span className="font-bold text-white">VocaCore AI</span>
           </div>
         </header>
 
-        {/* Page content */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-auto">
+        {/* Page content - Scrollable */}
+        <main className="p-4 sm:p-6 lg:p-8">
           <Outlet />
         </main>
       </div>
+
+      {/* Mobile margin compensation */}
+      <style>{`
+        @media (max-width: 1023px) {
+          .min-h-screen[style*="margin-left"] {
+            margin-left: 0 !important;
+          }
+        }
+      `}</style>
+
+      {/* Logout Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showLogoutConfirm}
+        onClose={() => setShowLogoutConfirm(false)}
+        onConfirm={logout}
+        title="Logout"
+        message="Are you sure you want to logout?"
+        confirmText="Logout"
+        cancelText="Cancel"
+        variant="danger"
+      />
     </div>
   );
 }

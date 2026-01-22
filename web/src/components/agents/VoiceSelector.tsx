@@ -1,7 +1,22 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, Loader, Volume2, Edit3 } from 'lucide-react';
+import { ChevronDown, Loader, Volume2, Edit3, Search, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+
+// Cache configuration
+const CACHE_KEY = 'cartesia_voices_cache';
+const CACHE_DURATION = 1000 * 60 * 60; // 1 hour
+
+// Sarvam TTS speakers (static list)
+const SARVAM_SPEAKERS: Voice[] = [
+  { id: 'anushka', name: 'Anushka', description: 'Female voice', language: 'hi-IN' },
+  { id: 'manisha', name: 'Manisha', description: 'Female voice', language: 'hi-IN' },
+  { id: 'vidya', name: 'Vidya', description: 'Female voice', language: 'hi-IN' },
+  { id: 'arya', name: 'Arya', description: 'Female voice', language: 'hi-IN' },
+  { id: 'abhilash', name: 'Abhilash', description: 'Male voice', language: 'hi-IN' },
+  { id: 'karun', name: 'Karun', description: 'Male voice', language: 'hi-IN' },
+  { id: 'hitesh', name: 'Hitesh', description: 'Male voice', language: 'hi-IN' },
+];
 
 interface Voice {
   id: string;
@@ -11,10 +26,40 @@ interface Voice {
   is_public?: boolean;
 }
 
+interface VoiceCache {
+  voices: Voice[];
+  timestamp: number;
+}
+
 interface VoiceSelectorProps {
   provider: string;
   selectedVoiceId: string;
   onVoiceChange: (voiceId: string) => void;
+}
+
+function getCachedVoices(): Voice[] | null {
+  try {
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (!cached) return null;
+    
+    const { voices, timestamp }: VoiceCache = JSON.parse(cached);
+    if (Date.now() - timestamp > CACHE_DURATION) {
+      localStorage.removeItem(CACHE_KEY);
+      return null;
+    }
+    return voices;
+  } catch {
+    return null;
+  }
+}
+
+function setCachedVoices(voices: Voice[]): void {
+  try {
+    const cache: VoiceCache = { voices, timestamp: Date.now() };
+    localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // Ignore storage errors
+  }
 }
 
 export function VoiceSelector({ provider, selectedVoiceId, onVoiceChange }: VoiceSelectorProps) {
@@ -24,16 +69,44 @@ export function VoiceSelector({ provider, selectedVoiceId, onVoiceChange }: Voic
   const [isOpen, setIsOpen] = useState(false);
   const [manualMode, setManualMode] = useState(false);
   const [manualVoiceId, setManualVoiceId] = useState(selectedVoiceId);
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (provider === 'cartesia' && !manualMode) {
-      fetchCartesiaVoices();
+    if (manualMode) return;
+    
+    if (provider === 'sarvam') {
+      // Load Sarvam speakers (static list)
+      setVoices(SARVAM_SPEAKERS);
+      setIsLoading(false);
+      setError(null);
+    } else if (provider === 'cartesia') {
+      // Try to load from cache first
+      const cached = getCachedVoices();
+      if (cached && cached.length > 0) {
+        setVoices(cached);
+      } else {
+        fetchCartesiaVoices();
+      }
+    } else {
+      // Other providers - clear voices
+      setVoices([]);
     }
   }, [provider, manualMode]);
 
   useEffect(() => {
     setManualVoiceId(selectedVoiceId);
   }, [selectedVoiceId]);
+
+  // Focus search input when dropdown opens
+  useEffect(() => {
+    if (isOpen && searchInputRef.current) {
+      setTimeout(() => searchInputRef.current?.focus(), 100);
+    }
+    if (!isOpen) {
+      setSearchQuery('');
+    }
+  }, [isOpen]);
 
   const fetchCartesiaVoices = async () => {
     setIsLoading(true);
@@ -59,7 +132,9 @@ export function VoiceSelector({ provider, selectedVoiceId, onVoiceChange }: Voic
       }
 
       const data = await response.json();
-      setVoices(data.voices || []);
+      const fetchedVoices = data.voices || [];
+      setVoices(fetchedVoices);
+      setCachedVoices(fetchedVoices);
     } catch (err) {
       console.error('Failed to fetch Cartesia voices:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch voices');
@@ -71,6 +146,17 @@ export function VoiceSelector({ provider, selectedVoiceId, onVoiceChange }: Voic
 
   const selectedVoice = voices.find(v => v.id === selectedVoiceId);
 
+  // Filter voices based on search query
+  const filteredVoices = useMemo(() => {
+    if (!searchQuery.trim()) return voices;
+    const query = searchQuery.toLowerCase();
+    return voices.filter(voice => 
+      voice.name.toLowerCase().includes(query) ||
+      voice.description?.toLowerCase().includes(query) ||
+      voice.language?.toLowerCase().includes(query)
+    );
+  }, [voices, searchQuery]);
+
   const handleManualSubmit = () => {
     if (manualVoiceId.trim()) {
       onVoiceChange(manualVoiceId.trim());
@@ -78,13 +164,15 @@ export function VoiceSelector({ provider, selectedVoiceId, onVoiceChange }: Voic
     }
   };
 
-  // For non-Cartesia providers or when manual mode is enabled
-  if (provider !== 'cartesia' || manualMode) {
+  // For providers without dropdown support or when manual mode is enabled
+  const hasDropdownSupport = provider === 'cartesia' || provider === 'sarvam';
+  
+  if (!hasDropdownSupport || manualMode) {
     return (
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <label className="block text-sm text-white/60">Voice ID</label>
-          {provider === 'cartesia' && (
+          {hasDropdownSupport && (
             <button
               type="button"
               onClick={() => setManualMode(false)}
@@ -113,15 +201,15 @@ export function VoiceSelector({ provider, selectedVoiceId, onVoiceChange }: Voic
           )}
         </div>
         <p className="text-xs text-white/40">
-          {provider === 'cartesia' 
-            ? 'Enter a Cartesia voice ID manually'
+          {hasDropdownSupport
+            ? `Enter a ${provider === 'cartesia' ? 'Cartesia voice ID' : 'Sarvam speaker name'} manually`
             : 'Enter the voice ID for your TTS provider'}
         </p>
       </div>
     );
   }
 
-  // Cartesia voice selector with dropdown
+  // Voice selector with dropdown (Cartesia or Sarvam)
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -182,14 +270,40 @@ export function VoiceSelector({ provider, selectedVoiceId, onVoiceChange }: Voic
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="absolute z-10 w-full mt-2 bg-[#0A0A0A] border border-white/10 rounded-xl shadow-2xl max-h-64 overflow-y-auto"
+                className="absolute z-10 w-full mt-2 bg-[#0A0A0A] border border-white/10 rounded-xl shadow-2xl overflow-hidden"
               >
-                {voices.length === 0 ? (
+                {/* Search Input */}
+                <div className="p-2 border-b border-white/10 sticky top-0 bg-[#0A0A0A]">
+                  <div className="relative">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
+                    <input
+                      ref={searchInputRef}
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search voices..."
+                      className="w-full pl-9 pr-8 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-white/40 focus:outline-none focus:border-purple-500/50"
+                    />
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchQuery('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/60"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Voice List */}
+                <div className="max-h-64 overflow-y-auto">
+                {filteredVoices.length === 0 ? (
                   <div className="p-4 text-center text-white/50 text-sm">
-                    No voices available
+                    {searchQuery ? 'No voices match your search' : 'No voices available'}
                   </div>
                 ) : (
-                  voices.map((voice) => (
+                  filteredVoices.map((voice) => (
                     <button
                       key={voice.id}
                       type="button"
@@ -229,6 +343,7 @@ export function VoiceSelector({ provider, selectedVoiceId, onVoiceChange }: Voic
                     </button>
                   ))
                 )}
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
