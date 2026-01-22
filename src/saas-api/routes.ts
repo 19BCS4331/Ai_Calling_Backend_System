@@ -897,6 +897,111 @@ export function createSaaSRouter(): Router {
   );
 
   // ===========================================
+  // TOOLS ROUTES
+  // ===========================================
+
+  /**
+   * POST /orgs/:orgId/tools/validate
+   * Validate a tool configuration (MCP server connection, API endpoint, etc.)
+   */
+  router.post(
+    '/orgs/:orgId/tools/validate',
+    authMiddleware,
+    orgContextMiddleware('orgId'),
+    asyncHandler(async (req, res) => {
+      const { tool_type, mcp_server_url, function_server_url, mcp_auth_config } = req.body;
+
+      if (!tool_type) {
+        throw SaaSError.validation('tool_type is required');
+      }
+
+      try {
+        if (tool_type === 'mcp' && mcp_server_url) {
+          // Validate MCP server connection
+          const headers: Record<string, string> = {};
+          
+          // Add auth header if provided
+          if (mcp_auth_config?.token) {
+            headers['Authorization'] = `Bearer ${mcp_auth_config.token}`;
+          } else if (mcp_auth_config?.key) {
+            headers['Authorization'] = `Bearer ${mcp_auth_config.key}`;
+          }
+
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+          try {
+            const response = await fetch(mcp_server_url, {
+              method: 'GET',
+              headers,
+              signal: controller.signal
+            });
+
+            clearTimeout(timeoutId);
+
+            // MCP servers might return various status codes
+            // Accept anything except 5xx errors
+            if (response.status >= 500) {
+              throw new Error(`MCP server error: ${response.status}`);
+            }
+
+            res.json({ 
+              valid: true, 
+              status: response.status,
+              message: 'MCP server is reachable'
+            });
+          } catch (err: any) {
+            clearTimeout(timeoutId);
+            
+            if (err.name === 'AbortError') {
+              throw new Error('Connection timeout - server took too long to respond');
+            }
+            throw err;
+          }
+        } else if (tool_type === 'api_request' && function_server_url) {
+          // Validate API endpoint with HEAD request
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+          try {
+            const response = await fetch(function_server_url, {
+              method: 'HEAD',
+              signal: controller.signal
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok && response.status !== 405) {
+              throw new Error(`Server returned ${response.status}`);
+            }
+
+            res.json({ 
+              valid: true, 
+              status: response.status,
+              message: 'API endpoint is reachable'
+            });
+          } catch (err: any) {
+            clearTimeout(timeoutId);
+            
+            if (err.name === 'AbortError') {
+              throw new Error('Connection timeout - server took too long to respond');
+            }
+            throw err;
+          }
+        } else {
+          throw SaaSError.validation('Invalid tool configuration for validation');
+        }
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Validation failed';
+        res.json({ 
+          valid: false, 
+          error: errorMessage 
+        });
+      }
+    })
+  );
+
+  // ===========================================
   // Error Handler
   // ===========================================
 

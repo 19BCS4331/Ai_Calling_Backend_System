@@ -207,6 +207,10 @@ export function useTools(typeFilter?: ToolType, statusFilter?: ToolStatus) {
   };
 
   const validateTool = async (id: string): Promise<{ valid: boolean; error?: string }> => {
+    if (!currentOrganization) {
+      throw new Error('No organization selected');
+    }
+
     // Get the tool
     const { data: tool, error: fetchError } = await supabase
       .from('tools')
@@ -217,43 +221,57 @@ export function useTools(typeFilter?: ToolType, statusFilter?: ToolStatus) {
     if (fetchError) throw fetchError;
 
     try {
-      // Validate based on tool type
-      if (tool.type === 'function' && tool.function_server_url) {
-        // Try a HEAD request to check if server is reachable
-        const response = await fetch(tool.function_server_url, {
-          method: 'HEAD',
-          signal: AbortSignal.timeout(5000)
-        });
+      // Call SaaS API validation endpoint (server-side validation, no CORS issues)
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
 
-        if (!response.ok) {
-          throw new Error(`Server returned ${response.status}`);
-        }
-      } else if (tool.type === 'mcp' && tool.mcp_server_url) {
-        // For MCP, just check if URL is reachable
-        const response = await fetch(tool.mcp_server_url, {
-          method: 'GET',
-          signal: AbortSignal.timeout(5000)
-        });
+      const response = await fetch(`${import.meta.env.VITE_SAAS_API_URL || 'http://localhost:3001'}/api/v1/orgs/${currentOrganization.id}/tools/validate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          tool_type: tool.type,
+          mcp_server_url: tool.mcp_server_url,
+          function_server_url: tool.function_server_url,
+          mcp_auth_config: tool.mcp_auth_config
+        })
+      });
 
-        // MCP servers might return various status codes, just check connection
-        if (response.status >= 500) {
-          throw new Error(`Server error: ${response.status}`);
-        }
+      if (!response.ok) {
+        throw new Error(`Validation request failed: ${response.status}`);
       }
 
-      // Update validation status
-      await supabase
-        .from('tools')
-        .update({
-          last_validated_at: new Date().toISOString(),
-          validation_error: null,
-          status: 'active'
-        })
-        .eq('id', id);
+      const result = await response.json();
 
-      await fetchTools();
-      return { valid: true };
+      if (result.valid) {
+        // Update validation status
+        await supabase
+          .from('tools')
+          .update({
+            last_validated_at: new Date().toISOString(),
+            validation_error: null,
+            status: 'active'
+          })
+          .eq('id', id);
 
+        await fetchTools();
+        return { valid: true };
+      } else {
+        // Update validation status with error
+        await supabase
+          .from('tools')
+          .update({
+            last_validated_at: new Date().toISOString(),
+            validation_error: result.error,
+            status: 'error'
+          })
+          .eq('id', id);
+
+        await fetchTools();
+        return { valid: false, error: result.error };
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Validation failed';
 
