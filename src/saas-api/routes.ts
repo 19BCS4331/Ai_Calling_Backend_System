@@ -1198,26 +1198,22 @@ export function createSaaSRouter(): Router {
         );
       }
 
-      const cartesiaData = await cartesiaResponse.json() as {
-        data?: Array<{
-          id: string;
-          name: string;
-          description?: string;
-          language?: string;
-          is_public?: boolean;
-          is_owner?: boolean;
-          created_at?: string;
-        }>;
-        has_more?: boolean;
-        next_page?: string;
-      };
+      const cartesiaData = await cartesiaResponse.json();
       
-      console.log('Cartesia API response:', JSON.stringify(cartesiaData, null, 2));
-      console.log('Number of voices:', cartesiaData.data?.length || 0);
+      // Cartesia API returns voices as a direct array, not wrapped in a data property
+      const voices = Array.isArray(cartesiaData) ? cartesiaData : [];
+      
+      console.log('Number of voices received:', voices.length);
       
       res.json({
-        voices: cartesiaData.data || [],
-        has_more: cartesiaData.has_more || false,
+        voices: voices.map((voice: any) => ({
+          id: voice.id,
+          name: voice.name,
+          description: voice.description,
+          language: voice.language,
+          is_public: voice.is_public,
+        })),
+        has_more: false,
       });
     })
   );
