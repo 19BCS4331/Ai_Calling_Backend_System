@@ -962,6 +962,7 @@ export function createSaaSRouter(): Router {
     orgContextMiddleware('orgId'),
     asyncHandler(async (req, res) => {
       const { toolId } = req.params;
+      const { agentId } = req.body;
 
       // Get the tool details
       const { data: tool, error: toolError } = await supabaseAdmin
@@ -979,41 +980,28 @@ export function createSaaSRouter(): Router {
         throw SaaSError.validation('Only MCP tools support function discovery');
       }
 
-      if (!tool.mcp_server_url) {
-        throw SaaSError.validation('MCP server URL is required');
+      // Get existing configurations for this tool and agent
+      const { data: configs, error: configError } = await supabaseAdmin
+        .from('agent_tool_configs')
+        .select('*')
+        .eq('tool_id', toolId)
+        .eq('agent_id', agentId)
+        .order('display_order');
+
+      if (configError) {
+        throw configError;
       }
 
-      // Make request to MCP server to discover tools
-      const headers: Record<string, string> = {
-        'Accept': 'application/json, text/event-stream'
-      };
-
-      if (tool.mcp_auth_config?.token) {
-        headers['Authorization'] = `Bearer ${tool.mcp_auth_config.token}`;
-      } else if (tool.mcp_auth_config?.key) {
-        headers['Authorization'] = `Bearer ${tool.mcp_auth_config.key}`;
-      }
-
-      try {
-        // For now, return a placeholder response
-        // In production, you'd connect to the MCP server and list tools
-        // This would require implementing the MCP client in the SaaS API
-        res.json({
-          functions: [
-            // Placeholder - in production, fetch from MCP server
-            // { name: 'function_name', description: 'Function description' }
-          ],
-          message: 'MCP function discovery requires MCP client integration in SaaS API'
-        });
-      } catch (error) {
-        throw SaaSError.validation('Failed to discover MCP functions');
-      }
+      // Return configurations with function details
+      res.json({
+        functions: configs || []
+      });
     })
   );
 
   /**
    * POST /orgs/:orgId/tools/validate
-   * Validate a tool configuration (MCP server connection, API endpoint, etc.)
+   * Validate a tool configuration
    */
   router.post(
     '/orgs/:orgId/tools/validate',

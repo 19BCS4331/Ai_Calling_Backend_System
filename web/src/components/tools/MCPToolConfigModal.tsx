@@ -43,23 +43,40 @@ export function MCPToolConfigModal({
     setError(null);
     
     try {
-      // For now, we'll use mock data since MCP discovery needs to be implemented
-      // In production, this would call the discover-functions endpoint
-      const mockFunctions: MCPFunction[] = [
-        { name: 'set_email_by_customer2', description: 'Update customer email address', enabled: true },
-        { name: 'create_customer2', description: 'Create a new customer', enabled: true },
-        { name: 'get_customer_data2', description: 'Fetch customer by phone number', enabled: true },
-        { name: 'generate_payment_link2', description: 'Generate payment link', enabled: true },
-        { name: 'create_loan2', description: 'Create a new loan', enabled: true },
-        { name: 'find_loans_by_customer2', description: 'Find all loans for a customer', enabled: true },
-        { name: 'find_payments_by_loan2', description: 'Find payments for a loan', enabled: true },
-        { name: 'create_payment2', description: 'Create a payment record', enabled: true },
-        { name: 'send_payment_link_mail2', description: 'Send payment link via email', enabled: true },
-        { name: 'company_documents_tool1', description: 'Access company documents', enabled: true }
-      ];
+      // Load existing configurations from backend
+      const { data: { session } } = await import('../../lib/supabase').then(m => m.supabase.auth.getSession());
+      if (!session) {
+        throw new Error('Not authenticated');
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SAAS_API_URL || 'http://localhost:3001'}/api/v1/orgs/${(await import('../../store/organization').then(m => m.useOrganizationStore.getState())).currentOrganization?.id}/tools/${toolId}/discover-functions`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`
+          },
+          body: JSON.stringify({ agentId: _agentId })
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to load functions');
+      }
+
+      const data = await response.json();
+      const loadedFunctions: MCPFunction[] = data.functions.map((fn: any) => ({
+        name: fn.mcp_function_name || fn.name,
+        description: fn.description,
+        enabled: fn.enabled !== undefined ? fn.enabled : true,
+        customName: fn.custom_name || undefined,
+        customDescription: fn.custom_description || undefined
+      }));
       
-      setFunctions(mockFunctions);
+      setFunctions(loadedFunctions);
     } catch (err) {
+      console.error('Failed to load functions:', err);
       setError(err instanceof Error ? err.message : 'Failed to load functions');
     } finally {
       setIsLoading(false);
