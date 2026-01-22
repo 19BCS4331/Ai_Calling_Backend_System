@@ -1172,14 +1172,17 @@ export function createSaaSRouter(): Router {
         .eq('provider_slug', 'cartesia')
         .single();
 
-      if (!credentials?.credentials?.api_key) {
-        throw SaaSError.validation('Cartesia API key not configured for your organization');
+      // Use organization's API key if available, otherwise fall back to environment variable
+      const apiKey = credentials?.credentials?.api_key || process.env.CARTESIA_API_KEY;
+
+      if (!apiKey) {
+        throw SaaSError.validation('Cartesia API key not configured. Please add CARTESIA_API_KEY to environment variables or configure it in your organization settings.');
       }
 
       // Fetch voices from Cartesia API
       const cartesiaResponse = await fetch('https://api.cartesia.ai/voices', {
         headers: {
-          'Authorization': `Bearer ${credentials.credentials.api_key}`,
+          'Authorization': `Bearer ${apiKey}`,
           'Cartesia-Version': '2024-06-10',
         },
       });
