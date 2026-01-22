@@ -37,7 +37,7 @@ export function Tools() {
 
   const getTypeIcon = (type: ToolType) => {
     switch (type) {
-      case 'function':
+      case 'api_request':
         return <Code size={16} className="text-blue-400" />;
       case 'mcp':
         return <Server size={16} className="text-purple-400" />;
@@ -50,8 +50,8 @@ export function Tools() {
 
   const getTypeLabel = (type: ToolType) => {
     switch (type) {
-      case 'function':
-        return 'Function';
+      case 'api_request':
+        return 'API Request';
       case 'mcp':
         return 'MCP Server';
       case 'builtin':
@@ -63,7 +63,7 @@ export function Tools() {
 
   const getTypeColor = (type: ToolType) => {
     switch (type) {
-      case 'function':
+      case 'api_request':
         return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
       case 'mcp':
         return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
@@ -135,7 +135,7 @@ export function Tools() {
   };
 
   const getToolUrl = (tool: Tool) => {
-    if (tool.type === 'function') return tool.function_server_url;
+    if (tool.type === 'api_request') return tool.function_server_url;
     if (tool.type === 'mcp') return tool.mcp_server_url;
     return null;
   };
@@ -180,7 +180,7 @@ export function Tools() {
             className="pl-11 pr-8 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50 appearance-none cursor-pointer min-w-[160px]"
           >
             <option value="">All Types</option>
-            <option value="function">Function</option>
+            <option value="api_request">API Request</option>
             <option value="mcp">MCP Server</option>
             <option value="builtin">Built-in</option>
           </select>
@@ -266,7 +266,7 @@ export function Tools() {
                         <Edit size={14} />
                         Edit
                       </button>
-                      {(tool.type === 'function' || tool.type === 'mcp') && (
+                      {(tool.type === 'api_request' || tool.type === 'mcp') && (
                         <button
                           onClick={() => {
                             handleValidate(tool.id);
