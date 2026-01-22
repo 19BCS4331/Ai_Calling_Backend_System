@@ -86,8 +86,11 @@ export class MCPClient extends EventEmitter {
     try {
       const url = new URL(this.config.url);
       
-      // Create headers if API key is provided
-      const headers: Record<string, string> = {};
+      // Create headers with required Accept headers for MCP/SSE
+      const headers: Record<string, string> = {
+        'Accept': 'application/json, text/event-stream'
+      };
+      
       if (this.config.apiKey) {
         headers['Authorization'] = `Bearer ${this.config.apiKey}`;
       }
