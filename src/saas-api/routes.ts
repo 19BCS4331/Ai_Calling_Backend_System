@@ -15,6 +15,9 @@
 
 import { Router, Request, Response, NextFunction } from 'express';
 import {
+  // Database
+  supabaseAdmin,
+  
   // Auth
   authMiddleware,
   optionalAuthMiddleware,
@@ -899,6 +902,114 @@ export function createSaaSRouter(): Router {
   // ===========================================
   // TOOLS ROUTES
   // ===========================================
+
+  /**
+   * GET /orgs/:orgId/agents/:agentId/tool-configs
+   * Get all tool configurations for an agent
+   */
+  router.get(
+    '/orgs/:orgId/agents/:agentId/tool-configs',
+    authMiddleware,
+    orgContextMiddleware('orgId'),
+    asyncHandler(async (req, res) => {
+      const { agentId } = req.params;
+
+      const { data, error } = await supabaseAdmin.rpc('get_agent_tools_with_configs', {
+        p_agent_id: agentId
+      });
+
+      if (error) throw error;
+
+      res.json({ tools: data || [] });
+    })
+  );
+
+  /**
+   * POST /orgs/:orgId/agents/:agentId/tool-configs
+   * Update tool configurations for an agent (bulk update)
+   */
+  router.post(
+    '/orgs/:orgId/agents/:agentId/tool-configs',
+    authMiddleware,
+    orgContextMiddleware('orgId'),
+    asyncHandler(async (req, res) => {
+      const { agentId } = req.params;
+      const { configs } = req.body;
+
+      if (!Array.isArray(configs)) {
+        throw SaaSError.validation('configs must be an array');
+      }
+
+      const { error } = await supabaseAdmin.rpc('update_agent_tool_configs', {
+        p_agent_id: agentId,
+        p_organization_id: req.org!.organization.id,
+        p_configs: configs
+      });
+
+      if (error) throw error;
+
+      res.json({ success: true });
+    })
+  );
+
+  /**
+   * POST /orgs/:orgId/tools/:toolId/discover-functions
+   * Discover available functions from an MCP tool
+   */
+  router.post(
+    '/orgs/:orgId/tools/:toolId/discover-functions',
+    authMiddleware,
+    orgContextMiddleware('orgId'),
+    asyncHandler(async (req, res) => {
+      const { toolId } = req.params;
+
+      // Get the tool details
+      const { data: tool, error: toolError } = await supabaseAdmin
+        .from('tools')
+        .select('*')
+        .eq('id', toolId)
+        .eq('organization_id', req.org!.organization.id)
+        .single();
+
+      if (toolError || !tool) {
+        throw SaaSError.notFound('Tool not found');
+      }
+
+      if (tool.type !== 'mcp') {
+        throw SaaSError.validation('Only MCP tools support function discovery');
+      }
+
+      if (!tool.mcp_server_url) {
+        throw SaaSError.validation('MCP server URL is required');
+      }
+
+      // Make request to MCP server to discover tools
+      const headers: Record<string, string> = {
+        'Accept': 'application/json, text/event-stream'
+      };
+
+      if (tool.mcp_auth_config?.token) {
+        headers['Authorization'] = `Bearer ${tool.mcp_auth_config.token}`;
+      } else if (tool.mcp_auth_config?.key) {
+        headers['Authorization'] = `Bearer ${tool.mcp_auth_config.key}`;
+      }
+
+      try {
+        // For now, return a placeholder response
+        // In production, you'd connect to the MCP server and list tools
+        // This would require implementing the MCP client in the SaaS API
+        res.json({
+          functions: [
+            // Placeholder - in production, fetch from MCP server
+            // { name: 'function_name', description: 'Function description' }
+          ],
+          message: 'MCP function discovery requires MCP client integration in SaaS API'
+        });
+      } catch (error) {
+        throw SaaSError.validation('Failed to discover MCP functions');
+      }
+    })
+  );
 
   /**
    * POST /orgs/:orgId/tools/validate

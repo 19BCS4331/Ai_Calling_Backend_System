@@ -197,7 +197,8 @@ export class MCPClient extends EventEmitter {
    * Register a discovered MCP tool in the tool registry
    */
   private async registerToolFromMCP(mcpTool: MCPToolInfo): Promise<void> {
-    const toolName = `mcp_${this.config.name}_${mcpTool.name}`;
+    // Use original tool name to match prompt references and avoid truncation
+    const toolName = mcpTool.name;
     
     const registeredTool: RegisteredTool = {
       definition: {
@@ -220,7 +221,7 @@ export class MCPClient extends EventEmitter {
     };
 
     this.toolRegistry.register(registeredTool);
-    this.logger.info('Registered MCP tool', { name: toolName, original: mcpTool.name });
+    this.logger.info('Registered MCP tool', { name: toolName, server: this.config.name });
   }
 
   /**

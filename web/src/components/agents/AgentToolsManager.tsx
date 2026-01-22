@@ -15,6 +15,8 @@ import {
   Settings
 } from 'lucide-react';
 import { useTools, useAgentTools } from '../../hooks/useTools';
+import { MCPToolConfigModal } from '../tools/MCPToolConfigModal';
+import { useOrganizationStore } from '../../store/organization';
 import type { Tool, AgentToolWithDetails, ToolType } from '../../lib/supabase-types';
 
 interface AgentToolsManagerProps {
@@ -22,6 +24,7 @@ interface AgentToolsManagerProps {
 }
 
 export function AgentToolsManager({ agentId }: AgentToolsManagerProps) {
+  const { currentOrganization } = useOrganizationStore();
   const { tools: availableTools, isLoading: toolsLoading } = useTools();
   const { 
     agentTools, 
@@ -35,6 +38,7 @@ export function AgentToolsManager({ agentId }: AgentToolsManagerProps) {
   const [expandedTool, setExpandedTool] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [isRemoving, setIsRemoving] = useState<string | null>(null);
+  const [configuringTool, setConfiguringTool] = useState<AgentToolWithDetails | null>(null);
 
   // Filter out tools that are already added
   const unassignedTools = availableTools.filter(
@@ -105,6 +109,34 @@ export function AgentToolsManager({ agentId }: AgentToolsManagerProps) {
       await toggleToolEnabled(agentTool.id, !agentTool.is_enabled);
     } catch (error) {
       console.error('Failed to toggle tool:', error);
+    }
+  };
+
+  const handleSaveToolConfig = async (configs: any[]) => {
+    if (!configuringTool || !currentOrganization) return;
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SAAS_API_URL || 'http://localhost:3001'}/api/v1/orgs/${currentOrganization.id}/agents/${agentId}/tool-configs`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${(await import('../../lib/supabase').then(m => m.supabase.auth.getSession())).data.session?.access_token}`
+          },
+          body: JSON.stringify({ configs })
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to save tool configuration');
+      }
+
+      // Refresh agent tools
+      window.location.reload();
+    } catch (error) {
+      console.error('Failed to save tool config:', error);
+      throw error;
     }
   };
 
@@ -196,6 +228,18 @@ export function AgentToolsManager({ agentId }: AgentToolsManagerProps) {
         )}
       </AnimatePresence>
 
+      {/* MCP Tool Configuration Modal */}
+      {configuringTool && (
+        <MCPToolConfigModal
+          isOpen={true}
+          onClose={() => setConfiguringTool(null)}
+          toolId={configuringTool.tool_id}
+          toolName={configuringTool.tool.name}
+          agentId={agentId}
+          onSave={handleSaveToolConfig}
+        />
+      )}
+
       {/* Assigned Tools List */}
       {agentTools.length === 0 ? (
         <div className="bg-white/5 border border-white/10 rounded-xl p-8 text-center">
@@ -252,6 +296,18 @@ export function AgentToolsManager({ agentId }: AgentToolsManagerProps) {
 
                 {/* Actions */}
                 <div className="flex items-center gap-2">
+                  {/* Configure MCP Tool */}
+                  {agentTool.tool.type === 'mcp' && (
+                    <button
+                      type="button"
+                      onClick={() => setConfiguringTool(agentTool)}
+                      className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-purple-400 hover:text-purple-300"
+                      title="Configure MCP functions"
+                    >
+                      <Settings size={18} />
+                    </button>
+                  )}
+
                   {/* Toggle Enabled */}
                   <button
                     type="button"
