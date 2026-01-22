@@ -135,6 +135,7 @@ export function MCPToolConfigModal({
                 </p>
               </div>
               <button
+                type="button"
                 onClick={onClose}
                 className="text-white/60 hover:text-white transition-colors"
               >
@@ -167,6 +168,7 @@ export function MCPToolConfigModal({
                     <div className="flex items-start gap-3">
                       {/* Enable/Disable Toggle */}
                       <button
+                        type="button"
                         onClick={() => toggleFunction(index)}
                         className="mt-1 flex-shrink-0"
                       >
@@ -228,12 +230,14 @@ export function MCPToolConfigModal({
           {/* Footer */}
           <div className="p-6 border-t border-white/10 flex items-center justify-between">
             <button
+              type="button"
               onClick={onClose}
               className="px-4 py-2 text-sm text-white/60 hover:text-white transition-colors"
             >
               Cancel
             </button>
             <button
+              type="button"
               onClick={handleSave}
               disabled={isSaving || isLoading}
               className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
