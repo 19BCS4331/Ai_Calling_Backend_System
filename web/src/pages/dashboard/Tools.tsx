@@ -7,7 +7,6 @@ import {
   Search, 
   Filter, 
   Server, 
-  Code, 
   Zap,
   MoreVertical,
   Edit,
@@ -16,7 +15,8 @@ import {
   XCircle,
   AlertCircle,
   ExternalLink,
-  RefreshCw
+  RefreshCw,
+  Globe2
 } from 'lucide-react';
 import { useTools } from '../../hooks/useTools';
 import type { Tool, ToolType, ToolStatus } from '../../lib/supabase-types';
@@ -38,7 +38,7 @@ export function Tools() {
   const getTypeIcon = (type: ToolType) => {
     switch (type) {
       case 'api_request':
-        return <Code size={16} className="text-blue-400" />;
+        return <Globe2 size={16} className="text-blue-400" />;
       case 'mcp':
         return <Server size={16} className="text-purple-400" />;
       case 'builtin':
