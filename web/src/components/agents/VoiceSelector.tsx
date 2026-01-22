@@ -40,7 +40,7 @@ export function VoiceSelector({ provider, selectedVoiceId, onVoiceChange }: Voic
 
     try {
       const apiUrl = import.meta.env.VITE_SAAS_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiUrl}/providers/cartesia/voices`, {
+      const response = await fetch(`${apiUrl}/api/v1/providers/cartesia/voices`, {
         credentials: 'include',
       });
 
