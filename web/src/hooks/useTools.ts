@@ -235,7 +235,9 @@ export function useTools(typeFilter?: ToolType, statusFilter?: ToolStatus) {
           tool_type: tool.type,
           mcp_server_url: tool.mcp_server_url,
           function_server_url: tool.function_server_url,
-          mcp_auth_config: tool.mcp_auth_config
+          mcp_auth_config: tool.mcp_auth_config,
+          function_auth_config: tool.function_auth_config,
+          function_headers: tool.function_headers
         })
       });
 
