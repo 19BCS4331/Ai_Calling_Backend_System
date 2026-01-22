@@ -1180,7 +1180,8 @@ export function createSaaSRouter(): Router {
       }
 
       // Fetch voices from Cartesia API
-      const cartesiaResponse = await fetch('https://api.cartesia.ai/voices', {
+      // Include limit parameter to get more voices, and filter for public voices if available
+      const cartesiaResponse = await fetch('https://api.cartesia.ai/voices?limit=100', {
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Cartesia-Version': '2024-06-10',
@@ -1210,6 +1211,9 @@ export function createSaaSRouter(): Router {
         has_more?: boolean;
         next_page?: string;
       };
+      
+      console.log('Cartesia API response:', JSON.stringify(cartesiaData, null, 2));
+      console.log('Number of voices:', cartesiaData.data?.length || 0);
       
       res.json({
         voices: cartesiaData.data || [],
