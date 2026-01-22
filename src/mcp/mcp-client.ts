@@ -32,6 +32,12 @@ export interface MCPClientConfig {
   timeout?: number;
   reconnect?: boolean;
   reconnectInterval?: number;
+  // Tool configurations for filtering and renaming
+  toolConfigs?: Array<{
+    mcp_function_name: string;
+    enabled: boolean;
+    custom_name?: string;
+  }>;
 }
 
 interface MCPToolInfo {
@@ -197,8 +203,22 @@ export class MCPClient extends EventEmitter {
    * Register a discovered MCP tool in the tool registry
    */
   private async registerToolFromMCP(mcpTool: MCPToolInfo): Promise<void> {
-    // Use original tool name to match prompt references and avoid truncation
-    const toolName = mcpTool.name;
+    // Check if this tool has a configuration
+    const toolConfig = this.config.toolConfigs?.find(
+      c => c.mcp_function_name === mcpTool.name
+    );
+
+    // Skip if disabled in configuration
+    if (toolConfig && !toolConfig.enabled) {
+      this.logger.info('Skipping disabled MCP tool', { 
+        name: mcpTool.name, 
+        server: this.config.name 
+      });
+      return;
+    }
+
+    // Use custom name if configured, otherwise use original name
+    const toolName = toolConfig?.custom_name || mcpTool.name;
     
     const registeredTool: RegisteredTool = {
       definition: {
@@ -216,12 +236,18 @@ export class MCPClient extends EventEmitter {
       metadata: {
         source: 'mcp',
         server: this.config.name,
-        originalName: mcpTool.name
+        originalName: mcpTool.name,
+        customName: toolConfig?.custom_name
       }
     };
 
     this.toolRegistry.register(registeredTool);
-    this.logger.info('Registered MCP tool', { name: toolName, server: this.config.name });
+    this.logger.info('Registered MCP tool', { 
+      name: toolName, 
+      originalName: mcpTool.name,
+      server: this.config.name,
+      customized: !!toolConfig?.custom_name
+    });
   }
 
   /**

@@ -617,6 +617,8 @@ export class APIServer {
 
     // Retrieve agent tools if agentId is provided
     let agentTools: any[] = [];
+    // Load agent tools and their configurations
+    let toolConfigs: any[] = [];
     if (agentId) {
       try {
         const supabaseUrl = process.env.SUPABASE_URL;
@@ -626,6 +628,7 @@ export class APIServer {
           const { createClient } = await import('@supabase/supabase-js');
           const supabase = createClient(supabaseUrl, supabaseKey);
           
+          // Get agent tools
           const { data, error } = await supabase.rpc('get_agent_tools', { 
             p_agent_id: agentId 
           });
@@ -635,6 +638,19 @@ export class APIServer {
             this.logger.info('Retrieved agent tools', { 
               agentId, 
               toolCount: agentTools.length 
+            });
+          }
+
+          // Get tool configurations (for MCP function filtering and renaming)
+          const { data: configs, error: configError } = await supabase.rpc('get_agent_tools_with_configs', {
+            p_agent_id: agentId
+          });
+
+          if (!configError && configs) {
+            toolConfigs = configs;
+            this.logger.info('Retrieved tool configurations', {
+              agentId,
+              configCount: toolConfigs.length
             });
           }
         }
@@ -854,12 +870,29 @@ export class APIServer {
       const toolConfig = tool.tool_config || {};
       const clientName = `agent_${agentId}_${tool.tool_slug}_${session.sessionId.slice(0, 8)}`;
       
+      // Get configurations for this specific MCP tool
+      const mcpToolConfigs = toolConfigs
+        .filter(c => c.tool_id === tool.tool_id)
+        .map(c => ({
+          mcp_function_name: c.mcp_function_name,
+          enabled: c.enabled,
+          custom_name: c.custom_name
+        }));
+
+      this.logger.info('MCP tool configurations', {
+        toolId: tool.tool_id,
+        toolName: tool.tool_name,
+        configCount: mcpToolConfigs.length,
+        configs: mcpToolConfigs
+      });
+      
       const connectionPromise = this.mcpClientManager.addServer({
         name: clientName,
         transport: toolConfig.transport || 'sse',
         url: toolConfig.server_url,
         apiKey: toolConfig.auth_config?.token || toolConfig.auth_config?.key,
-        timeout: toolConfig.timeout_ms || 30000
+        timeout: toolConfig.timeout_ms || 30000,
+        toolConfigs: mcpToolConfigs.length > 0 ? mcpToolConfigs : undefined
       }).then(() => ({ name: clientName, success: true, toolName: tool.tool_name }))
         .catch((error: Error) => {
           this.logger.warn('Failed to connect to agent MCP tool', {
