@@ -115,9 +115,16 @@ export class MCPClient extends EventEmitter {
         version: '1.0.0'
       });
 
-      // Connect to the server
+      // Connect to the server with timeout
       this.logger.info('Initializing MCP connection...');
-      await this.client.connect(this.transport);
+      
+      const connectionTimeout = this.config.timeout || 30000;
+      const connectPromise = this.client.connect(this.transport);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error(`MCP connection timeout after ${connectionTimeout}ms`)), connectionTimeout)
+      );
+      
+      await Promise.race([connectPromise, timeoutPromise]);
       
       this.isConnected = true;
       this.logger.info('MCP connection established');
