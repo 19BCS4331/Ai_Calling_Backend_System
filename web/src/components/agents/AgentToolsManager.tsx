@@ -5,14 +5,14 @@ import {
   Trash2, 
   GripVertical, 
   Server, 
-  Code, 
   Zap,
   ChevronDown,
   ChevronUp,
   ExternalLink,
   ToggleLeft,
   ToggleRight,
-  Settings
+  Settings,
+  Globe2
 } from 'lucide-react';
 import { useTools, useAgentTools } from '../../hooks/useTools';
 import { MCPToolConfigModal } from '../tools/MCPToolConfigModal';
@@ -47,8 +47,8 @@ export function AgentToolsManager({ agentId }: AgentToolsManagerProps) {
 
   const getTypeIcon = (type: ToolType) => {
     switch (type) {
-      case 'function':
-        return <Code size={16} className="text-blue-400" />;
+      case 'api_request':
+        return <Globe2 size={16} className="text-blue-400" />;
       case 'mcp':
         return <Server size={16} className="text-purple-400" />;
       case 'builtin':
@@ -60,7 +60,7 @@ export function AgentToolsManager({ agentId }: AgentToolsManagerProps) {
 
   const getTypeColor = (type: ToolType) => {
     switch (type) {
-      case 'function':
+      case 'api_request':
         return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
       case 'mcp':
         return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
