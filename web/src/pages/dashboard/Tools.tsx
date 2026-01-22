@@ -19,7 +19,7 @@ import {
   Globe2
 } from 'lucide-react';
 import { useTools } from '../../hooks/useTools';
-import { useAlert } from '../../hooks/useAlert';
+import { useAlert, useConfirm } from '../../hooks/useAlert';
 import type { Tool, ToolType, ToolStatus } from '../../lib/supabase-types';
 
 export function Tools() {
@@ -28,6 +28,7 @@ export function Tools() {
   const [searchQuery, setSearchQuery] = useState('');
   const { tools, isLoading, deleteTool, validateTool } = useTools(typeFilter);
   const { showSuccess, showError } = useAlert();
+  const { showConfirm } = useConfirm();
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [isValidating, setIsValidating] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -103,20 +104,24 @@ export function Tools() {
   };
 
   const handleDelete = async (toolId: string) => {
-    if (!confirm('Are you sure you want to delete this tool? This will also remove it from all agents.')) {
-      return;
-    }
-
-    try {
-      setIsDeleting(toolId);
-      await deleteTool(toolId);
-    } catch (error) {
-      console.error('Failed to delete tool:', error);
-      showError('Failed to delete tool: ' + (error instanceof Error ? error.message : 'Unknown error'));
-    } finally {
-      setIsDeleting(null);
-      setOpenMenuId(null);
-    }
+    showConfirm({
+      title: 'Delete Tool',
+      message: 'Are you sure you want to delete this tool? This will also remove it from all agents.',
+      variant: 'danger',
+      confirmText: 'Delete',
+      onConfirm: async () => {
+        try {
+          setIsDeleting(toolId);
+          await deleteTool(toolId);
+        } catch (error) {
+          console.error('Failed to delete tool:', error);
+          showError('Failed to delete tool: ' + (error instanceof Error ? error.message : 'Unknown error'));
+        } finally {
+          setIsDeleting(null);
+          setOpenMenuId(null);
+        }
+      }
+    });
   };
 
   const handleValidate = async (toolId: string) => {

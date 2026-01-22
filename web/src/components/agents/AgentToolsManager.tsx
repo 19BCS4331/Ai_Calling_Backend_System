@@ -17,7 +17,7 @@ import {
 import { useTools, useAgentTools } from '../../hooks/useTools';
 import { MCPToolConfigModal } from '../tools/MCPToolConfigModal';
 import { useOrganizationStore } from '../../store/organization';
-import { useAlert } from '../../hooks/useAlert';
+import { useAlert, useConfirm } from '../../hooks/useAlert';
 import type { Tool, AgentToolWithDetails, ToolType } from '../../lib/supabase-types';
 
 interface AgentToolsManagerProps {
@@ -27,6 +27,7 @@ interface AgentToolsManagerProps {
 export function AgentToolsManager({ agentId }: AgentToolsManagerProps) {
   const { currentOrganization } = useOrganizationStore();
   const { showError } = useAlert();
+  const { showConfirm } = useConfirm();
   const { tools: availableTools, isLoading: toolsLoading } = useTools();
   const { 
     agentTools, 
@@ -91,19 +92,23 @@ export function AgentToolsManager({ agentId }: AgentToolsManagerProps) {
   };
 
   const handleRemoveTool = async (agentToolId: string) => {
-    if (!confirm('Are you sure you want to remove this tool from the agent?')) {
-      return;
-    }
-
-    try {
-      setIsRemoving(agentToolId);
-      await removeToolFromAgent(agentToolId);
-    } catch (error) {
-      console.error('Failed to remove tool:', error);
-      showError('Failed to remove tool: ' + (error instanceof Error ? error.message : 'Unknown error'));
-    } finally {
-      setIsRemoving(null);
-    }
+    showConfirm({
+      title: 'Remove Tool',
+      message: 'Are you sure you want to remove this tool from the agent?',
+      variant: 'warning',
+      confirmText: 'Remove',
+      onConfirm: async () => {
+        try {
+          setIsRemoving(agentToolId);
+          await removeToolFromAgent(agentToolId);
+        } catch (error) {
+          console.error('Failed to remove tool:', error);
+          showError('Failed to remove tool: ' + (error instanceof Error ? error.message : 'Unknown error'));
+        } finally {
+          setIsRemoving(null);
+        }
+      }
+    });
   };
 
   const handleToggleEnabled = async (agentTool: AgentToolWithDetails) => {

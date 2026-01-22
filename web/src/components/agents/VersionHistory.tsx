@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { useConfirm } from '../../hooks/useAlert';
 import { Clock, User, RotateCcw, CheckCircle, AlertCircle } from 'lucide-react';
 import { useAgents } from '../../hooks/useAgents';
 import type { AgentVersion } from '../../lib/supabase-types';
@@ -13,6 +14,7 @@ interface VersionHistoryProps {
 
 export function VersionHistory({ agentId, currentVersion, publishedVersion, onRollback }: VersionHistoryProps) {
   const { getVersionHistory, rollbackToVersion } = useAgents();
+  const { showConfirm } = useConfirm();
   const [versions, setVersions] = useState<AgentVersion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRollingBack, setIsRollingBack] = useState(false);
@@ -37,21 +39,25 @@ export function VersionHistory({ agentId, currentVersion, publishedVersion, onRo
   };
 
   const handleRollback = async (versionNumber: number) => {
-    if (!confirm(`Are you sure you want to rollback to version ${versionNumber}?\n\nThis will:\n• Restore all configuration from version ${versionNumber}\n• Set this as the active published version\n• Activate the agent immediately\n\nThis action cannot be undone.`)) {
-      return;
-    }
-
-    try {
-      setIsRollingBack(true);
-      await rollbackToVersion(agentId, versionNumber);
-      await loadVersions();
-      onRollback?.();
-    } catch (err) {
-      console.error('Failed to rollback:', err);
-      setError(err instanceof Error ? err.message : 'Failed to rollback');
-    } finally {
-      setIsRollingBack(false);
-    }
+    showConfirm({
+      title: `Rollback to Version ${versionNumber}`,
+      message: `Are you sure you want to rollback to version ${versionNumber}?\n\nThis will:\n• Restore all configuration from version ${versionNumber}\n• Set this as the active published version\n• Activate the agent immediately\n\nThis action cannot be undone.`,
+      variant: 'warning',
+      confirmText: 'Rollback',
+      onConfirm: async () => {
+        try {
+          setIsRollingBack(true);
+          await rollbackToVersion(agentId, versionNumber);
+          await loadVersions();
+          onRollback?.();
+        } catch (err) {
+          console.error('Failed to rollback:', err);
+          setError(err instanceof Error ? err.message : 'Failed to rollback');
+        } finally {
+          setIsRollingBack(false);
+        }
+      }
+    });
   };
 
   const formatDate = (dateString: string) => {

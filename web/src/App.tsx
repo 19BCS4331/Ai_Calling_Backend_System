@@ -18,11 +18,13 @@ import { Analytics } from './pages/dashboard/Analytics';
 import { Settings } from './pages/dashboard/Settings';
 import { useAuthStore } from './store/auth';
 import { AlertDialog } from './components/ui/AlertDialog';
-import { useAlertStore } from './hooks/useAlert';
+import { ConfirmDialog } from './components/ui/ConfirmDialog';
+import { useAlertStore, useConfirmStore } from './hooks/useAlert';
 
 function App() {
   const { initialize, isLoading } = useAuthStore();
   const { isOpen, message, type, title, confirmText, closeAlert } = useAlertStore();
+  const confirmState = useConfirmStore();
 
   useEffect(() => {
     initialize();
@@ -48,6 +50,16 @@ function App() {
         type={type}
         title={title}
         confirmText={confirmText}
+      />
+      <ConfirmDialog
+        isOpen={confirmState.isOpen}
+        onClose={confirmState.closeConfirm}
+        onConfirm={confirmState.onConfirm}
+        title={confirmState.title}
+        message={confirmState.message}
+        variant={confirmState.variant}
+        confirmText={confirmState.confirmText}
+        cancelText={confirmState.cancelText}
       />
       <BrowserRouter>
         <Routes>

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Loader, Trash2 } from 'lucide-react';
 import { ToolForm } from '../../components/tools/ToolForm';
 import { useTools, useToolById } from '../../hooks/useTools';
+import { useConfirm } from '../../hooks/useAlert';
 import type { UpdateToolRequest } from '../../lib/supabase-types';
 
 export function ToolDetail() {
@@ -10,6 +11,7 @@ export function ToolDetail() {
   const navigate = useNavigate();
   const { tool, isLoading: isFetching, error: fetchError } = useToolById(id);
   const { updateTool, deleteTool } = useTools();
+  const { showConfirm } = useConfirm();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,19 +33,23 @@ export function ToolDetail() {
   const handleDelete = async () => {
     if (!id) return;
     
-    if (!confirm('Are you sure you want to delete this tool? This will also remove it from all agents.')) {
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      await deleteTool(id);
-      navigate('/dashboard/tools');
-    } catch (err) {
-      console.error('Failed to delete tool:', err);
-      setError(err instanceof Error ? err.message : 'Failed to delete tool');
-      setIsLoading(false);
-    }
+    showConfirm({
+      title: 'Delete Tool',
+      message: 'Are you sure you want to delete this tool? This will also remove it from all agents.',
+      variant: 'danger',
+      confirmText: 'Delete',
+      onConfirm: async () => {
+        try {
+          setIsLoading(true);
+          await deleteTool(id);
+          navigate('/dashboard/tools');
+        } catch (err) {
+          console.error('Failed to delete tool:', err);
+          setError(err instanceof Error ? err.message : 'Failed to delete tool');
+          setIsLoading(false);
+        }
+      }
+    });
   };
 
   const handleCancel = () => {

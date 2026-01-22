@@ -3,12 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Bot, Plus, Search, Filter, Play, Pause, Archive, Edit, BarChart3 } from 'lucide-react';
 import { useAgents } from '../../hooks/useAgents';
-import { useAlert } from '../../hooks/useAlert';
+import { useAlert, useConfirm } from '../../hooks/useAlert';
 import type { AgentStatus } from '../../lib/supabase-types';
 
 export function Agents() {
   const navigate = useNavigate();
   const { showError } = useAlert();
+  const { showConfirm } = useConfirm();
   const [statusFilter, setStatusFilter] = useState<AgentStatus | undefined>();
   const [searchQuery, setSearchQuery] = useState('');
   const { agents, isLoading, publishAgent, pauseAgent, deleteAgent, updateAgent } = useAgents(statusFilter);
@@ -60,13 +61,19 @@ export function Agents() {
   };
 
   const handleArchive = async (agentId: string) => {
-    if (confirm('Are you sure you want to archive this agent?')) {
-      try {
-        await deleteAgent(agentId);
-      } catch (error) {
-        console.error('Failed to archive agent:', error);
+    showConfirm({
+      title: 'Archive Agent',
+      message: 'Are you sure you want to archive this agent?',
+      variant: 'warning',
+      confirmText: 'Archive',
+      onConfirm: async () => {
+        try {
+          await deleteAgent(agentId);
+        } catch (error) {
+          console.error('Failed to archive agent:', error);
+        }
       }
-    }
+    });
   };
 
   return (
