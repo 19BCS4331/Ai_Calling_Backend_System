@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Check, Settings2, Eye, EyeOff } from 'lucide-react';
+import { X, Settings2, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface MCPFunction {
@@ -186,19 +186,6 @@ export function MCPToolConfigModal({
                     }`}
                   >
                     <div className="flex items-start gap-3">
-                      {/* Enable/Disable Toggle */}
-                      <button
-                        type="button"
-                        onClick={() => toggleFunction(index)}
-                        className="mt-1 flex-shrink-0"
-                      >
-                        {fn.enabled ? (
-                          <Eye className="text-purple-400" size={18} />
-                        ) : (
-                          <EyeOff className="text-white/30" size={18} />
-                        )}
-                      </button>
-
                       <div className="flex-1 space-y-3">
                         {/* Original Name */}
                         <div>
@@ -240,6 +227,23 @@ export function MCPToolConfigModal({
                           </div>
                         )}
                       </div>
+
+                      {/* Toggle Switch */}
+                      <button
+                        type="button"
+                        onClick={() => toggleFunction(index)}
+                        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-gray-900 ${
+                          fn.enabled ? 'bg-purple-600' : 'bg-gray-700'
+                        }`}
+                        role="switch"
+                        aria-checked={fn.enabled}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                            fn.enabled ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
                     </div>
                   </div>
                 ))}
