@@ -1008,7 +1008,7 @@ export function createSaaSRouter(): Router {
     authMiddleware,
     orgContextMiddleware('orgId'),
     asyncHandler(async (req, res) => {
-      const { tool_type, mcp_server_url, function_server_url, mcp_auth_config } = req.body;
+      const { tool_type, mcp_server_url, function_server_url, mcp_auth_config, function_auth_config, function_headers } = req.body;
 
       if (!tool_type) {
         throw SaaSError.validation('tool_type is required');
@@ -1068,12 +1068,34 @@ export function createSaaSRouter(): Router {
           }
         } else if (tool_type === 'api_request' && function_server_url) {
           // Validate API endpoint with HEAD request
+          const headers: Record<string, string> = {};
+
+          // Add custom headers if provided
+          if (function_headers && typeof function_headers === 'object') {
+            Object.assign(headers, function_headers);
+          }
+
+          // Add auth header if provided
+          if (function_auth_config) {
+            if (function_auth_config.type === 'bearer' && function_auth_config.token) {
+              headers['Authorization'] = `Bearer ${function_auth_config.token}`;
+            } else if (function_auth_config.type === 'api_key') {
+              if (function_auth_config.header_name && function_auth_config.api_key) {
+                headers[function_auth_config.header_name] = function_auth_config.api_key;
+              }
+            } else if (function_auth_config.type === 'basic' && function_auth_config.username && function_auth_config.password) {
+              const credentials = Buffer.from(`${function_auth_config.username}:${function_auth_config.password}`).toString('base64');
+              headers['Authorization'] = `Basic ${credentials}`;
+            }
+          }
+
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 10000);
 
           try {
             const response = await fetch(function_server_url, {
               method: 'HEAD',
+              headers,
               signal: controller.signal
             });
 
