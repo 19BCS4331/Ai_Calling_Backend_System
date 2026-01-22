@@ -1136,18 +1136,22 @@ export function createSaaSRouter(): Router {
   // ===========================================
 
   /**
+   * GET /providers/test
+   * Test endpoint to verify routing
+   */
+  router.get('/providers/test', (_req, res) => {
+    res.json({ message: 'Provider routes are working', timestamp: new Date().toISOString() });
+  });
+
+  /**
    * GET /providers/cartesia/voices
    * Fetch available voices from Cartesia API
    */
   router.get(
     '/providers/cartesia/voices',
     authMiddleware,
-    requireAuth,
     asyncHandler(async (req: Request, res: Response) => {
-      const userId = (req as any).user?.id;
-      if (!userId) {
-        throw SaaSError.unauthorized('User not authenticated');
-      }
+      const userId = req.auth!.user.id;
 
       // Get user's organization and Cartesia credentials
       const { data: orgMembers } = await supabaseAdmin
