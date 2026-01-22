@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Loader, Volume2, Edit3 } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 
 interface Voice {
   id: string;
@@ -39,14 +40,22 @@ export function VoiceSelector({ provider, selectedVoiceId, onVoiceChange }: Voic
     setError(null);
 
     try {
+      // Get Supabase session for authentication
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('Not authenticated');
+      }
+
       const apiUrl = import.meta.env.VITE_SAAS_API_URL || 'http://localhost:3001';
       const response = await fetch(`${apiUrl}/api/v1/providers/cartesia/voices`, {
-        credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Failed to fetch voices: ${response.status}`);
+        throw new Error(errorData.error?.message || errorData.message || `Failed to fetch voices: ${response.status}`);
       }
 
       const data = await response.json();
