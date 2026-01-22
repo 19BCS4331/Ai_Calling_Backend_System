@@ -24,7 +24,7 @@ export function MCPToolConfigModal({
   onClose,
   toolId,
   toolName,
-  agentId,
+  agentId: _agentId,
   onSave
 }: MCPToolConfigModalProps) {
   const [functions, setFunctions] = useState<MCPFunction[]>([]);
@@ -78,11 +78,12 @@ export function MCPToolConfigModal({
     ));
   };
 
-  const updateCustomDescription = (index: number, customDescription: string) => {
-    setFunctions(prev => prev.map((fn, i) => 
-      i === index ? { ...fn, customDescription: customDescription || undefined } : fn
-    ));
-  };
+  // Unused for now, but kept for future enhancement
+  // const updateCustomDescription = (index: number, customDescription: string) => {
+  //   setFunctions(prev => prev.map((fn, i) => 
+  //     i === index ? { ...fn, customDescription: customDescription || undefined } : fn
+  //   ));
+  // };
 
   const handleSave = async () => {
     setIsSaving(true);
