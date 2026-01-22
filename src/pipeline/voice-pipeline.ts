@@ -567,6 +567,12 @@ export class VoicePipeline extends EventEmitter {
 
     // Get tool definitions from registry
     const tools = this.toolRegistry.getDefinitions();
+    
+    this.logger.info('Generating LLM response with tools', {
+      toolCount: tools.length,
+      toolNames: tools.map(t => t.name),
+      messageCount: this.session.messages.length
+    });
 
     // Start TTS session FIRST for streaming audio output (don't block)
     this.startTTSSessionAsync();

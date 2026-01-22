@@ -214,6 +214,7 @@ export class GeminiLLMProvider extends LLMProvider {
       
       // Skip duplicate tool names
       if (seenNames.has(sanitizedName)) {
+        this.logger.warn('Skipping duplicate tool', { original: tool.name, sanitized: sanitizedName });
         continue;
       }
       
@@ -228,6 +229,12 @@ export class GeminiLLMProvider extends LLMProvider {
         }
       });
     }
+    
+    this.logger.info('Converted tools for Gemini', {
+      originalCount: tools.length,
+      uniqueCount: uniqueTools.length,
+      toolNames: uniqueTools.map(t => t.name)
+    });
     
     return uniqueTools;
   }
@@ -391,6 +398,11 @@ class GeminiStreamSession extends LLMStreamSession {
               this.processToken(part.text);
             }
             if (part.functionCall) {
+              this.logger.info('Gemini function call detected', {
+                name: part.functionCall.name,
+                args: part.functionCall.args
+              });
+              
               const toolCall: ToolCall = {
                 id: `call_${Date.now()}_${toolCalls.length}`,
                 type: 'function',
