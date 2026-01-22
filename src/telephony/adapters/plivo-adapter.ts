@@ -29,6 +29,7 @@ export class PlivoAdapter extends BaseTelephonyAdapter {
   private activeStreams: Map<string, WebSocket> = new Map();  // streamId -> WebSocket
   private callToStream: Map<string, string> = new Map();       // callId -> streamId
   private audioBuffers: Map<string, Buffer> = new Map();       // callId -> audio buffer
+  private callMetadata: Map<string, { from: string; to: string; direction: string }> = new Map();
   private readonly CHUNK_SIZE = 3200;  // 200ms at 8kHz, 16-bit = 3200 bytes
   private readonly WAV_HEADER_SIZE = 44;  // Standard WAV header size
 
@@ -235,7 +236,20 @@ export class PlivoAdapter extends BaseTelephonyAdapter {
    * Generate XML response for answering calls
    * This starts the bidirectional audio stream
    */
-  getAnswerXml(callId: string, streamUrl: string): string {
+  getAnswerXml(callId: string, streamUrl: string, webhookBody?: any): string {
+    // Store call metadata for when stream starts
+    if (webhookBody) {
+      this.callMetadata.set(callId, {
+        from: webhookBody.From || webhookBody.from,
+        to: webhookBody.To || webhookBody.to,
+        direction: webhookBody.Direction || webhookBody.direction || 'inbound'
+      });
+      console.log('[plivo-adapter] Stored call metadata:', {
+        callId,
+        metadata: this.callMetadata.get(callId)
+      });
+    }
+    
     return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Stream 
@@ -260,7 +274,7 @@ export class PlivoAdapter extends BaseTelephonyAdapter {
       const streamUrl = `${this.config.webhookBaseUrl.replace('https://', 'wss://')}/telephony/plivo/stream`;
       
       this.logger.info('Answering call with stream', { callId, streamUrl });
-      return this.getAnswerXml(callId, streamUrl);
+      return this.getAnswerXml(callId, streamUrl, body);
     }
 
     if (path === '/status' || path === '/telephony/plivo/status') {
@@ -333,7 +347,22 @@ export class PlivoAdapter extends BaseTelephonyAdapter {
    * Handle stream start event
    */
   private handleStreamStart(ws: WebSocket, message: PlivoStartMessage): void {
-    const { streamId, callId, from, to, direction } = message.start;
+    console.log('[plivo-adapter] Stream start message:', JSON.stringify(message, null, 2));
+    
+    const { streamId, callId } = message.start;
+    
+    // Get stored metadata from answer webhook
+    const metadata = this.callMetadata.get(callId);
+    
+    console.log('[plivo-adapter] Retrieved metadata:', { callId, metadata });
+    
+    if (!metadata) {
+      this.logger.warn('No metadata found for call', { callId });
+    }
+    
+    const from = metadata?.from || 'unknown';
+    const to = metadata?.to || 'unknown';
+    const direction = metadata?.direction || 'inbound';
     
     // Use prefixed callId to avoid collisions
     const internalCallId = `plivo_${callId}`;

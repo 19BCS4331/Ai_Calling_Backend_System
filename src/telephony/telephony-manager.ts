@@ -131,37 +131,129 @@ export class TelephonyManager extends EventEmitter {
     });
 
     try {
+      // Try to find agent configuration for this phone number
+      let sttConfig = this.config.defaultSTTConfig;
+      let llmConfig = this.config.defaultLLMConfig;
+      let ttsConfig = this.config.defaultTTSConfig;
+      let systemPrompt = this.config.systemPrompt;
+      let agentId: string | undefined;
+
+      // Dynamic import to avoid circular dependency
+      const { getAgentForPhoneNumber } = await import('../saas-api/phone-numbers');
+      const agent = await getAgentForPhoneNumber(call.to);
+
+      if (agent) {
+        this.logger.info('Found agent configuration for phone number', {
+          callId: call.callId,
+          agentId: agent.id,
+          agentName: agent.name
+        });
+
+        // Use agent's configuration
+        agentId = agent.id;
+        systemPrompt = agent.system_prompt || systemPrompt;
+
+        // Build STT config with correct credentials for the provider
+        const sttProviderType = agent.stt_provider as string;
+        let sttCredentials = this.config.defaultSTTConfig.credentials;
+        
+        // Use provider-specific credentials from environment
+        if (sttProviderType === 'sarvam') {
+          sttCredentials = { apiKey: process.env.SARVAM_API_KEY || '' };
+        } else if (sttProviderType === 'deepgram') {
+          sttCredentials = { apiKey: process.env.DEEPGRAM_API_KEY || '' };
+        }
+        
+        sttConfig = {
+          ...this.config.defaultSTTConfig,
+          type: sttProviderType as any,
+          credentials: sttCredentials,
+          ...(agent.stt_config as any),
+          language: 'unknown' // Force multi-language support
+        };
+
+        // Build LLM config
+        // Normalize provider name: gemini-flash -> gemini
+        const llmProviderType = agent.llm_provider === 'gemini-flash' ? 'gemini' : agent.llm_provider;
+        llmConfig = {
+          ...this.config.defaultLLMConfig,
+          type: llmProviderType as any,
+          ...(agent.llm_config as any)
+        };
+
+        // Build TTS config with correct credentials for the provider
+        const ttsProviderType = agent.tts_provider as string;
+        let ttsCredentials = this.config.defaultTTSConfig.credentials;
+        
+        // Use provider-specific credentials from environment
+        if (ttsProviderType === 'sarvam') {
+          ttsCredentials = { apiKey: process.env.SARVAM_API_KEY || '' };
+        } else if (ttsProviderType === 'cartesia') {
+          ttsCredentials = { apiKey: process.env.CARTESIA_API_KEY || '' };
+        } else if (ttsProviderType === 'elevenlabs') {
+          ttsCredentials = { apiKey: process.env.ELEVENLABS_API_KEY || '' };
+        }
+        
+        // Build voice config - use agent's voice_id or default per provider
+        const agentTtsConfig = (agent.tts_config || {}) as any;
+        const voiceConfig = {
+          voiceId: agent.voice_id || agentTtsConfig.voiceId || (ttsProviderType === 'sarvam' ? 'anushka' : 'aura-asteria-en'),
+          language: agentTtsConfig.language || 'en-IN',
+          gender: agentTtsConfig.gender || 'female'
+        };
+        
+        ttsConfig = {
+          ...this.config.defaultTTSConfig,
+          type: ttsProviderType as any,
+          credentials: ttsCredentials,
+          voice: voiceConfig,
+          ...(agentTtsConfig)
+        };
+      } else {
+        this.logger.warn('No agent found for phone number, using defaults', {
+          callId: call.callId,
+          phoneNumber: call.to
+        });
+      }
+
       // Create session for this call
       const sessionOptions: CreateSessionOptions = {
-        tenantId: 'telephony',
+        tenantId: agentId || 'telephony',
         callerId: call.from,
-        sttConfig: this.config.defaultSTTConfig,
-        llmConfig: this.config.defaultLLMConfig,
-        ttsConfig: this.config.defaultTTSConfig,
-        systemPrompt: this.config.systemPrompt,
+        sttConfig,
+        llmConfig,
+        ttsConfig,
+        systemPrompt,
         context: {
           callId: call.callId,
           from: call.from,
           to: call.to,
           provider: call.provider,
-          channel: 'telephony'
+          channel: 'telephony',
+          agentId
         }
       };
 
       const session = await this.sessionManager.createSession(sessionOptions);
       this.callToSession.set(call.callId, session.sessionId);
 
-      // Create providers
+      // Create providers using agent-specific or default configs
+      this.logger.info('Creating providers with configs', {
+        stt: sttConfig.type,
+        llm: llmConfig.type,
+        tts: ttsConfig.type
+      });
+      
       const sttProvider = STTProviderFactory.create(
-        this.config.defaultSTTConfig, 
+        sttConfig, 
         this.logger
       );
       const llmProvider = LLMProviderFactory.create(
-        this.config.defaultLLMConfig, 
+        llmConfig, 
         this.logger
       );
       const ttsProvider = TTSProviderFactory.create(
-        this.config.defaultTTSConfig, 
+        ttsConfig, 
         this.logger
       );
 
@@ -184,7 +276,7 @@ export class TelephonyManager extends EventEmitter {
       );
 
       // Set up pipeline events to route audio back to telephony
-      this.setupPipelineEvents(pipeline, adapter, call.callId, session.sessionId);
+      this.setupPipelineEvents(pipeline, adapter, call.callId, session.sessionId, ttsConfig);
 
       // Store and start pipeline
       this.activePipelines.set(call.callId, pipeline);
@@ -227,17 +319,17 @@ export class TelephonyManager extends EventEmitter {
     pipeline: VoicePipeline,
     adapter: BaseTelephonyAdapter,
     callId: string,
-    sessionId: string
+    sessionId: string,
+    actualTtsConfig: any
   ): void {
     // Route TTS audio to telephony
     pipeline.on('tts_audio_chunk', (chunk: Buffer) => {
-      // Get TTS sample rate from config
-      const ttsConfig = this.config.defaultTTSConfig as any;
+      // Get TTS sample rate from the actual session config
       let sampleRate: number;
       
-      switch (ttsConfig.type) {
+      switch (actualTtsConfig.type) {
         case 'cartesia':
-          sampleRate = ttsConfig.audioQuality === 'telephony' ? 8000 : 44100;
+          sampleRate = actualTtsConfig.audioQuality === 'telephony' ? 8000 : 44100;
           break;
         case 'sarvam':
           sampleRate = 22050;

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Key, Bell, Shield, Save, Check } from 'lucide-react';
+import { TelephonySettings } from '../../components/settings/TelephonySettings';
 
 export function Settings() {
   const [apiKeys, setApiKeys] = useState({
@@ -84,6 +85,9 @@ export function Settings() {
           </button>
         </div>
       </motion.div>
+
+      {/* Telephony Integration */}
+      <TelephonySettings />
 
       {/* Notifications */}
       <motion.div

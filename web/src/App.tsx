@@ -16,6 +16,7 @@ import { ToolNew } from './pages/dashboard/ToolNew';
 import { ToolDetail } from './pages/dashboard/ToolDetail';
 import { Analytics } from './pages/dashboard/Analytics';
 import { Settings } from './pages/dashboard/Settings';
+import { PhoneNumbers } from './pages/dashboard/PhoneNumbers';
 import { useAuthStore } from './store/auth';
 import { AlertDialog } from './components/ui/AlertDialog';
 import { ConfirmDialog } from './components/ui/ConfirmDialog';
@@ -80,6 +81,7 @@ function App() {
           <Route path="agents" element={<Agents />} />
           <Route path="agents/new" element={<AgentNew />} />
           <Route path="agents/:id" element={<AgentDetail />} />
+          <Route path="phone-numbers" element={<PhoneNumbers />} />
           <Route path="tools" element={<Tools />} />
           <Route path="tools/new" element={<ToolNew />} />
           <Route path="tools/:id" element={<ToolDetail />} />

@@ -88,6 +88,15 @@ import {
   StartCallBridgeRequest,
   CallMetrics
 } from './call-bridge';
+import {
+  connectPlivoAccount,
+  disconnectPlivoAccount,
+  getPlivoConnectionStatus,
+  fetchPlivoNumbers,
+  getTelephonyCredentials,
+  linkNumberToApplication,
+  unlinkNumberFromApplication
+} from './telephony-integration';
 import { createLogger } from '../utils/logger';
 
 const logger = createLogger('saas-routes');
@@ -1215,6 +1224,358 @@ export function createSaaSRouter(): Router {
         })),
         has_more: false,
       });
+    })
+  );
+
+  // ===========================================
+  // TELEPHONY INTEGRATION ROUTES
+  // ===========================================
+
+  /**
+   * POST /orgs/:orgId/telephony/plivo/connect
+   * Connect Plivo account with credentials
+   */
+  router.post(
+    '/orgs/:orgId/telephony/plivo/connect',
+    authMiddleware,
+    orgContextMiddleware('orgId'),
+    requireRole('admin'),
+    asyncHandler(async (req, res) => {
+      const { authId, authToken } = req.body;
+
+      if (!authId || !authToken) {
+        throw SaaSError.validation('authId and authToken are required');
+      }
+
+      const webhookBaseUrl = process.env.WEBHOOK_BASE_URL || 
+                             process.env.PUBLIC_URL || 
+                             `https://${req.get('host')}`;
+
+      const result = await connectPlivoAccount(
+        req.org!,
+        authId,
+        authToken,
+        webhookBaseUrl
+      );
+
+      res.json(result);
+    })
+  );
+
+  /**
+   * DELETE /orgs/:orgId/telephony/plivo/disconnect
+   * Disconnect Plivo account
+   */
+  router.delete(
+    '/orgs/:orgId/telephony/plivo/disconnect',
+    authMiddleware,
+    orgContextMiddleware('orgId'),
+    requireRole('admin'),
+    asyncHandler(async (req, res) => {
+      await disconnectPlivoAccount(req.org!);
+      res.json({ message: 'Plivo account disconnected successfully' });
+    })
+  );
+
+  /**
+   * GET /orgs/:orgId/telephony/plivo/status
+   * Get Plivo connection status
+   */
+  router.get(
+    '/orgs/:orgId/telephony/plivo/status',
+    authMiddleware,
+    orgContextMiddleware('orgId'),
+    asyncHandler(async (req, res) => {
+      const status = await getPlivoConnectionStatus(req.org!);
+      res.json(status);
+    })
+  );
+
+  // ===========================================
+  // PHONE NUMBERS ROUTES
+  // ===========================================
+
+  /**
+   * GET /orgs/:orgId/phone-numbers
+   * List organization's phone numbers
+   */
+  router.get(
+    '/orgs/:orgId/phone-numbers',
+    authMiddleware,
+    orgContextMiddleware('orgId'),
+    asyncHandler(async (req, res) => {
+      const { data: phoneNumbers, error } = await supabaseAdmin
+        .from('phone_numbers')
+        .select(`
+          *,
+          agent:agents(id, name, slug)
+        `)
+        .eq('organization_id', req.org!.organization.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw new SaaSError('INTERNAL_ERROR', error.message, 500);
+      }
+
+      res.json({ phone_numbers: phoneNumbers || [] });
+    })
+  );
+
+  /**
+   * POST /orgs/:orgId/phone-numbers/sync
+   * Sync phone numbers from Plivo
+   */
+  router.post(
+    '/orgs/:orgId/phone-numbers/sync',
+    authMiddleware,
+    orgContextMiddleware('orgId'),
+    requireRole('admin'),
+    asyncHandler(async (req, res) => {
+      const credentials = await getTelephonyCredentials(
+        req.org!.organization.id,
+        'plivo'
+      );
+
+      if (!credentials) {
+        throw SaaSError.validation('Plivo not connected. Please connect your Plivo account first.');
+      }
+
+      // Fetch numbers from Plivo
+      const plivoNumbers = await fetchPlivoNumbers(
+        credentials.authId,
+        credentials.authToken
+      );
+
+      // Get existing numbers in database
+      const { data: existingNumbers } = await supabaseAdmin
+        .from('phone_numbers')
+        .select('phone_number')
+        .eq('organization_id', req.org!.organization.id)
+        .eq('telephony_provider', 'plivo');
+
+      const existingNumberSet = new Set(
+        (existingNumbers || []).map(n => n.phone_number)
+      );
+
+      // Helper function to extract country code from phone number
+      const getCountryCodeFromNumber = (phoneNumber: string): string => {
+        // Common country code prefixes (1-3 digits)
+        const countryCodeMap: Record<string, string> = {
+          '1': 'US',    // USA/Canada
+          '44': 'GB',   // UK
+          '91': 'IN',   // India
+          '86': 'CN',   // China
+          '81': 'JP',   // Japan
+          '49': 'DE',   // Germany
+          '33': 'FR',   // France
+          '39': 'IT',   // Italy
+          '61': 'AU',   // Australia
+          '55': 'BR',   // Brazil
+          '52': 'MX',   // Mexico
+          '7': 'RU',    // Russia
+          '82': 'KR',   // South Korea
+          '34': 'ES',   // Spain
+          '31': 'NL',   // Netherlands
+          '46': 'SE',   // Sweden
+          '47': 'NO',   // Norway
+          '45': 'DK',   // Denmark
+          '41': 'CH',   // Switzerland
+          '43': 'AT',   // Austria
+          '32': 'BE',   // Belgium
+          '48': 'PL',   // Poland
+          '65': 'SG',   // Singapore
+          '60': 'MY',   // Malaysia
+          '66': 'TH',   // Thailand
+          '84': 'VN',   // Vietnam
+          '62': 'ID',   // Indonesia
+          '63': 'PH',   // Philippines
+          '27': 'ZA',   // South Africa
+          '20': 'EG',   // Egypt
+          '971': 'AE',  // UAE
+          '966': 'SA',  // Saudi Arabia
+        };
+
+        // Try 3-digit, then 2-digit, then 1-digit prefixes
+        for (let len = 3; len >= 1; len--) {
+          const prefix = phoneNumber.substring(0, len);
+          if (countryCodeMap[prefix]) {
+            return countryCodeMap[prefix];
+          }
+        }
+        
+        return 'US'; // Default fallback
+      };
+
+      // Insert new numbers
+      const numbersToInsert = plivoNumbers
+        .filter(n => !existingNumberSet.has(n.number))
+        .map(n => ({
+          organization_id: req.org!.organization.id,
+          phone_number: n.number,
+          country_code: n.country_iso || getCountryCodeFromNumber(n.number),
+          telephony_provider: 'plivo',
+          provider_number_id: n.number,
+          capabilities: {
+            voice: n.voice_enabled,
+            sms: n.sms_enabled
+          },
+          monthly_cost_cents: Math.round(parseFloat(n.monthly_rental_rate || '0') * 100),
+          is_active: true
+        }));
+
+      if (numbersToInsert.length > 0) {
+        const { error: insertError } = await supabaseAdmin
+          .from('phone_numbers')
+          .insert(numbersToInsert);
+
+        if (insertError) {
+          throw new SaaSError('INTERNAL_ERROR', insertError.message, 500);
+        }
+      }
+
+      res.json({
+        message: `Synced ${numbersToInsert.length} new phone numbers`,
+        synced: numbersToInsert.length,
+        total: plivoNumbers.length
+      });
+    })
+  );
+
+  /**
+   * POST /orgs/:orgId/phone-numbers/:numberId/link
+   * Link phone number to agent
+   */
+  router.post(
+    '/orgs/:orgId/phone-numbers/:numberId/link',
+    authMiddleware,
+    orgContextMiddleware('orgId'),
+    requireRole('member'),
+    asyncHandler(async (req, res) => {
+      const { numberId } = req.params;
+      const { agent_id } = req.body;
+
+      if (!agent_id) {
+        throw SaaSError.validation('agent_id is required');
+      }
+
+      // Verify phone number belongs to org
+      const { data: phoneNumber, error: fetchError } = await supabaseAdmin
+        .from('phone_numbers')
+        .select('*')
+        .eq('id', numberId)
+        .eq('organization_id', req.org!.organization.id)
+        .single();
+
+      if (fetchError || !phoneNumber) {
+        throw SaaSError.notFound('Phone number not found');
+      }
+
+      // Verify agent belongs to org
+      const { data: agent, error: agentError } = await supabaseAdmin
+        .from('agents')
+        .select('id')
+        .eq('id', agent_id)
+        .eq('organization_id', req.org!.organization.id)
+        .single();
+
+      if (agentError || !agent) {
+        throw SaaSError.notFound('Agent not found');
+      }
+
+      // Get Plivo credentials and app ID
+      const credentials = await getTelephonyCredentials(
+        req.org!.organization.id,
+        'plivo'
+      );
+
+      const { data: orgData } = await supabaseAdmin
+        .from('organizations')
+        .select('plivo_app_id')
+        .eq('id', req.org!.organization.id)
+        .single();
+
+      if (!credentials || !orgData?.plivo_app_id) {
+        throw SaaSError.validation('Plivo not properly configured');
+      }
+
+      // Link number to Plivo application
+      await linkNumberToApplication(
+        credentials.authId,
+        credentials.authToken,
+        phoneNumber.phone_number,
+        orgData.plivo_app_id
+      );
+
+      // Update database
+      const { data: updatedNumber, error: updateError } = await supabaseAdmin
+        .from('phone_numbers')
+        .update({ agent_id })
+        .eq('id', numberId)
+        .select()
+        .single();
+
+      if (updateError) {
+        throw new SaaSError('INTERNAL_ERROR', updateError.message, 500);
+      }
+
+      res.json({ phone_number: updatedNumber });
+    })
+  );
+
+  /**
+   * DELETE /orgs/:orgId/phone-numbers/:numberId/link
+   * Unlink phone number from agent
+   */
+  router.delete(
+    '/orgs/:orgId/phone-numbers/:numberId/link',
+    authMiddleware,
+    orgContextMiddleware('orgId'),
+    requireRole('member'),
+    asyncHandler(async (req, res) => {
+      const { numberId } = req.params;
+
+      // Verify phone number belongs to org
+      const { data: phoneNumber, error: fetchError } = await supabaseAdmin
+        .from('phone_numbers')
+        .select('*')
+        .eq('id', numberId)
+        .eq('organization_id', req.org!.organization.id)
+        .single();
+
+      if (fetchError || !phoneNumber) {
+        throw SaaSError.notFound('Phone number not found');
+      }
+
+      // Get Plivo credentials
+      const credentials = await getTelephonyCredentials(
+        req.org!.organization.id,
+        'plivo'
+      );
+
+      if (!credentials) {
+        throw SaaSError.validation('Plivo not connected');
+      }
+
+      // Unlink from Plivo application
+      await unlinkNumberFromApplication(
+        credentials.authId,
+        credentials.authToken,
+        phoneNumber.phone_number
+      );
+
+      // Update database
+      const { data: updatedNumber, error: updateError } = await supabaseAdmin
+        .from('phone_numbers')
+        .update({ agent_id: null })
+        .eq('id', numberId)
+        .select()
+        .single();
+
+      if (updateError) {
+        throw new SaaSError('INTERNAL_ERROR', updateError.message, 500);
+      }
+
+      res.json({ phone_number: updatedNumber });
     })
   );
 
