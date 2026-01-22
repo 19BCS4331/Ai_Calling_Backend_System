@@ -28,9 +28,14 @@ const startMode = process.env.START_MODE || 'all';
 async function startSaaSAPI(): Promise<void> {
   const port = parseInt(process.env.SAAS_API_PORT || '3001');
   
-  logger.info('Starting SaaS API server...', { port });
+  // Parse CORS origins from environment
+  const corsOrigins = process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(',').map(origin => origin.trim())
+    : ['http://localhost:3000', 'http://localhost:5173'];
   
-  await startSaaSServer({ port });
+  logger.info('Starting SaaS API server...', { port, corsOrigins });
+  
+  await startSaaSServer({ port, corsOrigins });
   
   logger.info('SaaS API server started', { 
     port,
