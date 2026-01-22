@@ -3,14 +3,15 @@ import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Zap, Mail, Lock, User, ArrowRight, Check, Sparkles } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
+import { useToast } from '../hooks/useToast';
 
 export function Signup() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
   const navigate = useNavigate();
   const { signup, loginWithGoogle, isLoading, isAuthenticated } = useAuthStore();
+  const toast = useToast();
 
   // Redirect when authenticated
   useEffect(() => {
@@ -21,15 +22,14 @@ export function Signup() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
 
     if (!name || !email || !password) {
-      setError('Please fill in all fields');
+      toast.error('Please fill in all fields');
       return;
     }
 
     if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+      toast.error('Password must be at least 6 characters');
       return;
     }
 
@@ -37,7 +37,7 @@ export function Signup() {
       await signup(name, email, password);
       // Navigation handled by useEffect when isAuthenticated changes
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create account');
+      toast.error(err instanceof Error ? err.message : 'Failed to create account');
     }
   };
 
@@ -45,7 +45,7 @@ export function Signup() {
     try {
       await loginWithGoogle();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to sign up with Google');
+      toast.error(err instanceof Error ? err.message : 'Failed to sign up with Google');
     }
   };
 
@@ -167,12 +167,6 @@ export function Signup() {
                   />
                 </div>
               </div>
-
-              {error && (
-                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
-                  <p className="text-red-400 text-sm text-center">{error}</p>
-                </div>
-              )}
 
               <button
                 type="submit"

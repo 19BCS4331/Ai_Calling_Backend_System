@@ -3,15 +3,16 @@ import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Zap, Mail, Lock, ArrowRight, Check } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
+import { useToast } from '../hooks/useToast';
 
 export function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
   const [resetSent, setResetSent] = useState(false);
   const [showResetForm, setShowResetForm] = useState(false);
   const navigate = useNavigate();
   const { login, loginWithGoogle, resetPassword, isLoading, isAuthenticated } = useAuthStore();
+  const toast = useToast();
 
   // Redirect when authenticated
   useEffect(() => {
@@ -22,10 +23,9 @@ export function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
 
     if (!email || !password) {
-      setError('Please fill in all fields');
+      toast.error('Please fill in all fields');
       return;
     }
 
@@ -33,7 +33,7 @@ export function Login() {
       await login(email, password);
       // Navigation handled by useEffect when isAuthenticated changes
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Invalid credentials');
+      toast.error(err instanceof Error ? err.message : 'Invalid credentials');
     }
   };
 
@@ -41,24 +41,24 @@ export function Login() {
     try {
       await loginWithGoogle();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to sign in with Google');
+      toast.error(err instanceof Error ? err.message : 'Failed to sign in with Google');
     }
   };
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
     
     if (!email) {
-      setError('Please enter your email address');
+      toast.error('Please enter your email address');
       return;
     }
 
     try {
       await resetPassword(email);
       setResetSent(true);
+      toast.success('Password reset email sent! Check your inbox.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send reset email');
+      toast.error(err instanceof Error ? err.message : 'Failed to send reset email');
     }
   };
 
@@ -145,7 +145,6 @@ export function Login() {
                       onClick={() => {
                         setShowResetForm(false);
                         setResetSent(false);
-                        setError('');
                       }}
                       className="w-full py-3 bg-white/5 border border-white/10 rounded-xl font-medium text-white hover:bg-white/10 transition-all"
                     >
@@ -168,12 +167,6 @@ export function Login() {
                       </div>
                     </div>
 
-                    {error && (
-                      <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
-                        <p className="text-red-400 text-sm text-center">{error}</p>
-                      </div>
-                    )}
-
                     <button
                       type="submit"
                       disabled={isLoading}
@@ -190,7 +183,6 @@ export function Login() {
                       type="button"
                       onClick={() => {
                         setShowResetForm(false);
-                        setError('');
                       }}
                       className="w-full py-3 bg-white/5 border border-white/10 rounded-xl font-medium text-white hover:bg-white/10 transition-all"
                     >
@@ -241,12 +233,6 @@ export function Login() {
                   />
                 </div>
               </div>
-
-              {error && (
-                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
-                  <p className="text-red-400 text-sm text-center">{error}</p>
-                </div>
-              )}
 
               <button
                 type="submit"

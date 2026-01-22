@@ -19,12 +19,15 @@ import { Settings } from './pages/dashboard/Settings';
 import { useAuthStore } from './store/auth';
 import { AlertDialog } from './components/ui/AlertDialog';
 import { ConfirmDialog } from './components/ui/ConfirmDialog';
+import { ToastContainer } from './components/ui/Toast';
 import { useAlertStore, useConfirmStore } from './hooks/useAlert';
+import { useToastStore } from './hooks/useToast';
 
 function App() {
   const { initialize, isLoading } = useAuthStore();
   const { isOpen, message, type, title, confirmText, closeAlert } = useAlertStore();
   const confirmState = useConfirmStore();
+  const { toasts, removeToast } = useToastStore();
 
   useEffect(() => {
     initialize();
@@ -61,6 +64,7 @@ function App() {
         confirmText={confirmState.confirmText}
         cancelText={confirmState.cancelText}
       />
+      <ToastContainer toasts={toasts} onClose={removeToast} />
       <BrowserRouter>
         <Routes>
         <Route path="/" element={<Landing />} />
