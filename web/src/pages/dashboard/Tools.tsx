@@ -19,6 +19,7 @@ import {
   Globe2
 } from 'lucide-react';
 import { useTools } from '../../hooks/useTools';
+import { useAlert } from '../../hooks/useAlert';
 import type { Tool, ToolType, ToolStatus } from '../../lib/supabase-types';
 
 export function Tools() {
@@ -26,6 +27,7 @@ export function Tools() {
   const [typeFilter, setTypeFilter] = useState<ToolType | undefined>();
   const [searchQuery, setSearchQuery] = useState('');
   const { tools, isLoading, deleteTool, validateTool } = useTools(typeFilter);
+  const { showSuccess, showError } = useAlert();
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [isValidating, setIsValidating] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -110,7 +112,7 @@ export function Tools() {
       await deleteTool(toolId);
     } catch (error) {
       console.error('Failed to delete tool:', error);
-      alert('Failed to delete tool: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      showError('Failed to delete tool: ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
       setIsDeleting(null);
       setOpenMenuId(null);
@@ -122,13 +124,13 @@ export function Tools() {
       setIsValidating(toolId);
       const result = await validateTool(toolId);
       if (result.valid) {
-        alert('Tool validated successfully!');
+        showSuccess('Tool validated successfully!');
       } else {
-        alert('Tool validation failed: ' + result.error);
+        showError('Tool validation failed: ' + result.error);
       }
     } catch (error) {
       console.error('Failed to validate tool:', error);
-      alert('Failed to validate tool: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      showError('Failed to validate tool: ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
       setIsValidating(null);
     }

@@ -17,9 +17,12 @@ import { ToolDetail } from './pages/dashboard/ToolDetail';
 import { Analytics } from './pages/dashboard/Analytics';
 import { Settings } from './pages/dashboard/Settings';
 import { useAuthStore } from './store/auth';
+import { AlertDialog } from './components/ui/AlertDialog';
+import { useAlertStore } from './hooks/useAlert';
 
 function App() {
   const { initialize, isLoading } = useAuthStore();
+  const { isOpen, message, type, title, confirmText, closeAlert } = useAlertStore();
 
   useEffect(() => {
     initialize();
@@ -37,8 +40,17 @@ function App() {
   }
 
   return (
-    <BrowserRouter>
-      <Routes>
+    <>
+      <AlertDialog
+        isOpen={isOpen}
+        onClose={closeAlert}
+        message={message}
+        type={type}
+        title={title}
+        confirmText={confirmText}
+      />
+      <BrowserRouter>
+        <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
@@ -56,8 +68,9 @@ function App() {
           <Route path="analytics" element={<Analytics />} />
           <Route path="settings" element={<Settings />} />
         </Route>
-      </Routes>
-    </BrowserRouter>
+        </Routes>
+      </BrowserRouter>
+    </>
   );
 }
 

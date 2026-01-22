@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useAlert } from '../../hooks/useAlert';
 import { motion } from 'framer-motion';
 import { 
   Save, 
@@ -38,6 +39,7 @@ const normalizeToolType = (type: ToolType): ToolType => {
 };
 
 export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps) {
+  const { showError } = useAlert();
   const [formData, setFormData] = useState<CreateToolRequest>({
     name: tool?.name || '',
     slug: tool?.slug || '',
@@ -112,7 +114,7 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
         function_parameters: parametersSchema
       });
     } catch (err) {
-      alert('Invalid configuration. Please check your input.');
+      showError('Invalid configuration. Please check your input.');
     }
   };
 

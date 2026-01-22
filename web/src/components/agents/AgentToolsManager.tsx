@@ -17,6 +17,7 @@ import {
 import { useTools, useAgentTools } from '../../hooks/useTools';
 import { MCPToolConfigModal } from '../tools/MCPToolConfigModal';
 import { useOrganizationStore } from '../../store/organization';
+import { useAlert } from '../../hooks/useAlert';
 import type { Tool, AgentToolWithDetails, ToolType } from '../../lib/supabase-types';
 
 interface AgentToolsManagerProps {
@@ -25,6 +26,7 @@ interface AgentToolsManagerProps {
 
 export function AgentToolsManager({ agentId }: AgentToolsManagerProps) {
   const { currentOrganization } = useOrganizationStore();
+  const { showError } = useAlert();
   const { tools: availableTools, isLoading: toolsLoading } = useTools();
   const { 
     agentTools, 
@@ -82,7 +84,7 @@ export function AgentToolsManager({ agentId }: AgentToolsManagerProps) {
       setShowAddTool(false);
     } catch (error) {
       console.error('Failed to add tool:', error);
-      alert('Failed to add tool: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      showError('Failed to add tool: ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
       setIsAdding(false);
     }
@@ -98,7 +100,7 @@ export function AgentToolsManager({ agentId }: AgentToolsManagerProps) {
       await removeToolFromAgent(agentToolId);
     } catch (error) {
       console.error('Failed to remove tool:', error);
-      alert('Failed to remove tool: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      showError('Failed to remove tool: ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
       setIsRemoving(null);
     }
@@ -148,7 +150,7 @@ export function AgentToolsManager({ agentId }: AgentToolsManagerProps) {
       window.location.reload();
     } catch (error) {
       console.error('Failed to save tool config:', error);
-      alert('Failed to save configuration: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      showError('Failed to save configuration: ' + (error instanceof Error ? error.message : 'Unknown error'));
       throw error;
     }
   };

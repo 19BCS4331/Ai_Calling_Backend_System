@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Bot, Plus, Search, Filter, Play, Pause, Archive, Edit, BarChart3 } from 'lucide-react';
 import { useAgents } from '../../hooks/useAgents';
+import { useAlert } from '../../hooks/useAlert';
 import type { AgentStatus } from '../../lib/supabase-types';
 
 export function Agents() {
   const navigate = useNavigate();
+  const { showError } = useAlert();
   const [statusFilter, setStatusFilter] = useState<AgentStatus | undefined>();
   const [searchQuery, setSearchQuery] = useState('');
   const { agents, isLoading, publishAgent, pauseAgent, deleteAgent, updateAgent } = useAgents(statusFilter);
@@ -37,7 +39,7 @@ export function Agents() {
       await publishAgent(agentId, summary || undefined);
     } catch (error) {
       console.error('Failed to publish agent:', error);
-      alert('Failed to publish agent: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      showError('Failed to publish agent: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
   };
 
