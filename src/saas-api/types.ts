@@ -360,6 +360,7 @@ export type SaaSErrorCode =
   | 'SUBSCRIPTION_INACTIVE'
   | 'PROVIDER_NOT_ALLOWED'
   | 'AGENT_LIMIT_EXCEEDED'
+  | 'EXTERNAL_API_ERROR'
   | 'INTERNAL_ERROR';
 
 export class SaaSError extends Error {

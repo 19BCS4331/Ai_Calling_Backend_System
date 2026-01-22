@@ -5,6 +5,7 @@ import type { Agent, CreateAgentRequest } from '../../lib/supabase-types';
 import { useProviders } from '../../hooks/useProviders';
 import { Select } from '../ui/Select';
 import { AgentToolsManager } from './AgentToolsManager';
+import { VoiceSelector } from './VoiceSelector';
 
 interface AgentFormProps {
   agent?: Agent;
@@ -213,38 +214,6 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
               </p>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-5">
-              <div>
-                <label className="block text-sm text-white/60 mb-2">Language</label>
-                <select
-                  value={formData.language}
-                  onChange={(e) => updateField('language', e.target.value)}
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
-                >
-                  <option value="en-IN">English (India)</option>
-                  <option value="hi-IN">Hindi</option>
-                  <option value="ta-IN">Tamil</option>
-                  <option value="te-IN">Telugu</option>
-                  <option value="bn-IN">Bengali</option>
-                  <option value="mr-IN">Marathi</option>
-                  <option value="gu-IN">Gujarati</option>
-                  <option value="kn-IN">Kannada</option>
-                  <option value="ml-IN">Malayalam</option>
-                  <option value="pa-IN">Punjabi</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm text-white/60 mb-2">Voice ID</label>
-                <input
-                  type="text"
-                  value={formData.voice_id}
-                  onChange={(e) => updateField('voice_id', e.target.value)}
-                  placeholder="e.g., anushka, abhilash"
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
-                />
-              </div>
-            </div>
           </motion.div>
         )}
 
@@ -336,17 +305,47 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
                 />
               </div>
 
-              <div>
-                <label className="block text-sm text-white/60 mb-2">TTS Language</label>
-                <input
-                  type="text"
-                  value={(formData.tts_config as any)?.language || 'en-IN'}
-                  onChange={(e) =>
-                    updateField('tts_config', { ...formData.tts_config, language: e.target.value })
-                  }
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
-                />
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-white/60 mb-2">Language</label>
+                  <select
+                    value={formData.language}
+                    onChange={(e) => updateField('language', e.target.value)}
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
+                  >
+                    <option value="en-IN">English (India)</option>
+                    <option value="hi-IN">Hindi</option>
+                    <option value="ta-IN">Tamil</option>
+                    <option value="te-IN">Telugu</option>
+                    <option value="bn-IN">Bengali</option>
+                    <option value="mr-IN">Marathi</option>
+                    <option value="gu-IN">Gujarati</option>
+                    <option value="kn-IN">Kannada</option>
+                    <option value="ml-IN">Malayalam</option>
+                    <option value="pa-IN">Punjabi</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm text-white/60 mb-2">TTS Language Code</label>
+                  <input
+                    type="text"
+                    value={(formData.tts_config as any)?.language || 'en-IN'}
+                    onChange={(e) =>
+                      updateField('tts_config', { ...formData.tts_config, language: e.target.value })
+                    }
+                    placeholder="e.g., en-IN, hi-IN"
+                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
+                  />
+                  <p className="text-xs text-white/40 mt-1">Provider-specific language code</p>
+                </div>
               </div>
+
+              <VoiceSelector
+                provider={formData.tts_provider || 'cartesia'}
+                selectedVoiceId={formData.voice_id || ''}
+                onVoiceChange={(voiceId) => updateField('voice_id', voiceId)}
+              />
             </div>
 
             {/* STT Provider */}

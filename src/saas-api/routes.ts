@@ -1132,6 +1132,86 @@ export function createSaaSRouter(): Router {
   );
 
   // ===========================================
+  // Provider Integrations
+  // ===========================================
+
+  /**
+   * GET /providers/cartesia/voices
+   * Fetch available voices from Cartesia API
+   */
+  router.get(
+    '/providers/cartesia/voices',
+    authMiddleware,
+    requireAuth,
+    asyncHandler(async (req: Request, res: Response) => {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        throw SaaSError.unauthorized('User not authenticated');
+      }
+
+      // Get user's organization and Cartesia credentials
+      const { data: orgMembers } = await supabaseAdmin
+        .from('organization_members')
+        .select('organization_id')
+        .eq('user_id', userId)
+        .limit(1)
+        .single();
+
+      if (!orgMembers) {
+        throw SaaSError.notFound('Organization not found');
+      }
+
+      const { data: credentials } = await supabaseAdmin
+        .from('organization_provider_credentials')
+        .select('credentials')
+        .eq('organization_id', orgMembers.organization_id)
+        .eq('provider_slug', 'cartesia')
+        .single();
+
+      if (!credentials?.credentials?.api_key) {
+        throw SaaSError.validation('Cartesia API key not configured for your organization');
+      }
+
+      // Fetch voices from Cartesia API
+      const cartesiaResponse = await fetch('https://api.cartesia.ai/voices', {
+        headers: {
+          'Authorization': `Bearer ${credentials.credentials.api_key}`,
+          'Cartesia-Version': '2024-06-10',
+        },
+      });
+
+      if (!cartesiaResponse.ok) {
+        const errorText = await cartesiaResponse.text();
+        console.error('Cartesia API error:', errorText);
+        throw new SaaSError(
+          'EXTERNAL_API_ERROR',
+          `Failed to fetch voices from Cartesia: ${cartesiaResponse.status}`,
+          502
+        );
+      }
+
+      const cartesiaData = await cartesiaResponse.json() as {
+        data?: Array<{
+          id: string;
+          name: string;
+          description?: string;
+          language?: string;
+          is_public?: boolean;
+          is_owner?: boolean;
+          created_at?: string;
+        }>;
+        has_more?: boolean;
+        next_page?: string;
+      };
+      
+      res.json({
+        voices: cartesiaData.data || [],
+        has_more: cartesiaData.has_more || false,
+      });
+    })
+  );
+
+  // ===========================================
   // Error Handler
   // ===========================================
 
