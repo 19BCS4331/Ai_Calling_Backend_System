@@ -4,6 +4,7 @@ import { Phone, RefreshCw, Unlink, Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useOrganizationStore } from '../../store/organization';
 import { useToast } from '../../hooks/useToast';
+import { saasApi, saasEndpoints } from '../../lib/api';
 
 interface PhoneNumber {
   id: string;
@@ -50,20 +51,12 @@ export function PhoneNumbers() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
-      const response = await fetch(
-        `/api/v1/orgs/${currentOrganization.id}/phone-numbers`,
-        {
-          headers: {
-            'Authorization': `Bearer ${session?.access_token}`,
-            'Content-Type': 'application/json'
-          }
-        }
+      const data = await saasApi.get<{ phone_numbers: PhoneNumber[] }>(
+        saasEndpoints.phoneNumbers(currentOrganization.id),
+        session?.access_token
       );
-
-      if (response.ok) {
-        const data = await response.json();
-        setPhoneNumbers(data.phone_numbers || []);
-      }
+      
+      setPhoneNumbers(data.phone_numbers || []);
     } catch (error) {
       console.error('Failed to fetch phone numbers:', error);
       toast.error('Failed to load phone numbers');
@@ -78,21 +71,13 @@ export function PhoneNumbers() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
-      const response = await fetch(
-        `/api/v1/orgs/${currentOrganization.id}/agents`,
-        {
-          headers: {
-            'Authorization': `Bearer ${session?.access_token}`,
-            'Content-Type': 'application/json'
-          }
-        }
+      const data = await saasApi.get<{ data: Agent[] }>(
+        saasEndpoints.agents(currentOrganization.id),
+        session?.access_token
       );
-
-      if (response.ok) {
-        const data = await response.json();
-        // API returns { data: [...], pagination: {...} }
-        setAgents(data.data || data.agents || []);
-      }
+      
+      // API returns { data: [...], pagination: {...} }
+      setAgents(data.data || []);
     } catch (error) {
       console.error('Failed to fetch agents:', error);
     }
@@ -105,23 +90,12 @@ export function PhoneNumbers() {
       setIsSyncing(true);
       const { data: { session } } = await supabase.auth.getSession();
 
-      const response = await fetch(
-        `/api/v1/orgs/${currentOrganization.id}/phone-numbers/sync`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${session?.access_token}`,
-            'Content-Type': 'application/json'
-          }
-        }
+      const result = await saasApi.post<{ message: string }>(
+        saasEndpoints.phoneNumbersSync(currentOrganization.id),
+        undefined,
+        session?.access_token
       );
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to sync phone numbers');
-      }
-
-      const result = await response.json();
+      
       toast.success(result.message);
       await fetchPhoneNumbers();
     } catch (error) {
@@ -138,23 +112,12 @@ export function PhoneNumbers() {
       setLinkingNumberId(numberId);
       const { data: { session } } = await supabase.auth.getSession();
 
-      const response = await fetch(
-        `/api/v1/orgs/${currentOrganization.id}/phone-numbers/${numberId}/link`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${session?.access_token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ agent_id: agentId })
-        }
+      await saasApi.post(
+        saasEndpoints.phoneNumberLink(currentOrganization.id, numberId),
+        { agent_id: agentId },
+        session?.access_token
       );
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to link agent');
-      }
-
+      
       toast.success('Agent linked successfully');
       await fetchPhoneNumbers();
     } catch (error) {
@@ -171,21 +134,11 @@ export function PhoneNumbers() {
       setLinkingNumberId(numberId);
       const { data: { session } } = await supabase.auth.getSession();
 
-      const response = await fetch(
-        `/api/v1/orgs/${currentOrganization.id}/phone-numbers/${numberId}/link`,
-        {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${session?.access_token}`,
-            'Content-Type': 'application/json'
-          }
-        }
+      await saasApi.delete(
+        saasEndpoints.phoneNumberLink(currentOrganization.id, numberId),
+        session?.access_token
       );
-
-      if (!response.ok) {
-        throw new Error('Failed to unlink agent');
-      }
-
+      
       toast.success('Agent unlinked successfully');
       await fetchPhoneNumbers();
     } catch (error) {

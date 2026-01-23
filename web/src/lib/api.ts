@@ -198,4 +198,14 @@ export const saasEndpoints = {
   // Payments
   checkout: (orgId: string) => `/api/v1/orgs/${orgId}/payments/checkout`,
   portal: (orgId: string) => `/api/v1/orgs/${orgId}/payments/portal`,
+  
+  // Telephony
+  telephonyStatus: (orgId: string) => `/api/v1/orgs/${orgId}/telephony/plivo/status`,
+  telephonyConnect: (orgId: string) => `/api/v1/orgs/${orgId}/telephony/plivo/connect`,
+  telephonyDisconnect: (orgId: string) => `/api/v1/orgs/${orgId}/telephony/plivo/disconnect`,
+  
+  // Phone Numbers
+  phoneNumbers: (orgId: string) => `/api/v1/orgs/${orgId}/phone-numbers`,
+  phoneNumbersSync: (orgId: string) => `/api/v1/orgs/${orgId}/phone-numbers/sync`,
+  phoneNumberLink: (orgId: string, numberId: string) => `/api/v1/orgs/${orgId}/phone-numbers/${numberId}/link`,
 };

@@ -4,6 +4,7 @@ import { Phone, Check, AlertCircle, Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useOrganizationStore } from '../../store/organization';
 import { useToast } from '../../hooks/useToast';
+import { saasApi, saasEndpoints } from '../../lib/api';
 
 interface PlivoStatus {
   connected: boolean;
@@ -32,20 +33,12 @@ export function TelephonySettings() {
       setIsFetching(true);
       const { data: { session } } = await supabase.auth.getSession();
       
-      const response = await fetch(
-        `/api/v1/orgs/${currentOrganization.id}/telephony/plivo/status`,
-        {
-          headers: {
-            'Authorization': `Bearer ${session?.access_token}`,
-            'Content-Type': 'application/json'
-          }
-        }
+      const data = await saasApi.get<{ status: PlivoStatus }>(
+        saasEndpoints.telephonyStatus(currentOrganization.id),
+        session?.access_token
       );
-
-      if (response.ok) {
-        const data = await response.json();
-        setStatus(data);
-      }
+      
+      setStatus(data.status);
     } catch (error) {
       console.error('Failed to fetch Plivo status:', error);
     } finally {
@@ -54,45 +47,25 @@ export function TelephonySettings() {
   };
 
   const handleConnect = async () => {
-    if (!authId || !authToken) {
-      toast.error('Please enter both Auth ID and Auth Token');
-      return;
-    }
-
-    if (!currentOrganization) {
-      toast.error('No organization selected');
-      return;
-    }
+    if (!currentOrganization || !authId || !authToken) return;
 
     try {
       setIsLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
 
-      const response = await fetch(
-        `/api/v1/orgs/${currentOrganization.id}/telephony/plivo/connect`,
+      const data = await saasApi.post<{ success: boolean; message: string }>(
+        saasEndpoints.telephonyConnect(currentOrganization.id),
         {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${session?.access_token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ authId, authToken })
-        }
+          authId,
+          authToken,
+          webhookBaseUrl: window.location.origin
+        },
+        session?.access_token
       );
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to connect Plivo account');
-      }
-
-      const result = await response.json();
-      toast.success(result.message || 'Plivo account connected successfully');
       
-      // Clear form
+      toast.success(data.message || 'Plivo connected successfully');
       setAuthId('');
       setAuthToken('');
-      
-      // Refresh status
       await fetchStatus();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to connect Plivo account');
@@ -108,22 +81,12 @@ export function TelephonySettings() {
       setIsLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
 
-      const response = await fetch(
-        `/api/v1/orgs/${currentOrganization.id}/telephony/plivo/disconnect`,
-        {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${session?.access_token}`,
-            'Content-Type': 'application/json'
-          }
-        }
+      const data = await saasApi.delete<{ success: boolean; message: string }>(
+        saasEndpoints.telephonyDisconnect(currentOrganization.id),
+        session?.access_token
       );
-
-      if (!response.ok) {
-        throw new Error('Failed to disconnect Plivo account');
-      }
-
-      toast.success('Plivo account disconnected successfully');
+      
+      toast.success(data.message || 'Plivo disconnected successfully');
       await fetchStatus();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to disconnect Plivo account');
