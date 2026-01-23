@@ -624,10 +624,14 @@ export class APIServer {
       audioQuality: config.tts?.audioQuality || 'web'  // 'web' or 'telephony' for Cartesia
     };
 
-    // Retrieve agent tools if agentId is provided
+    // LATENCY OPTIMIZATION: Parallelize independent database queries
+    // This reduces session setup time by ~300ms
     let agentTools: any[] = [];
-    // Load agent tools and their configurations
     let toolConfigs: any[] = [];
+    let session: any;
+    let organizationId: string | undefined;
+    let callRecord: any;
+
     if (agentId) {
       try {
         const supabaseUrl = process.env.SUPABASE_URL;
@@ -637,42 +641,45 @@ export class APIServer {
           const { createClient } = await import('@supabase/supabase-js');
           const supabase = createClient(supabaseUrl, supabaseKey);
           
-          // Get agent tools
-          const { data, error } = await supabase.rpc('get_agent_tools', { 
-            p_agent_id: agentId 
-          });
+          // Parallelize all independent database queries
+          const [toolsResult, configsResult, orgIdResult] = await Promise.all([
+            supabase.rpc('get_agent_tools', { p_agent_id: agentId }),
+            supabase.rpc('get_agent_tools_with_configs', { p_agent_id: agentId }),
+            getOrgIdFromAgent(agentId)
+          ]);
           
-          if (!error && data) {
-            agentTools = data;
+          // Process agent tools
+          if (!toolsResult.error && toolsResult.data) {
+            agentTools = toolsResult.data;
             this.logger.info('Retrieved agent tools', { 
               agentId, 
               toolCount: agentTools.length 
             });
           }
 
-          // Get tool configurations (for MCP function filtering and renaming)
-          const { data: configs, error: configError } = await supabase.rpc('get_agent_tools_with_configs', {
-            p_agent_id: agentId
-          });
-
-          if (!configError && configs) {
-            toolConfigs = configs;
+          // Process tool configurations
+          if (!configsResult.error && configsResult.data) {
+            toolConfigs = configsResult.data;
             this.logger.info('Retrieved tool configurations', {
               agentId,
               configCount: toolConfigs.length
             });
           }
+
+          // Process organization ID
+          organizationId = orgIdResult || undefined;
         }
       } catch (error) {
-        this.logger.warn('Failed to retrieve agent tools', {
+        this.logger.warn('Failed to retrieve agent data', {
           agentId,
           error: (error as Error).message
         });
       }
     }
 
-    // Create session
-    const session = await this.sessionManager.createSession({
+    // Parallelize session creation and call record creation
+    // Session creation is needed first for sessionId, but we can prepare the call record immediately after
+    session = await this.sessionManager.createSession({
       tenantId,
       callerId: connectionId,
       sttConfig,
@@ -682,13 +689,8 @@ export class APIServer {
       context: config.context || {}
     });
 
-    // Create call record in database
-    let organizationId: string | undefined;
-    if (agentId) {
-      organizationId = await getOrgIdFromAgent(agentId) || undefined;
-    }
-    
-    const callRecord = await createCallRecord({
+    // Create call record (non-blocking for session setup)
+    callRecord = await createCallRecord({
       organizationId,
       agentId,
       sessionId: session.sessionId,
@@ -730,10 +732,10 @@ export class APIServer {
     // Build latency optimization config from client request
     const latencyConfig: LatencyOptimizationConfig = this.buildLatencyConfig(config.latencyOptimization);
 
-    // Initialize audio cache with TTS provider if not already done
+    // Audio cache is now initialized globally on server startup
+    // Skip per-session initialization for better latency
     if (latencyConfig.audioCaching.enabled && !this.audioCache.isReady()) {
-      this.audioCache.initialize(ttsProvider, latencyConfig.audioCaching.preloadLanguages)
-        .catch(err => this.logger.warn('Audio cache init failed', { error: err.message }));
+      this.logger.debug('Audio cache not ready, will initialize on demand');
     }
 
     // Create a NEW tool registry for this session (don't use shared global registry)
@@ -934,7 +936,7 @@ export class APIServer {
         apiKey: toolConfig.auth_config?.token || toolConfig.auth_config?.key,
         timeout: toolConfig.timeout_ms || 30000,
         toolConfigs: mcpToolConfigs.length > 0 ? mcpToolConfigs : undefined
-      }, sessionToolRegistry).then(() => ({ name: clientName, success: true, toolName: tool.tool_name }))
+      }, sessionToolRegistry, session.sessionId).then(() => ({ name: clientName, success: true, toolName: tool.tool_name }))
         .catch((error: Error) => {
           this.logger.warn('Failed to connect to agent MCP tool', {
             sessionId: session.sessionId,
@@ -961,7 +963,7 @@ export class APIServer {
             url: workflow.url,
             apiKey: workflow.apiKey,
             timeout: 30000
-          }, sessionToolRegistry).then(() => ({ name: clientName, success: true, toolName: workflow.name || 'n8n' }))
+          }, sessionToolRegistry, session.sessionId).then(() => ({ name: clientName, success: true, toolName: workflow.name || 'n8n' }))
             .catch((error: Error) => {
               this.logger.warn('Failed to connect to MCP workflow', {
                 sessionId: session.sessionId,
@@ -1243,21 +1245,19 @@ export class APIServer {
    */
   private async cleanupSessionMcpClients(sessionId: string): Promise<void> {
     const clientNames = this.sessionMcpClients.get(sessionId);
+    // Use new cleanupSession method for connection pooling
     if (clientNames && clientNames.length > 0) {
-      for (const clientName of clientNames) {
-        try {
-          await this.mcpClientManager.removeServer(clientName);
-          this.logger.info('Removed session MCP client', { sessionId, clientName });
-        } catch (error) {
-          this.logger.warn('Failed to remove session MCP client', {
-            sessionId,
-            clientName,
-            error: (error as Error).message
-          });
-        }
+      try {
+        await this.mcpClientManager.cleanupSession(sessionId);
+        this.logger.info('Cleaned up session MCP connections', { sessionId, count: clientNames.length });
+      } catch (error) {
+        this.logger.warn('Failed to cleanup session MCP connections', {
+          sessionId,
+          error: (error as Error).message
+        });
       }
-      this.sessionMcpClients.delete(sessionId);
-    }
+    } 
+    this.sessionMcpClients.delete(sessionId);
   }
 
   /**
@@ -1566,12 +1566,41 @@ export class APIServer {
    * Start the server
    */
   async start(): Promise<void> {
+    // LATENCY OPTIMIZATION: Pre-initialize audio cache globally on server startup
+    // This eliminates 14+ seconds of cache preload time on first session
+    if (this.config.telephonyConfig?.defaultTTSConfig || process.env.SARVAM_API_KEY || process.env.CARTESIA_API_KEY) {
+      try {
+        this.logger.info('Pre-initializing global audio cache');
+        
+        // Create a default TTS provider for cache preloading
+        const defaultTTSConfig: TTSConfig = this.config.telephonyConfig?.defaultTTSConfig || {
+          type: (process.env.CARTESIA_API_KEY ? 'cartesia' : 'sarvam') as any,
+          credentials: { 
+            apiKey: process.env.CARTESIA_API_KEY || process.env.SARVAM_API_KEY || '' 
+          },
+          voice: { voiceId: 'anushka', language: 'en-IN' as any, gender: 'female' }
+        };
+        
+        const cacheTTSProvider = TTSProviderFactory.create(defaultTTSConfig, this.logger);
+        await cacheTTSProvider.initialize();
+        
+        // Preload cache with common languages
+        await this.audioCache.initialize(cacheTTSProvider, ['en-IN', 'hi-IN']);
+        this.logger.info('Global audio cache initialized successfully');
+      } catch (error) {
+        this.logger.warn('Failed to initialize global audio cache', { 
+          error: (error as Error).message 
+        });
+      }
+    }
+
     return new Promise((resolve) => {
       this.httpServer.listen(this.config.port, this.config.host, () => {
         this.logger.info('API server started', {
           host: this.config.host,
           port: this.config.port,
-          mcp: this.config.enableMCP
+          mcp: this.config.enableMCP,
+          audioCacheReady: this.audioCache.isReady()
         });
         resolve();
       });

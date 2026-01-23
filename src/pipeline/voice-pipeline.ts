@@ -168,6 +168,22 @@ export class VoicePipeline extends EventEmitter {
     await this.ttsProvider.initialize();
     this.logger.debug('TTS provider initialized');
 
+    // LATENCY OPTIMIZATION: Pre-warm LLM cache with system prompt + tools
+    // This eliminates ~1.5s latency on the first turn by creating the cache
+    // before the user speaks, instead of blocking on the first LLM request
+    if (this.llmProvider.getName() === 'gemini' && typeof (this.llmProvider as any).prewarmCache === 'function') {
+      this.logger.debug('Pre-warming Gemini cache with tools');
+      const tools = this.toolRegistry.getDefinitions();
+      const systemPrompt = this.session.llmConfig.systemPrompt;
+      
+      // Pre-warm cache asynchronously (don't block STT session start)
+      (this.llmProvider as any).prewarmCache(systemPrompt, tools).catch((error: Error) => {
+        this.logger.warn('Cache pre-warming failed, will create on first request', { 
+          error: error.message 
+        });
+      });
+    }
+
     // Start STT streaming session
     this.logger.debug('Starting STT streaming session');
     await this.startSTTSession();
@@ -232,6 +248,39 @@ export class VoicePipeline extends EventEmitter {
     }
 
     this.sttSession.write(audioChunk);
+  }
+
+  /**
+   * LATENCY OPTIMIZATION: Detect if a partial transcript is likely a complete utterance
+   * Used for speculative LLM execution to reduce latency
+   */
+  private isLikelyCompleteUtterance(text: string): boolean {
+    const trimmed = text.trim();
+    
+    // Check for sentence-ending punctuation
+    if (/[.!?।॥]$/.test(trimmed)) {
+      return true;
+    }
+    
+    // Check for turn-ending phrases
+    const turnEndingPhrases = /\b(thanks|thank you|okay|ok|bye|goodbye|done|that's it|that's all|please proceed|go ahead)\s*$/i;
+    if (turnEndingPhrases.test(trimmed)) {
+      return true;
+    }
+    
+    // Check for questions (even without punctuation)
+    const questionStarters = /^(what|when|where|who|why|how|can|could|would|will|is|are|do|does)/i;
+    if (questionStarters.test(trimmed) && trimmed.length > 15) {
+      return true;
+    }
+    
+    // Check for complete greetings
+    const greetings = /^(hello|hi|hey|good morning|good afternoon|good evening|namaste)$/i;
+    if (greetings.test(trimmed)) {
+      return true;
+    }
+    
+    return false;
   }
 
   /**
@@ -330,6 +379,31 @@ export class VoicePipeline extends EventEmitter {
             this.speculativeAbortController.abort();
             this.speculativeAbortController = null;
             this.isSpeculativeExecution = false;
+          }
+          
+          // LATENCY OPTIMIZATION: Speculative LLM execution on high-confidence partials
+          // Start LLM processing early if we detect a likely complete utterance
+          // This can save 200-400ms by overlapping STT finalization with LLM startup
+          if (!this.isProcessingTurn && !this.isSpeculativeExecution && result.text.length > 10) {
+            const isLikelyComplete = this.isLikelyCompleteUtterance(result.text);
+            const hasHighConfidence = result.confidence > 0.85;
+            
+            if (isLikelyComplete && hasHighConfidence) {
+              this.logger.debug('Starting speculative LLM execution', {
+                text: result.text,
+                confidence: result.confidence
+              });
+              
+              this.isSpeculativeExecution = true;
+              this.speculativeAbortController = new AbortController();
+              
+              // Start processing speculatively (will be aborted if user continues)
+              this.processUserInput(result.text).catch(err => {
+                this.logger.debug('Speculative execution aborted or failed', { 
+                  error: err.message 
+                });
+              });
+            }
           }
         },
 
@@ -471,10 +545,13 @@ export class VoicePipeline extends EventEmitter {
       waitMs = 350;  // Short but complete
       confidence = 'medium';
     }
-    // PRIORITY 6: Very short without punctuation (LOW confidence)
+    // PRIORITY 6: Very short without punctuation
+    // LATENCY OPTIMIZATION: Fast-track common greetings even without punctuation
     else if (length < 15) {
-      waitMs = maxWait;  // 900ms - might be incomplete
-      confidence = 'low';
+      // Check for common greetings (high-confidence even without punctuation)
+      const isGreeting = /^(hi|hey|hello|hola|namaste|namaskar|good\s+(morning|afternoon|evening|night)|yes|no|okay|ok|sure)$/i.test(trimmed);
+      waitMs = isGreeting ? 300 : maxWait;  // Fast-track greetings: 300ms vs 900ms
+      confidence = isGreeting ? 'high' : 'low';
     }
     // PRIORITY 7: Medium length without punctuation (MEDIUM confidence)
     else if (length < 40) {

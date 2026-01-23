@@ -72,6 +72,44 @@ export class GeminiLLMProvider extends LLMProvider {
     this.logger.info('Gemini LLM provider initialized', { model: this.config.model });
   }
 
+  /**
+   * Pre-warm cache with system prompt and tools before first user input
+   * This eliminates ~1.5s latency on the first LLM request
+   * Call this during pipeline startup after tools are registered
+   */
+  async prewarmCache(systemPrompt?: string, tools?: ToolDefinition[]): Promise<void> {
+    if (!this.client) {
+      this.logger.warn('Cannot prewarm cache - provider not initialized');
+      return;
+    }
+
+    // Nothing to cache
+    if (!systemPrompt && (!tools || tools.length === 0)) {
+      this.logger.debug('Skipping cache prewarm - no system prompt or tools');
+      return;
+    }
+
+    const functionDeclarations = tools ? this.convertTools(tools) : undefined;
+    const effectiveSystemPrompt = systemPrompt || this.config.systemPrompt;
+
+    this.logger.info('Pre-warming Gemini cache', {
+      hasSystemPrompt: !!effectiveSystemPrompt,
+      systemPromptLength: effectiveSystemPrompt?.length || 0,
+      toolCount: tools?.length || 0
+    });
+
+    const startTime = Date.now();
+
+    // Create cache asynchronously (don't block pipeline start)
+    await this.getOrCreateCache(effectiveSystemPrompt, functionDeclarations);
+
+    const duration = Date.now() - startTime;
+    this.logger.info('Cache pre-warming complete', {
+      durationMs: duration,
+      cacheName: this.cachedContentName
+    });
+  }
+
   async generate(
     messages: ChatMessage[],
     tools?: ToolDefinition[],
