@@ -2,18 +2,17 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Phone, PhoneIncoming, PhoneOutgoing, Clock, 
- ArrowUpRight, ArrowDownRight,
-  Activity, Mic, BarChart3,
-  Globe
+  Activity, BarChart3,
+  Globe, DollarSign, CheckCircle, Users
 } from 'lucide-react';
 import { Select } from '../../components/ui/Select';
-import { VoiceDemo } from '../../components/voice/VoiceDemo';
 import { CreditBalance } from '../../components/CreditBalance';
 import { useAuthStore } from '../../store/auth';
 import { useOrganizationStore } from '../../store/organization';
 import { useCalls } from '../../hooks/useCalls';
 import { useUsage } from '../../hooks/useUsage';
 import { useAgents } from '../../hooks/useAgents';
+import { supabase } from '../../lib/supabase';
 
 interface DashboardStats {
   totalCalls: number;
@@ -24,11 +23,19 @@ interface DashboardStats {
   minutesRemaining: number;
   activeCalls: number;
   maxConcurrent: number;
+  successRate: number;
+  totalCost: number;
+  activeAgents: number;
+}
+
+interface CallVolumeData {
+  date: string;
+  count: number;
 }
 
 export function Overview() {
   useAuthStore();
-  const { currentSubscription } = useOrganizationStore();
+  const { currentSubscription, currentOrganization } = useOrganizationStore();
   const { calls } = useCalls();
   const { currentUsage } = useUsage();
   const { agents: _agents } = useAgents();
@@ -41,9 +48,13 @@ export function Overview() {
     minutesUsed: 0,
     minutesRemaining: 0,
     activeCalls: 0,
-    maxConcurrent: 5
+    maxConcurrent: 5,
+    successRate: 0,
+    totalCost: 0,
+    activeAgents: 0
   });
   const [timeRange, setTimeRange] = useState('7');
+  const [callVolumeData, setCallVolumeData] = useState<CallVolumeData[]>([]);
 
   useEffect(() => {
     if (!calls.length && !currentUsage) {
@@ -65,7 +76,23 @@ export function Overview() {
     const minutesRemaining = Math.max(0, includedMinutes - minutesUsed);
     const maxConcurrent = currentSubscription?.plans?.max_concurrent_calls || 5;
 
-    console.log("Current subscription plan: ", currentSubscription)
+    // Calculate success rate
+    const successfulCalls = calls.filter(c => c.status === 'completed').length;
+    const successRate = totalCalls > 0 ? Math.round((successfulCalls / totalCalls) * 100) : 0;
+
+    // Calculate total cost - use user-facing cost, fallback to internal cost components
+    const totalCost = calls.reduce((sum, c) => {
+      // Use cost_user_cents if available (what we charge the user)
+      // Otherwise fallback to sum of internal cost components
+      const callCost = (c as any).cost_user_cents || 
+                       ((c.cost_telephony_cents || 0) + (c.cost_stt_cents || 0) + 
+                        (c.cost_tts_cents || 0) + (c.cost_llm_cents || 0));
+      return sum + (callCost / 100);
+    }, 0);
+
+    // Count active agents (agents with at least one call)
+    const agentsWithCalls = new Set(calls.map(c => c.agent_id).filter(Boolean));
+    const activeAgents = agentsWithCalls.size;
 
     setStats({
       totalCalls,
@@ -75,9 +102,65 @@ export function Overview() {
       minutesUsed,
       minutesRemaining,
       activeCalls,
-      maxConcurrent
+      maxConcurrent,
+      successRate,
+      totalCost,
+      activeAgents
     });
   }, [calls, currentUsage, currentSubscription]);
+
+  // Fetch call volume data based on time range
+  useEffect(() => {
+    if (!currentOrganization?.id) return;
+
+    const fetchCallVolumeData = async () => {
+      const days = parseInt(timeRange);
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+
+      try {
+        const { data, error } = await supabase
+          .from('calls')
+          .select('started_at')
+          .eq('organization_id', currentOrganization.id)
+          .gte('started_at', startDate.toISOString())
+          .order('started_at', { ascending: true });
+
+        if (error) throw error;
+
+        // Group calls by date
+        const volumeMap = new Map<string, number>();
+        
+        // Initialize all dates in range with 0
+        for (let i = 0; i < days; i++) {
+          const date = new Date();
+          date.setDate(date.getDate() - (days - 1 - i));
+          const dateStr = date.toISOString().split('T')[0];
+          volumeMap.set(dateStr, 0);
+        }
+
+        // Count calls per date
+        data?.forEach(call => {
+          if (call.started_at) {
+            const dateStr = call.started_at.split('T')[0];
+            volumeMap.set(dateStr, (volumeMap.get(dateStr) || 0) + 1);
+          }
+        });
+
+        // Convert to array format
+        const volumeData: CallVolumeData[] = Array.from(volumeMap.entries()).map(([date, count]) => ({
+          date,
+          count
+        }));
+
+        setCallVolumeData(volumeData);
+      } catch (err) {
+        console.error('Error fetching call volume data:', err);
+      }
+    };
+
+    fetchCallVolumeData();
+  }, [currentOrganization?.id, timeRange]);
 
   const formatDuration = (seconds?: number) => {
     if (!seconds) return '0:00';
@@ -91,33 +174,49 @@ export function Overview() {
       icon: Phone, 
       label: 'Total Calls', 
       value: stats.totalCalls.toLocaleString(), 
-      change: '+12%', 
-      changeType: 'positive',
       gradient: 'from-blue-500 to-cyan-500'
     },
     { 
-      icon: PhoneIncoming, 
-      label: 'Inbound', 
-      value: stats.inboundCalls.toLocaleString(), 
-      change: '+8%', 
-      changeType: 'positive',
+      icon: CheckCircle, 
+      label: 'Success Rate', 
+      value: `${stats.successRate}%`, 
       gradient: 'from-green-500 to-emerald-500'
-    },
-    { 
-      icon: PhoneOutgoing, 
-      label: 'Outbound', 
-      value: stats.outboundCalls.toLocaleString(), 
-      change: '+18%', 
-      changeType: 'positive',
-      gradient: 'from-purple-500 to-pink-500'
     },
     { 
       icon: Clock, 
       label: 'Avg Duration', 
       value: stats.avgDuration, 
-      change: '-5%', 
-      changeType: 'negative',
+      gradient: 'from-purple-500 to-pink-500'
+    },
+    { 
+      icon: DollarSign, 
+      label: 'Total Cost', 
+      value: `$${stats.totalCost.toFixed(2)}`, 
       gradient: 'from-orange-500 to-red-500'
+    },
+    { 
+      icon: PhoneIncoming, 
+      label: 'Inbound', 
+      value: stats.inboundCalls.toLocaleString(), 
+      gradient: 'from-cyan-500 to-blue-500'
+    },
+    { 
+      icon: PhoneOutgoing, 
+      label: 'Outbound', 
+      value: stats.outboundCalls.toLocaleString(), 
+      gradient: 'from-pink-500 to-rose-500'
+    },
+    { 
+      icon: Users, 
+      label: 'Active Agents', 
+      value: stats.activeAgents.toLocaleString(), 
+      gradient: 'from-indigo-500 to-purple-500'
+    },
+    { 
+      icon: Activity, 
+      label: 'Active Calls', 
+      value: stats.activeCalls.toLocaleString(), 
+      gradient: 'from-emerald-500 to-teal-500'
     },
   ];
 
@@ -158,12 +257,6 @@ export function Overview() {
                 <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${stat.gradient} flex items-center justify-center`}>
                   <stat.icon size={20} className="text-white" />
                 </div>
-                <div className={`flex items-center gap-1 text-xs font-medium ${
-                  stat.changeType === 'positive' ? 'text-green-400' : 'text-red-400'
-                }`}>
-                  {stat.changeType === 'positive' ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-                  {stat.change}
-                </div>
               </div>
               <p className="text-2xl font-bold text-white mb-1">{stat.value}</p>
               <p className="text-sm text-white/40">{stat.label}</p>
@@ -172,23 +265,8 @@ export function Overview() {
         ))}
       </div>
 
-      {/* Main Content Grid */}
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Voice Agent Demo */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="lg:col-span-2"
-        >
-          <div className="flex items-center gap-2 mb-4">
-            <Mic size={20} className="text-purple-400" />
-            <h2 className="text-lg font-semibold text-white">Live Voice Agent</h2>
-          </div>
-          <VoiceDemo />
-        </motion.div>
-
-        {/* Recent Calls */}
+      {/* Recent Calls */}
+      <div className="grid lg:grid-cols-1 gap-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -278,23 +356,49 @@ export function Overview() {
           />
         </div>
         
-        {/* Simple bar chart visualization */}
-        <div className="h-48 flex items-end justify-between gap-2">
-          {[65, 45, 80, 55, 90, 70, 85].map((height, i) => (
-            <motion.div
-              key={i}
-              initial={{ height: 0 }}
-              animate={{ height: `${height}%` }}
-              transition={{ delay: 0.9 + i * 0.1, duration: 0.5 }}
-              className="flex-1 bg-gradient-to-t from-purple-500 to-pink-500 rounded-t-lg opacity-80 hover:opacity-100 transition-opacity cursor-pointer"
-            />
-          ))}
-        </div>
-        <div className="flex justify-between mt-4 text-xs text-white/40">
-          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
-            <span key={day}>{day}</span>
-          ))}
-        </div>
+        {/* Bar chart visualization with real data */}
+        {callVolumeData.length > 0 ? (
+          <>
+            <div className="h-48 flex items-end justify-between gap-2">
+              {callVolumeData.map((dataPoint, i) => {
+                const maxCount = Math.max(...callVolumeData.map(d => d.count), 1);
+                const heightPercent = (dataPoint.count / maxCount) * 100;
+                
+                return (
+                  <motion.div
+                    key={dataPoint.date}
+                    initial={{ height: 0 }}
+                    animate={{ height: `${heightPercent}%` }}
+                    transition={{ delay: 0.9 + i * 0.05, duration: 0.5 }}
+                    className="relative flex-1 bg-gradient-to-t from-purple-500 to-pink-500 rounded-t-lg opacity-80 hover:opacity-100 transition-opacity cursor-pointer group"
+                    title={`${dataPoint.count} calls`}
+                  >
+                    {/* Tooltip on hover */}
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-black/90 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                      {dataPoint.count} calls
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+            <div className="flex justify-between mt-4 text-xs text-white/40">
+              {callVolumeData.map((dataPoint) => {
+                const date = new Date(dataPoint.date);
+                const label = parseInt(timeRange) <= 7 
+                  ? date.toLocaleDateString('en-US', { weekday: 'short' })
+                  : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                return <span key={dataPoint.date} className="truncate">{label}</span>;
+              })}
+            </div>
+          </>
+        ) : (
+          <div className="h-48 flex items-center justify-center text-white/40">
+            <div className="text-center">
+              <BarChart3 size={32} className="mx-auto mb-2 opacity-50" />
+              <p className="text-sm">No call data available</p>
+            </div>
+          </div>
+        )}
       </motion.div>
     </div>
   );

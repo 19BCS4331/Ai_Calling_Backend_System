@@ -12,6 +12,7 @@ import { STTProviderFactory } from '../providers/base/stt-provider';
 import { LLMProviderFactory } from '../providers/base/llm-provider';
 import { TTSProviderFactory } from '../providers/base/tts-provider';
 import { ToolRegistry } from '../tools/tool-registry';
+import { MCPClientManager } from '../mcp/mcp-client';
 import { BaseTelephonyAdapter } from './adapters/base-adapter';
 import { PlivoAdapter } from './adapters/plivo-adapter';
 import { 
@@ -28,15 +29,18 @@ export interface TelephonyManagerConfig {
   defaultLLMConfig: LLMConfig;
   defaultTTSConfig: TTSConfig;
   systemPrompt: string;
+  mcpClientManager?: MCPClientManager;
 }
 
 export class TelephonyManager extends EventEmitter {
   private logger: Logger;
   private sessionManager: SessionManager;
   private toolRegistry: ToolRegistry;
+  private mcpClientManager: MCPClientManager | null = null;
   private adapters: Map<string, BaseTelephonyAdapter> = new Map();
   private activePipelines: Map<string, VoicePipeline> = new Map();
   private callToSession: Map<string, string> = new Map();  // callId -> sessionId
+  private callMcpClients: Map<string, string[]> = new Map();  // callId -> MCP client names
   private pendingAudio: Map<string, TelephonyAudioPacket[]> = new Map();  // Buffer for early packets
   private config: TelephonyManagerConfig;
   private audioCache: AudioCacheService;
@@ -51,6 +55,7 @@ export class TelephonyManager extends EventEmitter {
     this.config = config;
     this.sessionManager = sessionManager;
     this.toolRegistry = toolRegistry;
+    this.mcpClientManager = config.mcpClientManager || null;
     this.logger = logger.child({ component: 'telephony-manager' });
     this.audioCache = new AudioCacheService(this.logger);
   }
@@ -295,13 +300,246 @@ export class TelephonyManager extends EventEmitter {
           .catch(err => this.logger.warn('Audio cache init failed', { error: err.message }));
       }
 
-      // Create voice pipeline with latency optimization and audio cache
+      // Create session-specific tool registry and load agent tools
+      const sessionToolRegistry = new ToolRegistry(this.logger);
+      
+      // Fetch agent tools if agentId is available
+      if (agentId) {
+        try {
+          const supabaseUrl = process.env.SUPABASE_URL;
+          const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+          
+          if (supabaseUrl && supabaseKey) {
+            const { createClient } = await import('@supabase/supabase-js');
+            const supabase = createClient(supabaseUrl, supabaseKey);
+            
+            // Get agent tools
+            const { data: agentTools, error } = await supabase.rpc('get_agent_tools', { 
+              p_agent_id: agentId 
+            });
+            
+            if (!error && agentTools) {
+              this.logger.info('Retrieved agent tools for telephony call', { 
+                agentId, 
+                toolCount: agentTools.length 
+              });
+
+              // Register HTTP/API tools
+              const httpTools = agentTools.filter((t: any) => 
+                t.tool_type === 'function' || t.tool_type === 'api_request'
+              );
+              
+              for (const tool of httpTools) {
+                try {
+                  const toolConfig = tool.tool_config || {};
+                  const url = toolConfig.server_url || toolConfig.endpoint_url || 
+                              toolConfig.function_server_url || toolConfig.url;
+                  
+                  if (!url) {
+                    this.logger.warn('HTTP tool missing URL', {
+                      callId: call.callId,
+                      toolName: tool.tool_name
+                    });
+                    continue;
+                  }
+                  
+                  sessionToolRegistry.register({
+                    definition: {
+                      name: tool.tool_slug,
+                      description: tool.tool_description || tool.tool_name,
+                      parameters: toolConfig.parameters || { type: 'object', properties: {} }
+                    },
+                    handler: async (params: any) => {
+                      const headers: Record<string, string> = {
+                        'Content-Type': 'application/json',
+                        ...toolConfig.headers
+                      };
+                      
+                      if (toolConfig.auth_config) {
+                        const auth = toolConfig.auth_config;
+                        if (auth.type === 'bearer' && auth.token) {
+                          headers['Authorization'] = `Bearer ${auth.token}`;
+                        } else if (auth.type === 'api_key' && auth.key) {
+                          headers[auth.header_name || 'X-API-Key'] = auth.key;
+                        }
+                      }
+                      
+                      const response = await fetch(url, {
+                        method: toolConfig.method || 'GET',
+                        headers,
+                        ...(toolConfig.method !== 'GET' && toolConfig.method !== 'HEAD' ? {
+                          body: JSON.stringify(params)
+                        } : {}),
+                        signal: AbortSignal.timeout(toolConfig.timeout_ms || 30000)
+                      });
+
+                      if (!response.ok) {
+                        throw new Error(`API request failed: ${response.status}`);
+                      }
+
+                      return await response.json();
+                    }
+                  });
+                  
+                  this.logger.info('Registered HTTP tool for telephony', {
+                    callId: call.callId,
+                    toolName: tool.tool_name
+                  });
+                } catch (error) {
+                  this.logger.warn('Failed to register HTTP tool', {
+                    callId: call.callId,
+                    toolName: tool.tool_name,
+                    error: (error as Error).message
+                  });
+                }
+              }
+
+              // Register builtin tools
+              const builtinTools = agentTools.filter((t: any) => t.tool_type === 'builtin');
+              for (const tool of builtinTools) {
+                try {
+                  const toolConfig = tool.tool_config || {};
+                  const builtinType = toolConfig.builtin_type || tool.tool_slug;
+                  
+                  if (builtinType === 'end_call' || tool.tool_name === 'End Call') {
+                    sessionToolRegistry.register({
+                      definition: {
+                        name: 'end_call',
+                        description: tool.tool_description || 'End the current call',
+                        parameters: { type: 'object', properties: {} }
+                      },
+                      handler: async () => {
+                        this.logger.info('End call tool invoked', { callId: call.callId });
+                        return { action: 'end_call', message: 'Call ended by agent' };
+                      }
+                    });
+                    
+                    this.logger.info('Registered builtin tool for telephony', {
+                      callId: call.callId,
+                      toolName: 'end_call'
+                    });
+                  }
+                } catch (error) {
+                  this.logger.warn('Failed to register builtin tool', {
+                    callId: call.callId,
+                    toolName: tool.tool_name,
+                    error: (error as Error).message
+                  });
+                }
+              }
+
+              // Register MCP tools
+              const mcpTools = agentTools.filter((t: any) => t.tool_type === 'mcp');
+              if (mcpTools.length > 0 && this.mcpClientManager) {
+                // Get tool configurations for MCP function filtering
+                const { data: toolConfigs } = await supabase.rpc('get_agent_tools_with_configs', {
+                  p_agent_id: agentId
+                });
+
+                const connectedMcpClients: string[] = [];
+                const mcpConnectionPromises: Promise<{ name: string; success: boolean; toolName: string }>[] = [];
+                
+                for (const tool of mcpTools) {
+                  const toolConfig = tool.tool_config || {};
+                  const clientName = `telephony_${agentId}_${tool.tool_slug}_${call.callId.slice(0, 8)}`;
+                  
+                  // Get configurations for this specific MCP tool
+                  const mcpToolConfigs = toolConfigs
+                    ?.filter((c: any) => c.tool_id === tool.tool_id)
+                    .map((c: any) => ({
+                      mcp_function_name: c.mcp_function_name,
+                      enabled: c.enabled,
+                      custom_name: c.custom_name
+                    })) || [];
+
+                  this.logger.info('MCP tool configurations for telephony', {
+                    callId: call.callId,
+                    toolId: tool.tool_id,
+                    toolName: tool.tool_name,
+                    configCount: mcpToolConfigs.length
+                  });
+                  
+                  const connectionPromise = this.mcpClientManager.addServer({
+                    name: clientName,
+                    transport: toolConfig.transport || 'sse',
+                    url: toolConfig.server_url,
+                    apiKey: toolConfig.auth_config?.token || toolConfig.auth_config?.key,
+                    timeout: toolConfig.timeout_ms || 30000,
+                    toolConfigs: mcpToolConfigs.length > 0 ? mcpToolConfigs : undefined
+                  }, sessionToolRegistry).then(() => ({ name: clientName, success: true, toolName: tool.tool_name }))
+                    .catch((error: Error) => {
+                      this.logger.warn('Failed to connect to MCP tool for telephony', {
+                        callId: call.callId,
+                        agentId,
+                        toolName: tool.tool_name,
+                        error: error.message
+                      });
+                      return { name: clientName, success: false, toolName: tool.tool_name };
+                    });
+                  
+                  mcpConnectionPromises.push(connectionPromise);
+                }
+                
+                // Wait for all MCP connections in parallel
+                if (mcpConnectionPromises.length > 0) {
+                  this.logger.info('Waiting for MCP connections for telephony', { 
+                    callId: call.callId, 
+                    count: mcpConnectionPromises.length 
+                  });
+                  
+                  try {
+                    const results = await Promise.all(mcpConnectionPromises);
+                    this.logger.info('MCP connections completed for telephony', { 
+                      callId: call.callId, 
+                      successful: results.filter(r => r.success).length,
+                      failed: results.filter(r => !r.success).length
+                    });
+                    
+                    for (const result of results) {
+                      if (result.success) {
+                        connectedMcpClients.push(result.name);
+                        this.logger.info('Connected to MCP tool for telephony', {
+                          callId: call.callId,
+                          toolName: result.toolName
+                        });
+                      }
+                    }
+                  } catch (error) {
+                    this.logger.error('MCP connection error for telephony', {
+                      callId: call.callId,
+                      error: (error as Error).message
+                    });
+                  }
+                }
+                
+                // Track which MCP clients belong to this call for cleanup
+                if (connectedMcpClients.length > 0) {
+                  this.callMcpClients.set(call.callId, connectedMcpClients);
+                }
+              } else if (mcpTools.length > 0 && !this.mcpClientManager) {
+                this.logger.warn('MCP tools found but no MCP client manager available', {
+                  callId: call.callId,
+                  mcpToolCount: mcpTools.length
+                });
+              }
+            }
+          }
+        } catch (error) {
+          this.logger.warn('Failed to retrieve agent tools for telephony', {
+            callId: call.callId,
+            agentId,
+            error: (error as Error).message
+          });
+        }
+      }
+
+      // Create voice pipeline with session-specific tool registry
       const pipeline = new VoicePipeline(
         session,
         sttProvider,
         llmProvider,
         ttsProvider,
-        this.toolRegistry,
+        sessionToolRegistry,
         this.logger,
         { latencyOptimization: DEFAULT_LATENCY_CONFIG },
         this.audioCache
@@ -408,6 +646,27 @@ export class TelephonyManager extends EventEmitter {
    */
   private async handleCallEnded(callId: string, reason: string): Promise<void> {
     this.logger.info('Call ended', { callId, reason });
+
+    // Clean up MCP clients for this call
+    const mcpClients = this.callMcpClients.get(callId);
+    if (mcpClients && this.mcpClientManager) {
+      for (const clientName of mcpClients) {
+        try {
+          await this.mcpClientManager.removeServer(clientName);
+          this.logger.info('Removed MCP client for telephony call', {
+            callId,
+            clientName
+          });
+        } catch (error) {
+          this.logger.warn('Failed to remove MCP client', {
+            callId,
+            clientName,
+            error: (error as Error).message
+          });
+        }
+      }
+      this.callMcpClients.delete(callId);
+    }
 
     // Stop pipeline
     const pipeline = this.activePipelines.get(callId);

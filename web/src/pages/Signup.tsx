@@ -106,7 +106,7 @@ export function Signup() {
               What's included:
             </p>
             {[
-              "5 free minutes to start",
+              "$5 free credits to start",
               "10+ Indian languages | 40+ Global languages",
               "Real-time analytics dashboard",
               "MCP access",

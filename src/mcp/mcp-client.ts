@@ -335,13 +335,17 @@ export class MCPClientManager {
 
   /**
    * Add and connect to a new MCP server
+   * @param config - MCP server configuration
+   * @param toolRegistry - Optional session-specific tool registry. If not provided, uses the global registry.
    */
-  async addServer(config: MCPClientConfig): Promise<MCPClient> {
+  async addServer(config: MCPClientConfig, toolRegistry?: ToolRegistry): Promise<MCPClient> {
     if (this.clients.has(config.name)) {
       throw new Error(`MCP server "${config.name}" already exists`);
     }
 
-    const client = new MCPClient(config, this.toolRegistry, this.logger);
+    // Use provided tool registry or fall back to global registry
+    const registryToUse = toolRegistry || this.toolRegistry;
+    const client = new MCPClient(config, registryToUse, this.logger);
     await client.connect();
     
     this.clients.set(config.name, client);

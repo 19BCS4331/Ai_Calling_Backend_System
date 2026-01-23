@@ -110,8 +110,14 @@ export class APIServer {
    * Setup telephony manager and routes
    */
   private async setupTelephony(config: TelephonyManagerConfig): Promise<void> {
+    // Add MCP client manager to config for MCP tool support in telephony
+    const telephonyConfig = {
+      ...config,
+      mcpClientManager: this.mcpClientManager
+    };
+    
     this.telephonyManager = new TelephonyManager(
-      config,
+      telephonyConfig,
       this.sessionManager,
       this.toolRegistry,
       this.logger
@@ -730,6 +736,10 @@ export class APIServer {
         .catch(err => this.logger.warn('Audio cache init failed', { error: err.message }));
     }
 
+    // Create a NEW tool registry for this session (don't use shared global registry)
+    // This ensures only agent-specific tools are loaded, not all built-in tools
+    const sessionToolRegistry = new ToolRegistry(this.logger);
+
     // Log all tool types for debugging
     this.logger.info('Agent tools by type', {
       sessionId: session.sessionId,
@@ -766,7 +776,7 @@ export class APIServer {
           continue;
         }
         
-        this.toolRegistry.register({
+        sessionToolRegistry.register({
           definition: {
             name: tool.tool_slug,
             description: tool.tool_description || tool.tool_name,
@@ -840,7 +850,7 @@ export class APIServer {
         
         // Handle different builtin tool types
         if (builtinType === 'end_call' || tool.tool_name === 'End Call') {
-          this.toolRegistry.register({
+          sessionToolRegistry.register({
             definition: {
               name: 'end_call',
               description: tool.tool_description || 'End the current call',
@@ -868,13 +878,13 @@ export class APIServer {
       }
     }
 
-    // Create pipeline with latency optimization config and audio cache
+    // Create pipeline with session-specific tool registry
     const pipeline = new VoicePipeline(
       session,
       sttProvider,
       llmProvider,
       ttsProvider,
-      this.toolRegistry,
+      sessionToolRegistry,
       this.logger,
       { latencyOptimization: latencyConfig },
       this.audioCache
@@ -924,7 +934,7 @@ export class APIServer {
         apiKey: toolConfig.auth_config?.token || toolConfig.auth_config?.key,
         timeout: toolConfig.timeout_ms || 30000,
         toolConfigs: mcpToolConfigs.length > 0 ? mcpToolConfigs : undefined
-      }).then(() => ({ name: clientName, success: true, toolName: tool.tool_name }))
+      }, sessionToolRegistry).then(() => ({ name: clientName, success: true, toolName: tool.tool_name }))
         .catch((error: Error) => {
           this.logger.warn('Failed to connect to agent MCP tool', {
             sessionId: session.sessionId,
@@ -951,7 +961,7 @@ export class APIServer {
             url: workflow.url,
             apiKey: workflow.apiKey,
             timeout: 30000
-          }).then(() => ({ name: clientName, success: true, toolName: workflow.name || 'n8n' }))
+          }, sessionToolRegistry).then(() => ({ name: clientName, success: true, toolName: workflow.name || 'n8n' }))
             .catch((error: Error) => {
               this.logger.warn('Failed to connect to MCP workflow', {
                 sessionId: session.sessionId,
