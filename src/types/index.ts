@@ -33,7 +33,7 @@ export interface VoiceConfig {
 // ============================================================================
 
 export type STTProviderType = 'sarvam' | 'reverie' | 'google' | 'deepgram';
-export type LLMProviderType = 'gemini' | 'openai' | 'anthropic' | 'groq';
+export type LLMProviderType = 'gemini' | 'openai' | 'anthropic' | 'groq' | 'cerebras';
 export type TTSProviderType = 'sarvam' | 'reverie' | 'google' | 'elevenlabs';
 
 export interface ProviderCredentials {

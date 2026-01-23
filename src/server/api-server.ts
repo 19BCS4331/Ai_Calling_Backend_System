@@ -551,10 +551,47 @@ export class APIServer {
     const { tenantId, config } = message;
     const agentId = config.agentId; // Agent ID from client config
 
+    // Normalize LLM provider type FIRST - map variants to base provider
+    // This must happen before API key selection so we know which key to use
+    let llmProviderType = config.llm?.provider || 'gemini';
+    if (llmProviderType.startsWith('gemini')) {
+      llmProviderType = 'gemini';
+    } else if (llmProviderType.startsWith('gpt') || llmProviderType.startsWith('openai')) {
+      llmProviderType = 'openai';
+    } else if (llmProviderType.startsWith('cerebras')) {
+      llmProviderType = 'cerebras';
+    } else if (llmProviderType.startsWith('claude') || llmProviderType.startsWith('anthropic')) {
+      llmProviderType = 'anthropic';
+    } else if (llmProviderType.startsWith('groq')) {
+      llmProviderType = 'groq';
+    }
+
     // Resolve API keys: use client-provided or fall back to environment variables
-    // This enables "demo mode" where the web app doesn't need to send API keys
+    // IMPORTANT: Select the correct API key based on the provider type
     const sttApiKey = config.stt?.apiKey || process.env.SARVAM_API_KEY || '';
-    const llmApiKey = config.llm?.apiKey || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || '';
+    
+    // LLM API key - select based on provider type (not generic fallback)
+    let llmApiKey = config.llm?.apiKey || '';
+    if (!llmApiKey) {
+      switch (llmProviderType) {
+        case 'cerebras':
+          llmApiKey = process.env.CEREBRAS_API_KEY || '';
+          break;
+        case 'openai':
+          llmApiKey = process.env.OPENAI_API_KEY || '';
+          break;
+        case 'anthropic':
+          llmApiKey = process.env.ANTHROPIC_API_KEY || '';
+          break;
+        case 'groq':
+          llmApiKey = process.env.GROQ_API_KEY || '';
+          break;
+        case 'gemini':
+        default:
+          llmApiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || '';
+          break;
+      }
+    }
     
     // TTS API key depends on provider
     const ttsProviderType = config.tts?.provider || 'sarvam';
@@ -565,6 +602,7 @@ export class APIServer {
     this.logger.info('API keys resolved', {
       stt: sttApiKey ? 'present' : 'MISSING',
       llm: llmApiKey ? 'present' : 'MISSING', 
+      llmProvider: llmProviderType,
       tts: ttsApiKey ? 'present' : 'MISSING',
       source: {
         stt: config.stt?.apiKey ? 'client' : 'env',
@@ -575,7 +613,7 @@ export class APIServer {
 
     // Validate required API keys
     if (!llmApiKey) {
-      throw new Error('LLM API key not configured. Set GOOGLE_API_KEY or GEMINI_API_KEY in environment.');
+      throw new Error(`LLM API key not configured for ${llmProviderType}. Set ${llmProviderType.toUpperCase()}_API_KEY in environment.`);
     }
     if (!sttApiKey) {
       throw new Error('STT API key not configured. Set SARVAM_API_KEY in environment.');
@@ -596,19 +634,23 @@ export class APIServer {
       config.systemPrompt || '',
       ttsProviderType
     );
-
-    // Normalize LLM provider type - map variants to base provider
-    let llmProviderType = config.llm?.provider || 'gemini';
-    if (llmProviderType.startsWith('gemini')) {
-      llmProviderType = 'gemini';
-    } else if (llmProviderType.startsWith('gpt') || llmProviderType.startsWith('openai')) {
-      llmProviderType = 'openai';
+    
+    // Set default model based on provider type
+    let defaultModel = 'gemini-2.5-flash';
+    if (llmProviderType === 'cerebras') {
+      defaultModel = 'llama-3.3-70b';
+    } else if (llmProviderType === 'openai') {
+      defaultModel = 'gpt-4o-mini';
+    } else if (llmProviderType === 'anthropic') {
+      defaultModel = 'claude-3-5-sonnet-20241022';
+    } else if (llmProviderType === 'groq') {
+      defaultModel = 'llama-3.1-70b-versatile';
     }
     
     const llmConfig: LLMConfig = {
       type: llmProviderType,
       credentials: { apiKey: llmApiKey },
-      model: config.llm?.model || 'gemini-2.5-flash',
+      model: config.llm?.model || defaultModel,
       systemPrompt: mergedSystemPrompt,
       temperature: config.llm?.temperature ?? 0.7
     };

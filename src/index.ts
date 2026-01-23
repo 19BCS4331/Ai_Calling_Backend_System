@@ -17,6 +17,7 @@ import './providers/tts/sarvam-tts';
 import './providers/tts/reverie-tts';
 import './providers/tts/cartesia-tts';
 import './providers/llm/gemini-llm';
+import './providers/llm/cerebras-llm';
 
 const logger = createLogger('voice-agent', {
   level: (process.env.LOG_LEVEL as any) || 'info',
