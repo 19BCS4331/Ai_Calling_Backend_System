@@ -131,9 +131,10 @@ export class GeminiLLMProvider extends LLMProvider {
         config: {
           systemInstruction: systemPrompt || this.config.systemPrompt,
           tools: functionDeclarations ? [{ functionDeclarations }] : undefined,
-          temperature: this.config.temperature ?? 0.7,
-          topP: this.config.topP ?? 0.95,
-          topK: this.config.topK ?? 40,
+          // LATENCY OPTIMIZATION: Lower temperature for faster, more deterministic responses
+          temperature: this.config.temperature ?? 0.3,
+          topP: this.config.topP ?? 0.9,
+          topK: this.config.topK ?? 20,
           maxOutputTokens: this.config.maxTokens ?? 2048
         }
       });
@@ -177,9 +178,10 @@ export class GeminiLLMProvider extends LLMProvider {
         cachedContentName: cacheName,
         systemPrompt: cacheName ? undefined : effectiveSystemPrompt,
         tools: cacheName ? undefined : functionDeclarations,
-        temperature: this.config.temperature ?? 0.7,
-        topP: this.config.topP ?? 0.95,
-        topK: this.config.topK ?? 40,
+        // LATENCY OPTIMIZATION: Lower temperature for faster, more deterministic responses
+        temperature: this.config.temperature ?? 0.3,
+        topP: this.config.topP ?? 0.9,
+        topK: this.config.topK ?? 20,
         maxOutputTokens: this.config.maxTokens ?? 2048
       }
     );

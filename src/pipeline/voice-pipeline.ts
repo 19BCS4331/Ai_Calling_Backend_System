@@ -184,6 +184,10 @@ export class VoicePipeline extends EventEmitter {
       });
     }
 
+    // TTS provider is already initialized above
+    // Cartesia doesn't support connection pre-warming (rejects empty transcripts)
+    // Connection overhead is minimal (~50ms) and handled efficiently by Cartesia
+
     // Start STT streaming session
     this.logger.debug('Starting STT streaming session');
     await this.startSTTSession();
@@ -384,9 +388,9 @@ export class VoicePipeline extends EventEmitter {
           // LATENCY OPTIMIZATION: Speculative LLM execution on high-confidence partials
           // Start LLM processing early if we detect a likely complete utterance
           // This can save 200-400ms by overlapping STT finalization with LLM startup
-          if (!this.isProcessingTurn && !this.isSpeculativeExecution && result.text.length > 10) {
+          if (!this.isProcessingTurn && !this.isSpeculativeExecution && result.text.length > 8) {
             const isLikelyComplete = this.isLikelyCompleteUtterance(result.text);
-            const hasHighConfidence = result.confidence > 0.85;
+            const hasHighConfidence = result.confidence > 0.75;  // Lowered from 0.85 for faster triggering
             
             if (isLikelyComplete && hasHighConfidence) {
               this.logger.debug('Starting speculative LLM execution', {
@@ -531,13 +535,19 @@ export class VoicePipeline extends EventEmitter {
       confidence = 'high';
     }
     // PRIORITY 3: Question with ? (HIGH confidence)
+    // LATENCY OPTIMIZATION: Ultra-fast response for questions
     else if (isQuestion && length > 10) {
-      waitMs = 250;  // Questions are usually complete
+      waitMs = 150;  // Questions are usually complete - respond immediately
+      confidence = 'high';
+    }
+    // PRIORITY 3.5: Question without ? but starts with question word (HIGH confidence)
+    else if (/^(what|when|where|who|why|how|can|could|would|will|is|are|do|does|did)/i.test(trimmed) && length > 12) {
+      waitMs = 200;  // Likely a question even without punctuation
       confidence = 'high';
     }
     // PRIORITY 4: Complete sentence with punctuation (HIGH confidence)
     else if (endsWithPunctuation && length > 15) {
-      waitMs = 250;  // Complete thought with punctuation
+      waitMs = 200;  // Complete thought with punctuation - reduced from 250ms
       confidence = 'high';
     }
     // PRIORITY 5: Short punctuated (MEDIUM-HIGH confidence)
