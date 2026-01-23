@@ -33,12 +33,12 @@ export function TelephonySettings() {
       setIsFetching(true);
       const { data: { session } } = await supabase.auth.getSession();
       
-      const data = await saasApi.get<{ status: PlivoStatus }>(
+      const data = await saasApi.get<PlivoStatus>(
         saasEndpoints.telephonyStatus(currentOrganization.id),
         session?.access_token
       );
       
-      setStatus(data.status);
+      setStatus(data);
     } catch (error) {
       console.error('Failed to fetch Plivo status:', error);
     } finally {

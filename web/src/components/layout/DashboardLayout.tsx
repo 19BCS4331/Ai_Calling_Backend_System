@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Zap, LayoutDashboard, Phone, Settings, BarChart3, 
   Bot, LogOut, ChevronLeft, Menu, Wrench, X,
-  PhoneIncoming
+  PhoneIncoming, Wallet, TrendingUp,
+  Clock
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '../../store/auth';
@@ -11,6 +12,7 @@ import { useOrganizationStore } from '../../store/organization';
 import { cn } from '../../lib/utils';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import VocaCoreAILogo from '../../assets/VocaCore-final-square.png';
+import { supabase } from '../../lib/supabase';
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Overview', href: '/dashboard' },
@@ -26,6 +28,13 @@ export function DashboardLayout() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [creditBalance, setCreditBalance] = useState<number | null>(null);
+  const [creditTotal, setCreditTotal] = useState<number | null>(null);
+  const [planType, setPlanType] = useState<'trial' | 'payg' | 'monthly' | null>(null);
+  const [planSlug, setPlanSlug] = useState<string | null>(null);
+  const [monthlyUsage, setMonthlyUsage] = useState<number>(0);
+  const [minutesUsed, setMinutesUsed] = useState<number>(0);
+  const [minutesIncluded, setMinutesIncluded] = useState<number>(0);
   const location = useLocation();
   const { user, isAuthenticated, logout } = useAuthStore();
   const { currentOrganization, isLoading: orgLoading } = useOrganizationStore();
@@ -43,6 +52,118 @@ export function DashboardLayout() {
       navigate('/onboarding');
     }
   }, [isAuthenticated, orgLoading, currentOrganization, navigate]);
+
+  // Fetch subscription and usage data
+  useEffect(() => {
+    if (!currentOrganization?.id) return;
+
+    const fetchSubscriptionData = async () => {
+      try {
+        // Fetch subscription with plan details
+        const { data: subData, error: subError } = await supabase
+          .from('subscriptions')
+          .select(`
+            credit_balance_cents,
+            credit_used_cents,
+            current_period_start,
+            plans (
+              slug,
+              included_credit_cents,
+              included_minutes,
+              is_credit_based
+            )
+          `)
+          .eq('organization_id', currentOrganization.id)
+          .in('status', ['active', 'trialing'])
+          .single();
+
+        if (subError) {
+          console.error('Error fetching subscription:', subError);
+          return;
+        }
+
+        const plan = (subData.plans as any);
+        const slug = plan?.slug;
+        setPlanSlug(slug);
+
+        // Determine plan type and set appropriate data
+        if (plan?.is_credit_based) {
+          // Trial plan - show credit balance
+          setPlanType('trial');
+          setCreditBalance(subData.credit_balance_cents / 100);
+          setCreditTotal((plan.included_credit_cents || 0) / 100);
+        } else if (slug === 'payg') {
+          // PAYG plan - show current month usage
+          setPlanType('payg');
+          
+          // Fetch current month usage
+          const periodStart = new Date(subData.current_period_start);
+          const { data: usageData } = await supabase
+            .from('calls')
+            .select('cost_user_cents')
+            .eq('organization_id', currentOrganization.id)
+            .gte('started_at', periodStart.toISOString())
+            .eq('status', 'completed');
+
+          const totalUsage = usageData?.reduce((sum, call) => sum + (call.cost_user_cents || 0), 0) || 0;
+          setMonthlyUsage(totalUsage / 100);
+        } else {
+          // Monthly plan - show minutes used
+          setPlanType('monthly');
+          setMinutesIncluded(plan?.included_minutes || 0);
+          
+          // Fetch current period minutes
+          const periodStart = new Date(subData.current_period_start);
+          const { data: usageData } = await supabase
+            .from('calls')
+            .select('duration_seconds')
+            .eq('organization_id', currentOrganization.id)
+            .gte('started_at', periodStart.toISOString())
+            .eq('status', 'completed');
+
+          const totalMinutes = Math.ceil((usageData?.reduce((sum, call) => sum + (call.duration_seconds || 0), 0) || 0) / 60);
+          setMinutesUsed(totalMinutes);
+        }
+      } catch (err) {
+        console.error('Error fetching subscription:', err);
+      }
+    };
+
+    fetchSubscriptionData();
+
+    // Set up real-time subscription for updates
+    const channel = supabase
+      .channel('subscription-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'subscriptions',
+          filter: `organization_id=eq.${currentOrganization.id}`
+        },
+        () => {
+          fetchSubscriptionData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'calls',
+          filter: `organization_id=eq.${currentOrganization.id}`
+        },
+        () => {
+          fetchSubscriptionData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentOrganization?.id]);
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -174,6 +295,111 @@ export function DashboardLayout() {
           })}
         </nav>
 
+        {/* Usage Display - Trial/PAYG/Monthly */}
+        {planType && (
+          <div className="px-3 pb-3">
+            <AnimatePresence mode="wait">
+              {!collapsed ? (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  className="px-3 py-3 rounded-xl bg-gradient-to-br from-purple-500/10 to-blue-500/10 border border-purple-500/20"
+                >
+                  {/* Trial Plan - Credit Balance */}
+                  {planType === 'trial' && creditBalance !== null && (
+                    <>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Wallet size={14} className="text-purple-400" />
+                        <span className="text-xs font-medium text-white/70">Trial Credit</span>
+                      </div>
+                      <div className="flex items-baseline gap-1 mb-2">
+                        <span className="text-xl font-bold text-white">${creditBalance.toFixed(2)}</span>
+                        <span className="text-xs text-white/40">/ ${creditTotal?.toFixed(2)}</span>
+                      </div>
+                      <div className="h-1.5 bg-white/10 rounded-full overflow-hidden mb-2">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${creditTotal ? (creditBalance / creditTotal) * 100 : 0}%` }}
+                          transition={{ duration: 0.5, ease: 'easeOut' }}
+                          className={cn(
+                            'h-full rounded-full',
+                            creditBalance < 1 ? 'bg-red-500' : creditBalance < 2 ? 'bg-yellow-500' : 'bg-gradient-to-r from-purple-500 to-blue-500'
+                          )}
+                        />
+                      </div>
+                      {creditBalance < 1 && (
+                        <p className="text-xs text-red-400 flex items-center gap-1">
+                          <TrendingUp size={12} />
+                          Low balance - Upgrade soon
+                        </p>
+                      )}
+                    </>
+                  )}
+
+                  {/* PAYG Plan - Monthly Usage */}
+                  {planType === 'payg' && (
+                    <>
+                      <div className="flex items-center gap-2 mb-2">
+                        <TrendingUp size={14} className="text-blue-400" />
+                        <span className="text-xs font-medium text-white/70">This Month</span>
+                      </div>
+                      <div className="flex items-baseline gap-1 mb-1">
+                        <span className="text-xl font-bold text-white">${monthlyUsage.toFixed(2)}</span>
+                      </div>
+                      <p className="text-xs text-white/40">Pay-as-you-go • $0.15/min</p>
+                    </>
+                  )}
+
+                  {/* Monthly Plan - Minutes Used */}
+                  {planType === 'monthly' && (
+                    <>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Clock size={14} className="text-green-400" />
+                        <span className="text-xs font-medium text-white/70 capitalize">{planSlug} Plan</span>
+                      </div>
+                      <div className="flex items-baseline gap-1 mb-2">
+                        <span className="text-xl font-bold text-white">{minutesUsed}</span>
+                        <span className="text-xs text-white/40">/ {minutesIncluded} min</span>
+                      </div>
+                      <div className="h-1.5 bg-white/10 rounded-full overflow-hidden mb-2">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${minutesIncluded ? Math.min((minutesUsed / minutesIncluded) * 100, 100) : 0}%` }}
+                          transition={{ duration: 0.5, ease: 'easeOut' }}
+                          className={cn(
+                            'h-full rounded-full',
+                            minutesUsed > minutesIncluded ? 'bg-red-500' : minutesUsed > minutesIncluded * 0.8 ? 'bg-yellow-500' : 'bg-gradient-to-r from-green-500 to-emerald-500'
+                          )}
+                        />
+                      </div>
+                      {minutesUsed > minutesIncluded && (
+                        <p className="text-xs text-red-400 flex items-center gap-1">
+                          <TrendingUp size={12} />
+                          {minutesUsed - minutesIncluded} min overage
+                        </p>
+                      )}
+                    </>
+                  )}
+                </motion.div>
+              ) : (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex justify-center"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500/10 to-blue-500/10 border border-purple-500/20 flex items-center justify-center">
+                    {planType === 'trial' && <Wallet size={18} className="text-purple-400" />}
+                    {planType === 'payg' && <TrendingUp size={18} className="text-blue-400" />}
+                    {planType === 'monthly' && <Clock size={18} className="text-green-400" />}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+
         {/* User section */}
         <div className="p-3 border-t border-white/[0.06]">
           <AnimatePresence mode="wait">
@@ -281,6 +507,85 @@ export function DashboardLayout() {
                 );
               })}
             </nav>
+
+            {/* Mobile Usage Display - Trial/PAYG/Monthly */}
+            {planType && (
+              <div className="px-3 pb-3">
+                <div className="px-4 py-3 rounded-xl bg-gradient-to-br from-purple-500/10 to-blue-500/10 border border-purple-500/20">
+                  {/* Trial Plan - Credit Balance */}
+                  {planType === 'trial' && creditBalance !== null && (
+                    <>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Wallet size={16} className="text-purple-400" />
+                        <span className="text-sm font-medium text-white/70">Trial Credit</span>
+                      </div>
+                      <div className="flex items-baseline gap-1 mb-2">
+                        <span className="text-2xl font-bold text-white">${creditBalance.toFixed(2)}</span>
+                        <span className="text-sm text-white/40">/ ${creditTotal?.toFixed(2)}</span>
+                      </div>
+                      <div className="h-2 bg-white/10 rounded-full overflow-hidden mb-2">
+                        <div
+                          style={{ width: `${creditTotal ? (creditBalance / creditTotal) * 100 : 0}%` }}
+                          className={cn(
+                            'h-full rounded-full transition-all duration-500',
+                            creditBalance < 1 ? 'bg-red-500' : creditBalance < 2 ? 'bg-yellow-500' : 'bg-gradient-to-r from-purple-500 to-blue-500'
+                          )}
+                        />
+                      </div>
+                      {creditBalance < 1 && (
+                        <p className="text-xs text-red-400 flex items-center gap-1">
+                          <TrendingUp size={12} />
+                          Low balance - Upgrade soon
+                        </p>
+                      )}
+                    </>
+                  )}
+
+                  {/* PAYG Plan - Monthly Usage */}
+                  {planType === 'payg' && (
+                    <>
+                      <div className="flex items-center gap-2 mb-2">
+                        <TrendingUp size={16} className="text-blue-400" />
+                        <span className="text-sm font-medium text-white/70">This Month</span>
+                      </div>
+                      <div className="flex items-baseline gap-1 mb-1">
+                        <span className="text-2xl font-bold text-white">${monthlyUsage.toFixed(2)}</span>
+                      </div>
+                      <p className="text-xs text-white/40">Pay-as-you-go • $0.15/min</p>
+                    </>
+                  )}
+
+                  {/* Monthly Plan - Minutes Used */}
+                  {planType === 'monthly' && (
+                    <>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Clock size={16} className="text-green-400" />
+                        <span className="text-sm font-medium text-white/70 capitalize">{planSlug} Plan</span>
+                      </div>
+                      <div className="flex items-baseline gap-1 mb-2">
+                        <span className="text-2xl font-bold text-white">{minutesUsed}</span>
+                        <span className="text-sm text-white/40">/ {minutesIncluded} min</span>
+                      </div>
+                      <div className="h-2 bg-white/10 rounded-full overflow-hidden mb-2">
+                        <div
+                          style={{ width: `${minutesIncluded ? Math.min((minutesUsed / minutesIncluded) * 100, 100) : 0}%` }}
+                          className={cn(
+                            'h-full rounded-full transition-all duration-500',
+                            minutesUsed > minutesIncluded ? 'bg-red-500' : minutesUsed > minutesIncluded * 0.8 ? 'bg-yellow-500' : 'bg-gradient-to-r from-green-500 to-emerald-500'
+                          )}
+                        />
+                      </div>
+                      {minutesUsed > minutesIncluded && (
+                        <p className="text-xs text-red-400 flex items-center gap-1">
+                          <TrendingUp size={12} />
+                          {minutesUsed - minutesIncluded} min overage
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Mobile User Section */}
             <div className="p-3 border-t border-white/[0.06]">

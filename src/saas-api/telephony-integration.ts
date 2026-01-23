@@ -72,6 +72,75 @@ export async function validatePlivoCredentials(
 }
 
 /**
+ * List all Plivo applications for an account
+ */
+export async function listPlivoApplications(
+  authId: string,
+  authToken: string
+): Promise<Array<{ app_id: string; app_name: string }>> {
+  try {
+    const response = await fetch(
+      `https://api.plivo.com/v1/Account/${authId}/Application/`,
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Basic ' + Buffer.from(`${authId}:${authToken}`).toString('base64'),
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to list Plivo applications: ${error}`);
+    }
+
+    const data = await response.json() as { objects: Array<{ app_id: string; app_name: string }> };
+    return data.objects || [];
+  } catch (error) {
+    logger.error('Error listing Plivo applications', { 
+      error: (error as Error).message 
+    });
+    throw error;
+  }
+}
+
+/**
+ * Delete a Plivo application by app_id
+ */
+export async function deletePlivoApplication(
+  authId: string,
+  authToken: string,
+  appId: string
+): Promise<void> {
+  try {
+    const response = await fetch(
+      `https://api.plivo.com/v1/Account/${authId}/Application/${appId}/`,
+      {
+        method: 'DELETE',
+        headers: {
+          'Authorization': 'Basic ' + Buffer.from(`${authId}:${authToken}`).toString('base64'),
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to delete Plivo application: ${error}`);
+    }
+
+    logger.info('Plivo application deleted', { appId });
+  } catch (error) {
+    logger.error('Error deleting Plivo application', { 
+      error: (error as Error).message,
+      appId
+    });
+    throw error;
+  }
+}
+
+/**
  * Create a Plivo application with our webhook URLs
  */
 export async function createPlivoApplication(
@@ -109,8 +178,77 @@ export async function createPlivoApplication(
     );
 
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Failed to create Plivo application: ${error}`);
+      const errorText = await response.text();
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        errorData = { error: errorText };
+      }
+
+      // Check if app already exists
+      if (errorData.error && errorData.error.includes('already exists')) {
+        // Try to find and delete the existing app
+        logger.info('Application already exists, attempting to delete and recreate', { appName: sanitizedAppName });
+        
+        const existingApps = await listPlivoApplications(authId, authToken);
+        const existingApp = existingApps.find(app => app.app_name === sanitizedAppName);
+        
+        if (existingApp) {
+          await deletePlivoApplication(authId, authToken, existingApp.app_id);
+          logger.info('Existing application deleted, retrying creation', { appId: existingApp.app_id });
+          
+          // Retry creation
+          const retryResponse = await fetch(
+            `https://api.plivo.com/v1/Account/${authId}/Application/`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': 'Basic ' + Buffer.from(`${authId}:${authToken}`).toString('base64'),
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                app_name: sanitizedAppName,
+                answer_url: answerUrl,
+                answer_method: 'POST',
+                hangup_url: hangupUrl,
+                hangup_method: 'POST'
+              })
+            }
+          );
+
+          if (!retryResponse.ok) {
+            const retryError = await retryResponse.text();
+            throw new SaaSError(
+              'PLIVO_APP_CREATE_FAILED',
+              `Failed to recreate Plivo application after deletion: ${retryError}`,
+              500
+            );
+          }
+
+          const retryData = await retryResponse.json() as { app_id: string; message: string; api_id: string };
+          logger.info('Plivo application recreated successfully', { appId: retryData.app_id });
+          
+          return {
+            app_id: retryData.app_id,
+            app_name: sanitizedAppName,
+            answer_url: answerUrl,
+            hangup_url: hangupUrl
+          };
+        }
+        
+        throw new SaaSError(
+          'PLIVO_APP_EXISTS',
+          `A Plivo application named "${sanitizedAppName}" already exists in your account. Please delete it from Plivo console or disconnect and reconnect.`,
+          409
+        );
+      }
+
+      throw new SaaSError(
+        'PLIVO_APP_CREATE_FAILED',
+        `Failed to create Plivo application: ${errorData.error || errorText}`,
+        500
+      );
     }
 
     const data = await response.json() as { app_id: string; message: string; api_id: string };
@@ -429,7 +567,7 @@ export async function connectPlivoAccount(
 }
 
 /**
- * Disconnect Plivo account - removes credentials and app ID
+ * Disconnect Plivo account - removes credentials, app ID, and phone numbers
  */
 export async function disconnectPlivoAccount(
   orgContext: OrgContext
@@ -438,6 +576,21 @@ export async function disconnectPlivoAccount(
 
   // Remove credentials
   await deleteTelephonyCredentials(orgId, 'plivo');
+
+  // Remove all phone numbers associated with Plivo for this organization
+  const { error: phoneNumberError } = await supabaseAdmin
+    .from('phone_numbers')
+    .delete()
+    .eq('organization_id', orgId)
+    .eq('telephony_provider', 'plivo');
+
+  if (phoneNumberError) {
+    logger.error('Failed to delete phone numbers', { 
+      orgId, 
+      error: phoneNumberError.message 
+    });
+    throw new Error(`Failed to delete phone numbers: ${phoneNumberError.message}`);
+  }
 
   // Remove app ID from organization
   const { error: updateError } = await supabaseAdmin
@@ -449,7 +602,7 @@ export async function disconnectPlivoAccount(
     throw new Error(`Failed to update organization: ${updateError.message}`);
   }
 
-  logger.info('Plivo account disconnected', { orgId });
+  logger.info('Plivo account disconnected', { orgId, phoneNumbersDeleted: true });
 }
 
 /**

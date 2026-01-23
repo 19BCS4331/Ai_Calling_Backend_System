@@ -6,6 +6,7 @@
 
 import {
   ToolDefinition,
+  ToolParameterSchema,
   ToolExecutionRequest,
   ToolExecutionResult,
   RegisteredTool,
@@ -58,6 +59,67 @@ export class ToolRegistry {
    */
   getDefinitions(): ToolDefinition[] {
     return Array.from(this.tools.values()).map(t => t.definition);
+  }
+
+  /**
+   * Get compressed tool definitions to reduce token usage
+   * Shortens descriptions and removes unnecessary metadata
+   */
+  getCompressedDefinitions(maxTools?: number): ToolDefinition[] {
+    const tools = Array.from(this.tools.values()).map(t => ({
+      name: t.definition.name,
+      // Truncate description to max 100 chars
+      description: t.definition.description 
+        ? t.definition.description.slice(0, 100) + (t.definition.description.length > 100 ? '...' : '')
+        : t.definition.name,
+      parameters: this.compressParameters(t.definition.parameters)
+    }));
+
+    // If maxTools specified, prioritize essential tools
+    if (maxTools && tools.length > maxTools) {
+      // Essential tools always included
+      const essentialNames = ['end_call', 'transfer_call', 'hold_call', 'get_current_time'];
+      const essential = tools.filter(t => essentialNames.includes(t.name));
+      const others = tools.filter(t => !essentialNames.includes(t.name));
+      
+      // Take essential + fill remaining slots with other tools
+      const remaining = maxTools - essential.length;
+      return [...essential, ...others.slice(0, Math.max(0, remaining))];
+    }
+
+    return tools;
+  }
+
+  /**
+   * Compress parameter schema to reduce tokens
+   */
+  private compressParameters(params: ToolDefinition['parameters']): ToolDefinition['parameters'] {
+    if (!params.properties) return params;
+
+    const compressed: Record<string, any> = {};
+    for (const [key, prop] of Object.entries(params.properties)) {
+      compressed[key] = {
+        type: prop.type,
+        // Truncate description to 50 chars max
+        description: prop.description 
+          ? (prop.description.length > 50 ? prop.description.slice(0, 50) + '...' : prop.description)
+          : ''
+      };
+      // Keep enum if present (important for valid values)
+      if (prop.enum) {
+        compressed[key].enum = prop.enum;
+      }
+      // Keep items if present (required for array types)
+      if ((prop as any).items) {
+        compressed[key].items = (prop as any).items;
+      }
+    }
+
+    return {
+      type: params.type,
+      properties: compressed as Record<string, ToolParameterSchema>,
+      required: params.required
+    };
   }
 
   /**

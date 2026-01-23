@@ -22,6 +22,7 @@ import { InMemoryMetrics, CostTracker } from '../utils/logger';
 import { TelephonyManager, TelephonyManagerConfig, PlivoAdapter, TelephonyConfig } from '../telephony';
 import { AudioCacheService } from '../services/audio-cache';
 import { buildSystemPrompt } from '../prompts/tts-prompts';
+import { createCallRecord, endCallRecord, findCallBySessionId, getOrgIdFromAgent } from '../saas-api/call-persistence';
 
 export interface APIServerConfig {
   port: number;
@@ -675,6 +676,34 @@ export class APIServer {
       context: config.context || {}
     });
 
+    // Create call record in database
+    let organizationId: string | undefined;
+    if (agentId) {
+      organizationId = await getOrgIdFromAgent(agentId) || undefined;
+    }
+    
+    const callRecord = await createCallRecord({
+      organizationId,
+      agentId,
+      sessionId: session.sessionId,
+      direction: 'web',
+      sttProvider: sttConfig.type,
+      ttsProvider: ttsConfig.type,
+      llmProvider: llmConfig.type,
+      metadata: {
+        connectionId,
+        tenantId,
+        userAgent: config.context?.userAgent
+      }
+    });
+
+    if (callRecord) {
+      this.logger.info('Call record created for web session', {
+        callId: callRecord.id,
+        sessionId: session.sessionId
+      });
+    }
+
     this.logger.info('Creating providers', { sessionId: session.sessionId });
 
     // Create providers
@@ -1155,6 +1184,35 @@ export class APIServer {
 
     const session = await this.sessionManager.endSession(sessionId);
     
+    // End call record in database
+    const callRecord = await findCallBySessionId(sessionId);
+    if (callRecord) {
+      const durationSeconds = session?.metrics ? Math.floor(session.metrics.totalDurationMs / 1000) : 0;
+      const firstResponseLatency = session?.metrics?.e2eLatencyMs?.[0] || undefined;
+      const avgResponseLatency = session?.metrics?.e2eLatencyMs?.length 
+        ? Math.floor(session.metrics.e2eLatencyMs.reduce((a, b) => a + b, 0) / session.metrics.e2eLatencyMs.length)
+        : undefined;
+      
+      await endCallRecord({
+        callId: callRecord.id,
+        durationSeconds,
+        endReason: 'normal',
+        llmPromptTokens: session?.metrics?.llmPromptTokens || 0,
+        llmCompletionTokens: session?.metrics?.llmCompletionTokens || 0,
+        llmCachedTokens: session?.metrics?.llmCachedTokens || 0,
+        ttsCharacters: session?.metrics?.ttsCharacters || 0,
+        latencyFirstResponseMs: firstResponseLatency,
+        latencyAvgResponseMs: avgResponseLatency,
+        interruptionsCount: session?.metrics?.interruptionsCount || 0
+      });
+      
+      this.logger.info('Call record ended via end_session', { 
+        callId: callRecord.id, 
+        sessionId,
+        durationSeconds
+      });
+    }
+    
     // Trigger post-call follow-up email (non-blocking)
     this.triggerPostCallFollowUp(sessionId, session).catch(err => {
       this.logger.warn('Post-call follow-up failed', { sessionId, error: err.message });
@@ -1292,13 +1350,61 @@ export class APIServer {
           });
           this.activePipelines.delete(sessionId);
         }
-        // End session in session manager
-        this.sessionManager.endSession(sessionId).catch(() => {});
+        
+        // Clean up session-specific MCP clients
+        this.cleanupSessionMcpClients(sessionId).catch(() => {});
+        
+        // End session and update call record in database
+        this.endSessionWithCallRecord(sessionId, 'disconnect');
       }
       this.connectionSessions.delete(connectionId);
     }
     
     this.logger.info('WebSocket disconnected', { connectionId });
+  }
+  
+  /**
+   * End a session and update the call record in the database
+   */
+  private async endSessionWithCallRecord(sessionId: string, endReason: string): Promise<void> {
+    try {
+      const session = await this.sessionManager.endSession(sessionId);
+      
+      // End call record in database
+      const callRecord = await findCallBySessionId(sessionId);
+      if (callRecord) {
+        const durationSeconds = session?.metrics ? Math.floor(session.metrics.totalDurationMs / 1000) : 0;
+        const firstResponseLatency = session?.metrics?.e2eLatencyMs?.[0] || undefined;
+        const avgResponseLatency = session?.metrics?.e2eLatencyMs?.length 
+          ? Math.floor(session.metrics.e2eLatencyMs.reduce((a, b) => a + b, 0) / session.metrics.e2eLatencyMs.length)
+          : undefined;
+        
+        await endCallRecord({
+          callId: callRecord.id,
+          durationSeconds,
+          endReason,
+          llmPromptTokens: session?.metrics?.llmPromptTokens || 0,
+          llmCompletionTokens: session?.metrics?.llmCompletionTokens || 0,
+          llmCachedTokens: session?.metrics?.llmCachedTokens || 0,
+          ttsCharacters: session?.metrics?.ttsCharacters || 0,
+          latencyFirstResponseMs: firstResponseLatency,
+          latencyAvgResponseMs: avgResponseLatency,
+          interruptionsCount: session?.metrics?.interruptionsCount || 0
+        });
+        
+        this.logger.info('Call record ended', { 
+          callId: callRecord.id, 
+          sessionId,
+          durationSeconds,
+          endReason
+        });
+      }
+    } catch (err) {
+      this.logger.error('Error ending session with call record', { 
+        sessionId, 
+        error: (err as Error).message 
+      });
+    }
   }
 
   /**

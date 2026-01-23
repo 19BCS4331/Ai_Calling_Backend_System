@@ -44,12 +44,17 @@ interface OrganizationState {
   currentSubscription: Subscription | null;
   isLoading: boolean;
   error: string | null;
+  lastFetchedAt: number | null;
+  lastSubscriptionFetchedAt: number | null;
   
-  fetchUserOrganizations: () => Promise<void>;
+  fetchUserOrganizations: (force?: boolean) => Promise<void>;
   setCurrentOrganization: (orgId: string) => Promise<void>;
-  fetchCurrentSubscription: (orgId: string) => Promise<void>;
+  fetchCurrentSubscription: (orgId: string, force?: boolean) => Promise<void>;
   updateOrganization: (orgId: string, data: Partial<Organization>) => Promise<void>;
 }
+
+// Cache TTL: 5 minutes
+const CACHE_TTL = 5 * 60 * 1000;
 
 export const useOrganizationStore = create<OrganizationState>((set, get) => ({
   currentOrganization: null,
@@ -57,8 +62,18 @@ export const useOrganizationStore = create<OrganizationState>((set, get) => ({
   currentSubscription: null,
   isLoading: false,
   error: null,
+  lastFetchedAt: null,
+  lastSubscriptionFetchedAt: null,
 
-  fetchUserOrganizations: async () => {
+  fetchUserOrganizations: async (force = false) => {
+    const state = get();
+    const now = Date.now();
+    
+    // Skip if data is fresh (within cache TTL) and not forced
+    if (!force && state.lastFetchedAt && (now - state.lastFetchedAt) < CACHE_TTL && state.organizations.length > 0) {
+      return;
+    }
+
     set({ isLoading: true, error: null });
     
     try {
@@ -93,7 +108,8 @@ export const useOrganizationStore = create<OrganizationState>((set, get) => ({
       set({ 
         organizations: orgs,
         currentOrganization: orgs[0] || null,
-        isLoading: false 
+        isLoading: false,
+        lastFetchedAt: Date.now()
       });
 
       if (orgs[0]) {
@@ -116,7 +132,15 @@ export const useOrganizationStore = create<OrganizationState>((set, get) => ({
     }
   },
 
-  fetchCurrentSubscription: async (orgId: string) => {
+  fetchCurrentSubscription: async (orgId: string, force = false) => {
+    const state = get();
+    const now = Date.now();
+    
+    // Skip if data is fresh (within cache TTL) and not forced
+    if (!force && state.lastSubscriptionFetchedAt && (now - state.lastSubscriptionFetchedAt) < CACHE_TTL && state.currentSubscription) {
+      return;
+    }
+
     try {
       const { data, error } = await supabase
         .from('subscriptions')
@@ -143,7 +167,10 @@ export const useOrganizationStore = create<OrganizationState>((set, get) => ({
 
       if (error && error.code !== 'PGRST116') throw error;
 
-      set({ currentSubscription: data as Subscription | null });
+      set({ 
+        currentSubscription: data as Subscription | null,
+        lastSubscriptionFetchedAt: Date.now()
+      });
     } catch (error) {
       console.error('Failed to fetch subscription:', error);
     }

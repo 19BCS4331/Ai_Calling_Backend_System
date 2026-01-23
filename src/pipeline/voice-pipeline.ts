@@ -34,6 +34,11 @@ export interface VoicePipelineConfig {
   maxTurnDuration: number;       // Max ms for a single turn
   silenceTimeout: number;        // Ms of silence before ending turn
   latencyOptimization: LatencyOptimizationConfig;  // Phase 1 optimizations
+  // Token optimization settings
+  maxHistoryTurns: number;       // Max conversation turns to keep (default: 10)
+  maxHistoryTokens: number;      // Approximate max tokens for history (default: 4000)
+  maxTools: number;              // Max tools to send to LLM (default: 15, 0 = unlimited)
+  compressTools: boolean;        // Compress tool definitions to save tokens (default: true)
 }
 
 export interface PipelineEvents {
@@ -125,13 +130,19 @@ export class VoicePipeline extends EventEmitter {
     this.audioCache = audioCache || null;
 
     this.config = {
-      enableBargeIn: true,
-      sttPartialThreshold: 5,
-      llmSentenceBuffer: 20,
-      maxTurnDuration: 30000,
-      silenceTimeout: 2000,
-      latencyOptimization: DEFAULT_LATENCY_CONFIG,
-      ...config
+      enableBargeIn: config?.enableBargeIn ?? true,
+      sttPartialThreshold: config?.sttPartialThreshold ?? 5,
+      llmSentenceBuffer: config?.llmSentenceBuffer ?? 20,
+      maxTurnDuration: config?.maxTurnDuration ?? 30000,
+      silenceTimeout: config?.silenceTimeout ?? 2000,
+      latencyOptimization: config?.latencyOptimization ?? DEFAULT_LATENCY_CONFIG,
+      // Token optimization: keep last 10 turns (~20 messages) or ~4000 tokens
+      maxHistoryTurns: config?.maxHistoryTurns ?? 10,
+      maxHistoryTokens: config?.maxHistoryTokens ?? 4000,
+      // Tool optimization: 0 = unlimited (Gemini 2.5 Flash implicit caching handles token cost)
+      // Implicit caching gives 75% discount on repeated prefixes (min 1024 tokens)
+      maxTools: config?.maxTools ?? 0,
+      compressTools: config?.compressTools ?? true
     };
 
     this.metrics = this.createEmptyMetrics();
@@ -274,6 +285,16 @@ export class VoicePipeline extends EventEmitter {
     this.sttSession?.abort();
     this.llmSession?.abort();
     this.ttsSession?.abort();
+
+    // Clean up LLM provider context cache (if Gemini)
+    // This deletes the cached system prompt + tools to avoid stale caches
+    try {
+      if (this.llmProvider && 'cleanup' in this.llmProvider) {
+        await (this.llmProvider as any).cleanup();
+      }
+    } catch (error) {
+      this.logger.warn('Failed to cleanup LLM provider', { error: (error as Error).message });
+    }
 
     this.logger.info('Voice pipeline stopped', { metrics: this.metrics });
   }
@@ -565,22 +586,39 @@ export class VoicePipeline extends EventEmitter {
     this.firstTTSByteTime = 0;
     this.ttsSessionReady = false;
 
-    // Get tool definitions from registry
-    const tools = this.toolRegistry.getDefinitions();
+    // TOKEN OPTIMIZATION: Get tool definitions (optionally compressed)
+    // Context caching handles the bulk of token savings now
+    const maxTools = this.config.maxTools > 0 ? this.config.maxTools : undefined;
+    const tools = this.config.compressTools
+      ? this.toolRegistry.getCompressedDefinitions(maxTools)
+      : this.toolRegistry.getDefinitions();
     
-    this.logger.info('Generating LLM response with tools', {
+    // TOKEN OPTIMIZATION: Use sliding window for conversation history
+    // This prevents token explosion on longer calls
+    const recentMessages = this.getRecentMessages();
+    const systemPrompt = this.session.llmConfig.systemPrompt;
+    
+    // Estimate and log token usage for debugging
+    const estimatedTokens = this.estimateTotalPromptTokens(recentMessages, tools, systemPrompt);
+    
+    this.logger.info('Generating LLM response', {
       toolCount: tools.length,
       toolNames: tools.map(t => t.name),
-      messageCount: this.session.messages.length
+      totalMessages: this.session.messages.length,
+      recentMessages: recentMessages.length,
+      estimatedPromptTokens: estimatedTokens,
+      systemPromptLength: systemPrompt?.length || 0,
+      toolCompression: this.config.compressTools,
+      maxTools: this.config.maxTools
     });
 
     // Start TTS session FIRST for streaming audio output (don't block)
     this.startTTSSessionAsync();
 
     this.llmSession = await this.llmProvider.generateStream(
-      this.session.messages,
+      recentMessages,  // Use truncated history instead of full history
       tools,
-      this.session.llmConfig.systemPrompt,
+      systemPrompt,
       {
         onToken: (chunk) => {
           // Track first LLM token time
@@ -637,9 +675,15 @@ export class VoicePipeline extends EventEmitter {
           };
           this.session.messages.push(assistantMessage);
 
-          // Update metrics
+          // Update metrics - track tokens separately for billing
           if (response.usage) {
             this.session.metrics.tokenCount += response.usage.totalTokens;
+            this.session.metrics.llmPromptTokens += response.usage.promptTokens;
+            this.session.metrics.llmCompletionTokens += response.usage.completionTokens;
+            // Track cached tokens for 75% discount calculation
+            if (response.usage.cachedContentTokenCount) {
+              this.session.metrics.llmCachedTokens += response.usage.cachedContentTokenCount;
+            }
           }
           
           // Signal TTS that no more text is coming (but don't wait for audio)
@@ -740,6 +784,9 @@ export class VoicePipeline extends EventEmitter {
     // Phase 2: Track sentence for history truncation
     this.ttsTextQueue.push(sentence.trim());
     this.currentAssistantMessage += sentence;
+    
+    // Track TTS characters for billing
+    this.session.metrics.ttsCharacters += sentence.length;
     
     // Wait briefly for TTS session if not ready yet
     if (!this.ttsSessionReady || !this.ttsSession?.isSessionActive()) {
@@ -927,6 +974,9 @@ export class VoicePipeline extends EventEmitter {
       playedText: this.playedAudioText.length,
       sentenceIndex: this.ttsSentenceIndex
     });
+    
+    // Track interruption for metrics
+    this.session.metrics.interruptionsCount++;
     
     // Phase 2: Truncate the last assistant message to what was actually heard
     this.truncateAssistantMessage();
@@ -1246,6 +1296,100 @@ export class VoicePipeline extends EventEmitter {
       return 'hi-IN';
     }
     return 'en-IN';
+  }
+
+  /**
+   * Get recent conversation history with sliding window
+   * This prevents token explosion by limiting context sent to LLM
+   * 
+   * Strategy:
+   * 1. Keep last N turns (user + assistant pairs)
+   * 2. Estimate tokens and trim if exceeding limit
+   * 3. Always preserve most recent messages
+   */
+  private getRecentMessages(): ChatMessage[] {
+    const messages = this.session.messages;
+    
+    if (messages.length === 0) {
+      return [];
+    }
+
+    // Calculate max messages based on turns (each turn = user + assistant)
+    const maxMessages = this.config.maxHistoryTurns * 2;
+    
+    // If under limit, return all
+    if (messages.length <= maxMessages) {
+      return messages;
+    }
+
+    // Sliding window: keep only the most recent messages
+    const recentMessages = messages.slice(-maxMessages);
+    
+    // Estimate tokens and further trim if needed
+    let estimatedTokens = this.estimateMessageTokens(recentMessages);
+    
+    while (estimatedTokens > this.config.maxHistoryTokens && recentMessages.length > 2) {
+      // Remove oldest pair (user + assistant)
+      recentMessages.splice(0, 2);
+      estimatedTokens = this.estimateMessageTokens(recentMessages);
+    }
+
+    if (recentMessages.length < messages.length) {
+      this.logger.debug('Conversation history truncated', {
+        originalCount: messages.length,
+        truncatedCount: recentMessages.length,
+        estimatedTokens,
+        maxTokens: this.config.maxHistoryTokens
+      });
+    }
+
+    return recentMessages;
+  }
+
+  /**
+   * Estimate token count for messages (rough approximation)
+   * Uses ~4 characters per token heuristic
+   */
+  private estimateMessageTokens(messages: ChatMessage[]): number {
+    let totalChars = 0;
+    for (const msg of messages) {
+      totalChars += (msg.content?.length || 0);
+      // Add overhead for tool calls
+      if (msg.toolCalls) {
+        totalChars += JSON.stringify(msg.toolCalls).length;
+      }
+    }
+    // Rough estimate: 4 chars per token + message overhead
+    return Math.ceil(totalChars / 4) + (messages.length * 10);
+  }
+
+  /**
+   * Estimate total prompt tokens for logging/debugging
+   */
+  private estimateTotalPromptTokens(
+    messages: ChatMessage[], 
+    tools: ToolDefinition[], 
+    systemPrompt?: string
+  ): number {
+    let tokens = 0;
+    
+    // System prompt tokens (~4 chars per token)
+    if (systemPrompt) {
+      tokens += Math.ceil(systemPrompt.length / 4);
+    }
+    
+    // Message tokens
+    tokens += this.estimateMessageTokens(messages);
+    
+    // Tool definition tokens (JSON schema is verbose)
+    for (const tool of tools) {
+      // Tool name + description + parameters schema
+      tokens += Math.ceil(tool.name.length / 4);
+      tokens += Math.ceil((tool.description?.length || 0) / 4);
+      tokens += Math.ceil(JSON.stringify(tool.parameters).length / 4);
+    }
+    
+    return tokens;
   }
 
   private createEmptyMetrics(): PipelineMetrics {

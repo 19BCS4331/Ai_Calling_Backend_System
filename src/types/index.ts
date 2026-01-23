@@ -156,6 +156,7 @@ export interface LLMResponse {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
+    cachedContentTokenCount?: number;  // For Gemini explicit caching
   };
   latencyMs?: number;
 }
@@ -252,6 +253,12 @@ export interface CallMetrics {
   toolCallCount: number;
   errorCount: number;
   estimatedCost: number;
+  // Extended metrics for billing and analytics
+  llmPromptTokens: number;
+  llmCompletionTokens: number;
+  llmCachedTokens: number;  // Cached tokens (get 75% discount)
+  ttsCharacters: number;
+  interruptionsCount: number;
 }
 
 // ============================================================================

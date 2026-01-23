@@ -88,10 +88,10 @@ export class SessionManager {
       llmConfig: options.llmConfig,
       ttsConfig: options.ttsConfig,
       
-      messages: options.systemPrompt ? [{
-        role: 'system',
-        content: options.systemPrompt
-      }] : [],
+      // NOTE: System prompt is NOT stored in messages array
+      // It's passed separately to LLM via llmConfig.systemPrompt to avoid duplication
+      // This saves ~1000-2000 tokens per turn
+      messages: [],
       
       context: options.context || {},
       
@@ -375,7 +375,13 @@ export class SessionManager {
       turnCount: 0,
       toolCallCount: 0,
       errorCount: 0,
-      estimatedCost: 0
+      estimatedCost: 0,
+      // Extended metrics for billing
+      llmPromptTokens: 0,
+      llmCompletionTokens: 0,
+      llmCachedTokens: 0,  // Cached tokens (get 75% discount)
+      ttsCharacters: 0,
+      interruptionsCount: 0
     };
   }
 

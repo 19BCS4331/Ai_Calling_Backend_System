@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Phone, RefreshCw, Unlink, Loader2 } from 'lucide-react';
+import { Phone, RefreshCw, Unlink, Loader2, Bot } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useOrganizationStore } from '../../store/organization';
 import { useToast } from '../../hooks/useToast';
 import { saasApi, saasEndpoints } from '../../lib/api';
+import { Select } from '../../components/ui/Select';
 
 interface PhoneNumber {
   id: string;
@@ -253,19 +254,25 @@ export function PhoneNumbers() {
                           <p className="text-sm text-yellow-400">No active agents</p>
                         </div>
                       ) : (
-                        <div className="flex flex-wrap gap-2">
-                          {agents
-                            .filter(a => a.status === 'active')
-                            .map(agent => (
-                              <button
-                                key={agent.id}
-                                onClick={() => handleLinkAgent(number.id, agent.id)}
-                                className="px-4 py-2.5 bg-white/5 hover:bg-purple-500/20 border border-white/10 hover:border-purple-500/50 rounded-xl text-sm text-white font-medium transition-all duration-200 hover:shadow-lg hover:shadow-purple-500/20"
-                              >
-                                Link to {agent.name}
-                              </button>
-                            ))}
-                        </div>
+                        <Select
+                          value=""
+                          onChange={(value) => {
+                            if (value) {
+                              handleLinkAgent(number.id, value);
+                            }
+                          }}
+                          options={[
+                            { value: '', label: 'Select agent to link', icon: <Bot size={16} className="text-white/40" /> },
+                            ...agents
+                              .filter(a => a.status === 'active')
+                              .map(agent => ({
+                                value: agent.id,
+                                label: agent.name,
+                                icon: <Bot size={16} className="text-purple-400" />
+                              }))
+                          ]}
+                          className="min-w-[200px]"
+                        />
                       )}
                     </div>
                   )}

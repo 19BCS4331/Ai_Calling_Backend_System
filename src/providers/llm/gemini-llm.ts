@@ -33,6 +33,14 @@ interface GeminiLLMConfig extends LLMConfig {
 
 export class GeminiLLMProvider extends LLMProvider {
   private client: GoogleGenAI | null = null;
+  
+  // Explicit caching for guaranteed cost savings
+  // Minimum: 1024 tokens for Gemini 2.5 Flash
+  // Creates cache with system prompt + tools, reuses for all requests in session
+  private cachedContentName: string | null = null;
+  private cacheCreationPromise: Promise<string | null> | null = null;
+  private cachedSystemPrompt: string | null = null;
+  private cachedToolsHash: string | null = null;
 
   constructor(config: GeminiLLMConfig, logger: Logger) {
     super(config, logger);
@@ -115,7 +123,11 @@ export class GeminiLLMProvider extends LLMProvider {
 
     const contents = this.convertMessages(messages);
     const functionDeclarations = tools ? this.convertTools(tools) : undefined;
+    const effectiveSystemPrompt = systemPrompt || this.config.systemPrompt;
 
+    // Get or create explicit cache for system prompt + tools
+    const cacheName = await this.getOrCreateCache(effectiveSystemPrompt, functionDeclarations);
+    
     return new GeminiStreamSession(
       events,
       this.logger,
@@ -123,14 +135,125 @@ export class GeminiLLMProvider extends LLMProvider {
       {
         model: this.config.model,
         contents,
-        systemPrompt: systemPrompt || this.config.systemPrompt,
-        tools: functionDeclarations,
+        // If cache exists, reference it instead of sending system prompt + tools
+        cachedContentName: cacheName,
+        systemPrompt: cacheName ? undefined : effectiveSystemPrompt,
+        tools: cacheName ? undefined : functionDeclarations,
         temperature: this.config.temperature ?? 0.7,
         topP: this.config.topP ?? 0.95,
         topK: this.config.topK ?? 40,
         maxOutputTokens: this.config.maxTokens ?? 2048
       }
     );
+  }
+
+  /**
+   * Get existing cache or create a new one for system prompt + tools
+   * Uses explicit caching API for guaranteed cost savings
+   */
+  private async getOrCreateCache(
+    systemPrompt?: string,
+    tools?: any[]
+  ): Promise<string | null> {
+    if (!this.client) return null;
+    
+    // Nothing to cache
+    if (!systemPrompt && (!tools || tools.length === 0)) {
+      return null;
+    }
+
+    // Check if we already have a valid cache
+    const toolsHash = tools ? JSON.stringify(tools).slice(0, 100) : '';
+    if (this.cachedContentName && 
+        this.cachedSystemPrompt === systemPrompt && 
+        this.cachedToolsHash === toolsHash) {
+      return this.cachedContentName;
+    }
+
+    // If cache creation is in progress, wait for it
+    if (this.cacheCreationPromise) {
+      return this.cacheCreationPromise;
+    }
+
+    // Create new cache
+    this.cacheCreationPromise = this.createExplicitCache(systemPrompt, tools);
+    const cacheName = await this.cacheCreationPromise;
+    this.cacheCreationPromise = null;
+    
+    if (cacheName) {
+      this.cachedContentName = cacheName;
+      this.cachedSystemPrompt = systemPrompt || null;
+      this.cachedToolsHash = toolsHash;
+    }
+    
+    return cacheName;
+  }
+
+  /**
+   * Create explicit cache with system prompt + tools
+   * Requires model version suffix (e.g., gemini-2.5-flash-preview-05-20)
+   */
+  private async createExplicitCache(
+    systemPrompt?: string,
+    tools?: any[]
+  ): Promise<string | null> {
+    if (!this.client) return null;
+
+    try {
+      // Model must have explicit version for caching
+      const modelForCache = this.config.model.includes('-') 
+        ? `models/${this.config.model}` 
+        : `models/${this.config.model}-preview-05-20`;
+
+      this.logger.info('Creating explicit cache', {
+        model: modelForCache,
+        hasSystemPrompt: !!systemPrompt,
+        systemPromptLength: systemPrompt?.length || 0,
+        toolCount: tools?.length || 0
+      });
+
+      const cache = await this.client.caches.create({
+        model: modelForCache,
+        config: {
+          displayName: `voice-agent-cache-${Date.now()}`,
+          systemInstruction: systemPrompt,
+          tools: tools ? [{ functionDeclarations: tools }] : undefined,
+          ttl: '3600s', // 1 hour TTL
+        }
+      });
+
+      if (cache?.name) {
+        this.logger.info('Explicit cache created', {
+          cacheName: cache.name,
+          usageMetadata: (cache as any).usageMetadata
+        });
+        return cache.name;
+      }
+      
+      return null;
+    } catch (error) {
+      this.logger.warn('Failed to create explicit cache, falling back to no cache', {
+        error: (error as Error).message
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Clean up resources when the session ends
+   */
+  async cleanup(): Promise<void> {
+    if (this.cachedContentName && this.client) {
+      try {
+        await this.client.caches.delete({ name: this.cachedContentName });
+        this.logger.info('Explicit cache deleted', { cacheName: this.cachedContentName });
+      } catch (error) {
+        this.logger.warn('Failed to delete cache', { error: (error as Error).message });
+      }
+    }
+    this.cachedContentName = null;
+    this.cachedSystemPrompt = null;
+    this.cachedToolsHash = null;
   }
 
   async countTokens(messages: ChatMessage[]): Promise<number> {
@@ -339,6 +462,7 @@ interface GeminiStreamConfig {
   contents: Content[];
   systemPrompt?: string;
   tools?: any[];
+  cachedContentName?: string | null;  // Explicit cache reference
   temperature: number;
   topP: number;
   topK: number;
@@ -367,23 +491,41 @@ class GeminiStreamSession extends LLMStreamSession {
     this.abortController = new AbortController();
 
     try {
+      // Build config - use explicit cache if available for guaranteed savings
+      const config: any = {
+        temperature: this.streamConfig.temperature,
+        topP: this.streamConfig.topP,
+        topK: this.streamConfig.topK,
+        maxOutputTokens: this.streamConfig.maxOutputTokens
+      };
+
+      // If we have an explicit cache, reference it (system prompt + tools are cached)
+      if (this.streamConfig.cachedContentName) {
+        config.cachedContent = this.streamConfig.cachedContentName;
+        this.logger.info('Using explicit cache', {
+          cacheName: this.streamConfig.cachedContentName
+        });
+      } else {
+        // No cache - send system prompt and tools directly
+        if (this.streamConfig.systemPrompt) {
+          config.systemInstruction = this.streamConfig.systemPrompt;
+        }
+        if (this.streamConfig.tools) {
+          config.tools = [{ functionDeclarations: this.streamConfig.tools }];
+        }
+      }
+
       const response = await this.client.models.generateContentStream({
         model: this.streamConfig.model,
         contents: this.streamConfig.contents,
-        config: {
-          systemInstruction: this.streamConfig.systemPrompt,
-          tools: this.streamConfig.tools ? [{ functionDeclarations: this.streamConfig.tools }] : undefined,
-          temperature: this.streamConfig.temperature,
-          topP: this.streamConfig.topP,
-          topK: this.streamConfig.topK,
-          maxOutputTokens: this.streamConfig.maxOutputTokens
-        }
+        config
       });
 
       let fullContent = '';
       const toolCalls: ToolCall[] = [];
       let promptTokens = 0;
       let completionTokens = 0;
+      let cachedContentTokenCount = 0;
 
       for await (const chunk of response) {
         if (!this.isActive) break;
@@ -417,10 +559,24 @@ class GeminiStreamSession extends LLMStreamSession {
           }
         }
 
-        // Update usage metadata
+        // Update usage metadata - includes cachedContentTokenCount for explicit caching
         if (chunk.usageMetadata) {
           promptTokens = chunk.usageMetadata.promptTokenCount || 0;
           completionTokens = chunk.usageMetadata.candidatesTokenCount || 0;
+          
+          const metadata = chunk.usageMetadata as any;
+          cachedContentTokenCount = metadata.cachedContentTokenCount || 0;
+          
+          // Log token usage with cache info
+          this.logger.info('Gemini token usage', {
+            promptTokens,
+            completionTokens,
+            cachedContentTokenCount,
+            // Calculate savings: cached tokens get 75% discount
+            effectiveCost: cachedContentTokenCount > 0 
+              ? `${promptTokens - (cachedContentTokenCount * 0.75)} effective tokens (${Math.round((cachedContentTokenCount / promptTokens) * 100)}% cached)`
+              : `${promptTokens} tokens (no cache)`
+          });
         }
       }
 
@@ -432,7 +588,8 @@ class GeminiStreamSession extends LLMStreamSession {
         usage: {
           promptTokens,
           completionTokens,
-          totalTokens: promptTokens + completionTokens
+          totalTokens: promptTokens + completionTokens,
+          cachedContentTokenCount
         },
         latencyMs: Date.now() - this.startTime
       };

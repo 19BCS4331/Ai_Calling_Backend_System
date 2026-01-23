@@ -2,10 +2,13 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Phone, PhoneIncoming, PhoneOutgoing, Clock, 
-  Zap, ArrowUpRight, ArrowDownRight,
-  Activity, Mic, BarChart3
+ ArrowUpRight, ArrowDownRight,
+  Activity, Mic, BarChart3,
+  Globe
 } from 'lucide-react';
+import { Select } from '../../components/ui/Select';
 import { VoiceDemo } from '../../components/voice/VoiceDemo';
+import { CreditBalance } from '../../components/CreditBalance';
 import { useAuthStore } from '../../store/auth';
 import { useOrganizationStore } from '../../store/organization';
 import { useCalls } from '../../hooks/useCalls';
@@ -40,6 +43,7 @@ export function Overview() {
     activeCalls: 0,
     maxConcurrent: 5
   });
+  const [timeRange, setTimeRange] = useState('7');
 
   useEffect(() => {
     if (!calls.length && !currentUsage) {
@@ -133,6 +137,9 @@ export function Overview() {
         </div>
       </div>
 
+      {/* Credit Balance (Trial Users) */}
+      <CreditBalance />
+
       {/* Stats Grid */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map((stat, i) => (
@@ -164,43 +171,6 @@ export function Overview() {
           </motion.div>
         ))}
       </div>
-
-      {/* Usage Bar */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-        className="bg-white/[0.02] border border-white/5 rounded-2xl p-6"
-      >
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-              <Zap size={20} className="text-white" />
-            </div>
-            <div>
-              <h3 className="text-white font-medium">Monthly Usage</h3>
-              <p className="text-sm text-white/40">{stats.minutesUsed} of {stats.minutesUsed + stats.minutesRemaining} minutes used</p>
-            </div>
-          </div>
-          <button className="px-4 py-2 bg-purple-500/10 border border-purple-500/20 rounded-lg text-purple-400 text-sm hover:bg-purple-500/20 transition-colors">
-            Upgrade Plan
-          </button>
-        </div>
-        
-        <div className="h-3 bg-white/5 rounded-full overflow-hidden">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${(stats.minutesUsed / (stats.minutesUsed + stats.minutesRemaining)) * 100}%` }}
-            transition={{ duration: 1, ease: 'easeOut' }}
-            className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full"
-          />
-        </div>
-        
-        <div className="flex justify-between mt-2 text-xs text-white/40">
-          <span>{stats.minutesUsed} minutes used</span>
-          <span>{stats.minutesRemaining} minutes remaining</span>
-        </div>
-      </motion.div>
 
       {/* Main Content Grid */}
       <div className="grid lg:grid-cols-3 gap-6">
@@ -246,15 +216,22 @@ export function Overview() {
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
                   call.direction === 'inbound' 
                     ? 'bg-green-500/10 border border-green-500/20' 
+                    : call.direction === 'web'
+                    ? 'bg-blue-500/10 border border-blue-500/20'
                     : 'bg-purple-500/10 border border-purple-500/20'
                 }`}>
                   {call.direction === 'inbound' ? (
                     <PhoneIncoming size={14} className="text-green-400" />
+                  ) : call.direction === 'web' ? (
+                    <Globe size={14} className="text-blue-400" />
                   ) : (
                     <PhoneOutgoing size={14} className="text-purple-400" />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
+                  {call.direction === 'web' && (
+                    <p className="text-xs text-white/40">Web Call</p>
+                  )}
                   <p className="text-sm text-white truncate">
                     {call.from_number || call.to_number}
                   </p>
@@ -288,11 +265,17 @@ export function Overview() {
             <BarChart3 size={20} className="text-purple-400" />
             <h2 className="text-lg font-semibold text-white">Call Volume</h2>
           </div>
-          <select className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-purple-500/50">
-            <option value="7">Last 7 days</option>
-            <option value="30">Last 30 days</option>
-            <option value="90">Last 90 days</option>
-          </select>
+          <Select
+            value={timeRange}
+            onChange={setTimeRange}
+            options={[
+              { value: '7', label: 'Last 7 days' },
+              { value: '30', label: 'Last 30 days' },
+              { value: '90', label: 'Last 90 days' }
+            ]}
+            className="w-40"
+            searchable={false}
+          />
         </div>
         
         {/* Simple bar chart visualization */}

@@ -208,4 +208,8 @@ export const saasEndpoints = {
   phoneNumbers: (orgId: string) => `/api/v1/orgs/${orgId}/phone-numbers`,
   phoneNumbersSync: (orgId: string) => `/api/v1/orgs/${orgId}/phone-numbers/sync`,
   phoneNumberLink: (orgId: string, numberId: string) => `/api/v1/orgs/${orgId}/phone-numbers/${numberId}/link`,
+  
+  // Calls (extended)
+  callStats: (orgId: string) => `/api/v1/orgs/${orgId}/calls/stats`,
+  callTranscript: (orgId: string, callId: string) => `/api/v1/orgs/${orgId}/calls/${callId}/transcript`,
 };

@@ -20,6 +20,7 @@ import {
   TelephonyAudioPacket 
 } from './types';
 import { telephonyToPipeline } from './audio-converter';
+import { createCallRecord, endCallRecord, findCallBySessionId, getOrgIdFromAgent } from '../saas-api/call-persistence';
 
 export interface TelephonyManagerConfig {
   adapters: TelephonyConfig[];
@@ -237,6 +238,37 @@ export class TelephonyManager extends EventEmitter {
       const session = await this.sessionManager.createSession(sessionOptions);
       this.callToSession.set(call.callId, session.sessionId);
 
+      // Create call record in database
+      let organizationId: string | undefined;
+      if (agentId) {
+        organizationId = await getOrgIdFromAgent(agentId) || undefined;
+      }
+      
+      const callRecord = await createCallRecord({
+        organizationId,
+        agentId,
+        sessionId: session.sessionId,
+        direction: call.direction || 'inbound',
+        fromNumber: call.from,
+        toNumber: call.to,
+        sttProvider: sttConfig.type,
+        ttsProvider: ttsConfig.type,
+        llmProvider: llmConfig.type,
+        metadata: {
+          callId: call.callId,
+          provider: call.provider,
+          channel: 'telephony'
+        }
+      });
+
+      if (callRecord) {
+        this.logger.info('Call record created for telephony call', {
+          callId: callRecord.id,
+          sessionId: session.sessionId,
+          direction: call.direction
+        });
+      }
+
       // Create providers using agent-specific or default configs
       this.logger.info('Creating providers with configs', {
         stt: sttConfig.type,
@@ -387,7 +419,38 @@ export class TelephonyManager extends EventEmitter {
     // End session
     const sessionId = this.callToSession.get(callId);
     if (sessionId) {
-      await this.sessionManager.endSession(sessionId);
+      const session = await this.sessionManager.endSession(sessionId);
+      
+      // End call record in database
+      const callRecord = await findCallBySessionId(sessionId);
+      if (callRecord) {
+        const durationSeconds = session?.metrics ? Math.floor(session.metrics.totalDurationMs / 1000) : 0;
+        const firstResponseLatency = session?.metrics?.e2eLatencyMs?.[0] || undefined;
+        const avgResponseLatency = session?.metrics?.e2eLatencyMs?.length 
+          ? Math.floor(session.metrics.e2eLatencyMs.reduce((a, b) => a + b, 0) / session.metrics.e2eLatencyMs.length)
+          : undefined;
+        
+        await endCallRecord({
+          callId: callRecord.id,
+          durationSeconds,
+          endReason: reason,
+          llmPromptTokens: session?.metrics?.llmPromptTokens || 0,
+          llmCompletionTokens: session?.metrics?.llmCompletionTokens || 0,
+          llmCachedTokens: session?.metrics?.llmCachedTokens || 0,
+          ttsCharacters: session?.metrics?.ttsCharacters || 0,
+          latencyFirstResponseMs: firstResponseLatency,
+          latencyAvgResponseMs: avgResponseLatency,
+          interruptionsCount: session?.metrics?.interruptionsCount || 0
+        });
+        
+        this.logger.info('Call record ended for telephony call', {
+          callId: callRecord.id,
+          sessionId,
+          durationSeconds,
+          endReason: reason
+        });
+      }
+      
       this.callToSession.delete(callId);
     }
 

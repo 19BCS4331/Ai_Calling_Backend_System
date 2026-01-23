@@ -14,6 +14,7 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  lastInitializedAt: number | null;
   initialize: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<void>;
@@ -22,19 +23,31 @@ interface AuthState {
   resetPassword: (email: string) => Promise<void>;
 }
 
+// Cache TTL: 5 minutes
+const CACHE_TTL = 5 * 60 * 1000;
+
 const mapSupabaseUser = (supabaseUser: SupabaseUser): User => ({
   id: supabaseUser.id,
   email: supabaseUser.email || '',
   name: supabaseUser.user_metadata?.name || supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || '',
 });
 
-export const useAuthStore = create<AuthState>()((set) => ({
+export const useAuthStore = create<AuthState>()((set, get) => ({
   user: null,
   isAuthenticated: false,
   isLoading: true,
   error: null,
+  lastInitializedAt: null,
 
   initialize: async () => {
+    const state = get();
+    const now = Date.now();
+    
+    // Skip if already initialized recently (within cache TTL)
+    if (state.lastInitializedAt && (now - state.lastInitializedAt) < CACHE_TTL && state.user) {
+      return;
+    }
+
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
@@ -42,13 +55,14 @@ export const useAuthStore = create<AuthState>()((set) => ({
         set({ 
           user: mapSupabaseUser(session.user), 
           isAuthenticated: true, 
-          isLoading: false 
+          isLoading: false,
+          lastInitializedAt: Date.now()
         });
         
         // Fetch user's organizations
         useOrganizationStore.getState().fetchUserOrganizations();
       } else {
-        set({ user: null, isAuthenticated: false, isLoading: false });
+        set({ user: null, isAuthenticated: false, isLoading: false, lastInitializedAt: Date.now() });
       }
 
       // Listen for auth changes

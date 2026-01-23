@@ -308,22 +308,22 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm text-white/60 mb-2">Language</label>
-                  <select
-                    value={formData.language}
-                    onChange={(e) => updateField('language', e.target.value)}
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
-                  >
-                    <option value="en-IN">English (India)</option>
-                    <option value="hi-IN">Hindi</option>
-                    <option value="ta-IN">Tamil</option>
-                    <option value="te-IN">Telugu</option>
-                    <option value="bn-IN">Bengali</option>
-                    <option value="mr-IN">Marathi</option>
-                    <option value="gu-IN">Gujarati</option>
-                    <option value="kn-IN">Kannada</option>
-                    <option value="ml-IN">Malayalam</option>
-                    <option value="pa-IN">Punjabi</option>
-                  </select>
+                  <Select
+                    value={formData.language || 'en-IN'}
+                    onChange={(value) => updateField('language', value)}
+                    options={[
+                      { value: 'en-IN', label: 'English (India)' },
+                      { value: 'hi-IN', label: 'Hindi' },
+                      { value: 'ta-IN', label: 'Tamil' },
+                      { value: 'te-IN', label: 'Telugu' },
+                      { value: 'bn-IN', label: 'Bengali' },
+                      { value: 'mr-IN', label: 'Marathi' },
+                      { value: 'gu-IN', label: 'Gujarati' },
+                      { value: 'kn-IN', label: 'Kannada' },
+                      { value: 'ml-IN', label: 'Malayalam' },
+                      { value: 'pa-IN', label: 'Punjabi' }
+                    ]}
+                  />
                 </div>
 
                 <div>

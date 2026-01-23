@@ -16,10 +16,12 @@ import {
   AlertCircle,
   ExternalLink,
   RefreshCw,
-  Globe2
+  Globe2,
+  Code
 } from 'lucide-react';
 import { useTools } from '../../hooks/useTools';
 import { useAlert, useConfirm } from '../../hooks/useAlert';
+import { Select } from '../../components/ui/Select';
 import type { Tool, ToolType, ToolStatus } from '../../lib/supabase-types';
 
 export function Tools() {
@@ -179,19 +181,18 @@ export function Tools() {
         </div>
 
         {/* Type Filter */}
-        <div className="relative">
-          <Filter size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
-          <select
-            value={typeFilter || ''}
-            onChange={(e) => setTypeFilter(e.target.value as ToolType | undefined || undefined)}
-            className="pl-11 pr-8 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50 appearance-none cursor-pointer min-w-[160px]"
-          >
-            <option value="">All Types</option>
-            <option value="api_request">API Request</option>
-            <option value="mcp">MCP Server</option>
-            <option value="builtin">Built-in</option>
-          </select>
-        </div>
+        <Select
+          value={typeFilter || ''}
+          onChange={(value) => setTypeFilter(value as ToolType || undefined)}
+          options={[
+            { value: '', label: 'All Types', icon: <Filter size={16} className="text-white/40" /> },
+            { value: 'api_request', label: 'API Request', icon: <ExternalLink size={16} className="text-blue-400" /> },
+            { value: 'mcp', label: 'MCP Server', icon: <Server size={16} className="text-purple-400" /> },
+            { value: 'builtin', label: 'Built-in', icon: <Code size={16} className="text-green-400" /> }
+          ]}
+          className="w-full sm:w-48"
+          searchable={false}
+        />
       </div>
 
       {/* Tools Grid */}

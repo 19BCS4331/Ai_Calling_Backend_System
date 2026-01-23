@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Bot, Plus, Search, Filter, Play, Pause, Archive, Edit, BarChart3 } from 'lucide-react';
 import { useAgents } from '../../hooks/useAgents';
 import { useAlert, useConfirm } from '../../hooks/useAlert';
+import { Select } from '../../components/ui/Select';
 import type { AgentStatus } from '../../lib/supabase-types';
 
 export function Agents() {
@@ -108,20 +109,19 @@ export function Agents() {
         </div>
 
         {/* Status Filter */}
-        <div className="relative">
-          <Filter size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
-          <select
-            value={statusFilter || ''}
-            onChange={(e) => setStatusFilter(e.target.value as AgentStatus || undefined)}
-            className="pl-11 pr-10 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all appearance-none cursor-pointer"
-          >
-            <option value="">All Status</option>
-            <option value="draft">Draft</option>
-            <option value="active">Active</option>
-            <option value="paused">Paused</option>
-            <option value="archived">Archived</option>
-          </select>
-        </div>
+        <Select
+          value={statusFilter || ''}
+          onChange={(value) => setStatusFilter(value as AgentStatus || undefined)}
+          options={[
+            { value: '', label: 'All Status', icon: <Filter size={16} className="text-white/40" /> },
+            { value: 'draft', label: 'Draft', icon: <Edit size={16} className="text-gray-400" /> },
+            { value: 'active', label: 'Active', icon: <Play size={16} className="text-green-400" /> },
+            { value: 'paused', label: 'Paused', icon: <Pause size={16} className="text-yellow-400" /> },
+            { value: 'archived', label: 'Archived', icon: <Archive size={16} className="text-red-400" /> }
+          ]}
+          className="w-full sm:w-48"
+          searchable={false}
+        />
       </div>
 
       {/* Agents Grid */}

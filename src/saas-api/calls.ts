@@ -480,13 +480,14 @@ export async function getCallStats(
   failed_calls: number;
   total_minutes: number;
   total_cost_cents: number;
+  total_user_cost_cents: number;
   avg_duration_seconds: number;
   avg_latency_ms: number | null;
   by_direction: Record<CallDirection, number>;
 }> {
   const { data, error } = await supabaseAdmin
     .from('calls')
-    .select('status, direction, duration_seconds, billed_minutes, cost_total_cents, latency_first_response_ms')
+    .select('status, direction, duration_seconds, billed_minutes, cost_total_cents, cost_user_cents, latency_first_response_ms')
     .eq('organization_id', orgContext.organization.id)
     .gte('started_at', startDate.toISOString())
     .lte('started_at', endDate.toISOString());
@@ -502,6 +503,7 @@ export async function getCallStats(
 
   const totalMinutes = completed.reduce((sum: number, c) => sum + (c.billed_minutes || 0), 0);
   const totalCost = completed.reduce((sum: number, c) => sum + (c.cost_total_cents || 0), 0);
+  const totalUserCost = completed.reduce((sum: number, c) => sum + ((c as any).cost_user_cents || c.cost_total_cents || 0), 0);
   const totalDuration = completed.reduce((sum: number, c) => sum + (c.duration_seconds || 0), 0);
 
   const latencies = completed
@@ -526,6 +528,7 @@ export async function getCallStats(
     failed_calls: failed.length,
     total_minutes: totalMinutes,
     total_cost_cents: totalCost,
+    total_user_cost_cents: totalUserCost,
     avg_duration_seconds: completed.length > 0 ? Math.round(totalDuration / completed.length) : 0,
     avg_latency_ms: avgLatency ? Math.round(avgLatency) : null,
     by_direction: byDirection

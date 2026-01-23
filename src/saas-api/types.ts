@@ -361,7 +361,9 @@ export type SaaSErrorCode =
   | 'PROVIDER_NOT_ALLOWED'
   | 'AGENT_LIMIT_EXCEEDED'
   | 'EXTERNAL_API_ERROR'
-  | 'INTERNAL_ERROR';
+  | 'INTERNAL_ERROR'
+  | 'PLIVO_APP_EXISTS'
+  | 'PLIVO_APP_CREATE_FAILED';
 
 export class SaaSError extends Error {
   constructor(
