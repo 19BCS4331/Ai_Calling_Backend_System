@@ -638,13 +638,13 @@ export class APIServer {
     // Set default model based on provider type
     let defaultModel = 'gemini-2.5-flash';
     if (llmProviderType === 'cerebras') {
-      defaultModel = 'llama-3.3-70b';
+      defaultModel = 'qwen-3-235b-a22b-instruct-2507';  // Supports tool calling
     } else if (llmProviderType === 'openai') {
       defaultModel = 'gpt-4o-mini';
     } else if (llmProviderType === 'anthropic') {
       defaultModel = 'claude-3-5-sonnet-20241022';
     } else if (llmProviderType === 'groq') {
-      defaultModel = 'llama-3.1-70b-versatile';
+      defaultModel = 'meta-llama/llama-4-scout-17b-16e-instruct';  // Ultra-fast with tool calling
     }
     
     const llmConfig: LLMConfig = {

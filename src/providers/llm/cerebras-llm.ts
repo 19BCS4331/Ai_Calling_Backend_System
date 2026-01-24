@@ -83,7 +83,8 @@ export class CerebrasLLMProvider extends LLMProvider {
         temperature: this.config.temperature ?? 0.3,
         max_tokens: this.config.maxTokens ?? 2048,
         top_p: this.config.topP ?? 0.9,
-        stream: false
+        stream: false,
+        parallel_tool_calls: false  // Disable parallel tool calls for sequential execution
       });
 
       return this.parseResponse(response, startTime);
@@ -180,11 +181,13 @@ export class CerebrasLLMProvider extends LLMProvider {
 
         cerebrasMessages.push(assistantMsg);
       } else if (msg.role === 'tool') {
-        // Tool response message
+        // Tool response message - content is REQUIRED by Cerebras API
+        // Ensure content is always a non-empty string
+        const toolContent = msg.content || JSON.stringify({ result: 'success' });
         cerebrasMessages.push({
           role: 'tool',
           tool_call_id: msg.toolCallId,
-          content: msg.content
+          content: toolContent
         });
       }
     }
@@ -193,17 +196,90 @@ export class CerebrasLLMProvider extends LLMProvider {
   }
 
   /**
+   * Recursively add additionalProperties: false to all objects in a schema
+   * Required by Cerebras strict mode
+   */
+  private enforceStrictSchema(schema: any): any {
+    if (!schema || typeof schema !== 'object') {
+      return schema;
+    }
+
+    const result = { ...schema };
+
+    // Add additionalProperties: false to any object type
+    if (result.type === 'object') {
+      result.additionalProperties = false;
+    }
+
+    // Recursively process properties
+    if (result.properties && typeof result.properties === 'object') {
+      result.properties = Object.entries(result.properties).reduce((acc, [key, value]) => {
+        acc[key] = this.enforceStrictSchema(value);
+        return acc;
+      }, {} as any);
+    }
+
+    // Recursively process array items
+    if (result.items) {
+      result.items = this.enforceStrictSchema(result.items);
+    }
+
+    // Recursively process anyOf, oneOf, allOf
+    if (result.anyOf) {
+      result.anyOf = result.anyOf.map((s: any) => this.enforceStrictSchema(s));
+    }
+    if (result.oneOf) {
+      result.oneOf = result.oneOf.map((s: any) => this.enforceStrictSchema(s));
+    }
+    if (result.allOf) {
+      result.allOf = result.allOf.map((s: any) => this.enforceStrictSchema(s));
+    }
+
+    return result;
+  }
+
+  /**
    * Convert our ToolDefinition format to Cerebras function calling format
+   * Per Cerebras docs: strict mode requires additionalProperties: false on ALL objects
+   * IMPORTANT: gpt-oss-120b requires ALL tools to have the same strict value
    */
   private convertTools(tools: ToolDefinition[]): any[] {
-    return tools.map(tool => ({
-      type: 'function',
-      function: {
+    return tools.map(tool => {
+      // Check if tool has actual parameters
+      const hasRealParameters = tool.parameters?.properties && 
+        Object.keys(tool.parameters.properties).length > 0;
+      
+      // Start with base parameters or empty object schema
+      const baseParameters = tool.parameters || {
+        type: 'object',
+        properties: {},
+        required: []
+      };
+      
+      // ALWAYS enforce strict schema for consistency (gpt-oss-120b requirement)
+      // Even for parameter-less tools, we need strict: true with proper schema
+      const parameters = this.enforceStrictSchema(baseParameters);
+      
+      // Log the tool schema for debugging
+      this.logger.info('Converting tool for Cerebras', {
         name: tool.name,
-        description: tool.description,
-        parameters: tool.parameters
-      }
-    }));
+        description: tool.description?.substring(0, 100),
+        hasRealParameters,
+        useStrict: true,  // Always true for gpt-oss-120b
+        parameterCount: tool.parameters?.properties ? Object.keys(tool.parameters.properties).length : 0,
+        strictSchema: parameters
+      });
+      
+      return {
+        type: 'function',
+        function: {
+          name: tool.name,
+          description: tool.description,
+          strict: true,  // ALWAYS true for gpt-oss-120b (no mixing allowed)
+          parameters
+        }
+      };
+    });
   }
 
   /**
@@ -289,7 +365,8 @@ class CerebrasStreamSession extends LLMStreamSession {
         temperature: this.streamConfig.temperature,
         max_tokens: this.streamConfig.maxTokens,
         top_p: this.streamConfig.topP,
-        stream: true
+        stream: true,
+        parallel_tool_calls: false  // Disable parallel tool calls for sequential execution
       });
 
       let fullContent = '';
@@ -299,6 +376,12 @@ class CerebrasStreamSession extends LLMStreamSession {
       
       // Track tool call accumulation
       const toolCallsMap = new Map<number, { id: string; name: string; arguments: string }>();
+
+      this.logger.debug('Cerebras stream started', {
+        model: this.streamConfig.model,
+        hasTools: !!this.streamConfig.tools,
+        toolCount: this.streamConfig.tools?.length || 0
+      });
 
       for await (const chunk of stream) {
         if (!this.isActive) break;
@@ -378,6 +461,18 @@ class CerebrasStreamSession extends LLMStreamSession {
 
     } catch (error) {
       if (this.isActive) {
+        const err = error as any;
+        // Log detailed error information for debugging
+        this.logger.error('Cerebras stream error details', {
+          message: err.message,
+          status: err.status,
+          statusCode: err.statusCode,
+          code: err.code,
+          type: err.type,
+          body: err.body,
+          cause: err.cause?.message,
+          stack: err.stack?.split('\n').slice(0, 5).join('\n')
+        });
         this.emitError(error as Error);
       }
     }

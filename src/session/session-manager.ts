@@ -85,7 +85,10 @@ export class SessionManager {
       status: 'initializing',
       
       sttConfig: options.sttConfig,
-      llmConfig: options.llmConfig,
+      llmConfig: {
+        ...options.llmConfig,
+        systemPrompt: options.systemPrompt || options.llmConfig.systemPrompt
+      },
       ttsConfig: options.ttsConfig,
       
       // NOTE: System prompt is NOT stored in messages array

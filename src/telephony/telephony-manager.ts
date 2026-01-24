@@ -178,13 +178,61 @@ export class TelephonyManager extends EventEmitter {
           language: 'unknown' // Force multi-language support
         };
 
-        // Build LLM config
-        // Normalize provider name: gemini-flash -> gemini
-        const llmProviderType = agent.llm_provider === 'gemini-flash' ? 'gemini' : agent.llm_provider;
+        // Build LLM config with correct credentials for the provider
+        // Normalize provider name: map variants to base provider
+        let llmProviderType = agent.llm_provider as string;
+        if (llmProviderType.startsWith('gemini')) {
+          llmProviderType = 'gemini';
+        } else if (llmProviderType.startsWith('gpt') || llmProviderType.startsWith('openai')) {
+          llmProviderType = 'openai';
+        } else if (llmProviderType.startsWith('cerebras')) {
+          llmProviderType = 'cerebras';
+        } else if (llmProviderType.startsWith('claude') || llmProviderType.startsWith('anthropic')) {
+          llmProviderType = 'anthropic';
+        } else if (llmProviderType.startsWith('groq')) {
+          llmProviderType = 'groq';
+        }
+        
+        // Use provider-specific credentials from environment
+        let llmCredentials: any = {};
+        switch (llmProviderType) {
+          case 'cerebras':
+            llmCredentials = { apiKey: process.env.CEREBRAS_API_KEY || '' };
+            break;
+          case 'openai':
+            llmCredentials = { apiKey: process.env.OPENAI_API_KEY || '' };
+            break;
+          case 'anthropic':
+            llmCredentials = { apiKey: process.env.ANTHROPIC_API_KEY || '' };
+            break;
+          case 'groq':
+            llmCredentials = { apiKey: process.env.GROQ_API_KEY || '' };
+            break;
+          case 'gemini':
+          default:
+            llmCredentials = { apiKey: process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || '' };
+            break;
+        }
+        
+        // Set default model based on provider
+        let defaultModel = 'gemini-2.5-flash';
+        if (llmProviderType === 'cerebras') {
+          defaultModel = 'qwen-3-235b-a22b-instruct-2507';  // Supports tool calling with strict mode
+        } else if (llmProviderType === 'openai') {
+          defaultModel = 'gpt-4o-mini';
+        } else if (llmProviderType === 'anthropic') {
+          defaultModel = 'claude-3-5-sonnet-20241022';
+        } else if (llmProviderType === 'groq') {
+          defaultModel = 'meta-llama/llama-4-scout-17b-16e-instruct';  // Ultra-fast with tool calling
+        }
+        
+        const agentLlmConfig = (agent.llm_config || {}) as any;
         llmConfig = {
           ...this.config.defaultLLMConfig,
           type: llmProviderType as any,
-          ...(agent.llm_config as any)
+          credentials: llmCredentials,
+          model: agentLlmConfig.model || defaultModel,
+          ...agentLlmConfig
         };
 
         // Build TTS config with correct credentials for the provider

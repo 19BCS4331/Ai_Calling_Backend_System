@@ -12,6 +12,7 @@ export { SarvamSTTProvider } from './stt/sarvam-stt';
 // LLM Providers
 export { GeminiLLMProvider } from './llm/gemini-llm';
 export { CerebrasLLMProvider } from './llm/cerebras-llm';
+export { GroqLLMProvider } from './llm/groq-llm';
 
 // TTS Providers
 export { SarvamTTSProvider } from './tts/sarvam-tts';

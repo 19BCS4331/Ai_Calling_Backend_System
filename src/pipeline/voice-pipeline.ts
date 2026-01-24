@@ -98,6 +98,10 @@ export class VoicePipeline extends EventEmitter {
   private isExecutingTool: boolean = false;       // True while tool is being executed
   private queuedUserInput: string | null = null;  // User speech captured during tool execution
 
+  // Phase 3.5: TTS sentence queue (FIFO ordering fix)
+  private sentenceQueue: string[] = [];           // Queue of sentences waiting to be sent to TTS
+  private isProcessingSentenceQueue: boolean = false;  // Prevent concurrent queue processing
+
   // Phase 4: Advanced Turn Detection
   // Silence debounce - wait for sustained silence before processing
   private silenceDebounceTimer: NodeJS.Timeout | null = null;
@@ -719,6 +723,17 @@ export class VoicePipeline extends EventEmitter {
         },
 
         onSentence: (sentence) => {
+          const sentenceTimestamp = Date.now();
+          const sentenceIndex = this.pendingSentences.length;
+          
+          this.logger.info('📝 LLM SENTENCE RECEIVED', {
+            index: sentenceIndex,
+            sentence: sentence,
+            length: sentence.length,
+            timestamp: sentenceTimestamp,
+            elapsedMs: sentenceTimestamp - this.currentTurnStart
+          });
+          
           this.emit('llm_sentence', sentence);
           this.pendingSentences.push(sentence);
           
@@ -862,11 +877,23 @@ export class VoicePipeline extends EventEmitter {
   }
   
   /**
-   * Stream a sentence to TTS immediately (low-latency)
+   * Stream a sentence to TTS immediately
    * Phase 2: Track sentences for barge-in history truncation
+   * Phase 3.5: Send each sentence individually for strict FIFO ordering
    */
   private streamSentenceToTTS(sentence: string): void {
     if (!sentence.trim()) return;
+    
+    const queueTimestamp = Date.now();
+    const queueIndex = this.ttsTextQueue.length;
+    
+    this.logger.info('🎯 QUEUING SENTENCE FOR TTS', {
+      index: queueIndex,
+      sentence: sentence.trim(),
+      length: sentence.length,
+      queueSize: this.sentenceQueue.length,
+      timestamp: queueTimestamp
+    });
     
     // Phase 2: Track sentence for history truncation
     this.ttsTextQueue.push(sentence.trim());
@@ -875,22 +902,53 @@ export class VoicePipeline extends EventEmitter {
     // Track TTS characters for billing
     this.session.metrics.ttsCharacters += sentence.length;
     
-    // Wait briefly for TTS session if not ready yet
-    if (!this.ttsSessionReady || !this.ttsSession?.isSessionActive()) {
-      // Retry after short delay (reduced from 50ms for lower latency)
-      setTimeout(() => {
-        if (this.ttsSession?.isSessionActive()) {
-          this.logger.debug('Streaming sentence to TTS', { length: sentence.length });
-          this.ttsSession.sendText(sentence);
-          this.ttsSentText = true;
+    // Send sentence immediately to TTS queue
+    this.sentenceQueue.push(sentence);
+    this.processSentenceQueueSync();
+  }
+  
+  /**
+   * Process sentence queue synchronously (FIFO)
+   * Cartesia's WebSocket guarantees ordering, so we just need to send in order
+   * The TTS provider already has internal queueing for when WS isn't ready
+   */
+  private processSentenceQueueSync(): void {
+    // Process all queued sentences immediately
+    // Cartesia's sendText() already handles queueing if WS not ready
+    while (this.sentenceQueue.length > 0) {
+      const sentence = this.sentenceQueue.shift()!;
+      const sendTimestamp = Date.now();
+      
+      // Check if TTS session exists and is ready
+      if (this.ttsSession?.isSessionActive()) {
+        this.logger.info('🔊 SENDING TO TTS', { 
+          sentence: sentence.trim(),
+          length: sentence.length,
+          queueRemaining: this.sentenceQueue.length,
+          timestamp: sendTimestamp,
+          ttsReady: this.ttsSessionReady
+        });
+        this.ttsSession.sendText(sentence);
+        this.ttsSentText = true;
+      } else {
+        // TTS not ready yet - put back in queue and schedule retry
+        this.logger.warn('⏸️ TTS NOT READY - REQUEUEING', {
+          sentence: sentence.trim(),
+          queueSize: this.sentenceQueue.length + 1,
+          ttsReady: this.ttsSessionReady,
+          ttsActive: this.ttsSession?.isSessionActive()
+        });
+        this.sentenceQueue.unshift(sentence);
+        if (!this.isProcessingSentenceQueue) {
+          this.isProcessingSentenceQueue = true;
+          setTimeout(() => {
+            this.isProcessingSentenceQueue = false;
+            this.processSentenceQueueSync();
+          }, 10);
         }
-      }, 20);
-      return;
+        break;
+      }
     }
-    
-    this.logger.debug('Streaming sentence to TTS', { length: sentence.length });
-    this.ttsSession.sendText(sentence);
-    this.ttsSentText = true;
   }
   
   /**

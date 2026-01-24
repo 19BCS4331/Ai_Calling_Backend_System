@@ -300,6 +300,7 @@ class CartesiaTTSStreamSession extends TTSStreamSession {
 
     // Use continue: true to keep context open for more text
     // This allows streaming multiple sentences to the same context
+    // NO max_buffer_delay_ms - we want strict FIFO ordering, not buffering
     const message = {
       model_id: this.modelId,
       transcript: text,
