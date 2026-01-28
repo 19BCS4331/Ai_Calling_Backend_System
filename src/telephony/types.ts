@@ -9,8 +9,8 @@ import { Logger } from '../types';
  * Telephony provider configuration
  */
 export interface TelephonyConfig {
-  provider: 'plivo' | 'twilio';
-  credentials: {
+  provider: 'plivo' | 'twilio' | 'tata';
+  credentials?: {
     authId: string;
     authToken: string;
   };
@@ -143,3 +143,110 @@ export interface PlivoPlayAudioMessage {
 export interface PlivoClearAudioMessage {
   event: 'clearAudio';
 }
+
+/**
+ * TATA Teleservices message types
+ * Based on TATA's bi-directional streaming protocol
+ */
+
+// Messages received FROM TATA (we are the endpoint/vendor)
+export interface TataIncomingConnectedMessage {
+  event: 'connected';
+}
+
+export interface TataIncomingStartMessage {
+  event: 'start';
+  sequenceNumber: string;
+  start: {
+    streamSid: string;
+    accountSid: string;
+    callSid: string;
+    from: string;
+    to: string;
+    direction: 'inbound' | 'outbound';
+    mediaFormat: {
+      encoding: 'audio/x-mulaw';
+      sampleRate: 8000;
+      bitRate: 64;
+      bitDepth: 8;
+    };
+    customParameters?: Record<string, any>;
+  };
+  streamSid: string;
+}
+
+export interface TataIncomingMediaMessage {
+  event: 'media';
+  sequenceNumber: string;
+  media: {
+    chunk: string;
+    timestamp: string;
+    payload: string;  // base64 mulaw
+  };
+  streamSid: string;
+}
+
+export interface TataIncomingStopMessage {
+  event: 'stop';
+  sequenceNumber: string;
+  stop: {
+    accountSid: string;
+    callSid: string;
+    reason: string;
+  };
+  streamSid: string;
+}
+
+export interface TataIncomingDTMFMessage {
+  event: 'dtmf';
+  streamSid: string;
+  sequenceNumber: string;
+  dtmf: {
+    digit: string;
+  };
+}
+
+export interface TataIncomingMarkMessage {
+  event: 'mark';
+  sequenceNumber: string;
+  streamSid: string;
+  mark: {
+    name: string;
+  };
+}
+
+// Messages sent TO TATA (from us, the endpoint/vendor)
+export interface TataOutgoingMediaMessage {
+  event: 'media';
+  streamSid: string;
+  media: {
+    payload: string;  // base64 mulaw
+    chunk: number;
+  };
+}
+
+export interface TataOutgoingMarkMessage {
+  event: 'mark';
+  streamSid: string;
+  mark: {
+    name: string;
+  };
+}
+
+export interface TataOutgoingClearMessage {
+  event: 'clear';
+  streamSid: string;
+}
+
+export type TataIncomingMessage = 
+  | TataIncomingConnectedMessage
+  | TataIncomingStartMessage 
+  | TataIncomingMediaMessage 
+  | TataIncomingStopMessage 
+  | TataIncomingDTMFMessage
+  | TataIncomingMarkMessage;
+
+export type TataOutgoingMessage = 
+  | TataOutgoingMediaMessage 
+  | TataOutgoingMarkMessage 
+  | TataOutgoingClearMessage;

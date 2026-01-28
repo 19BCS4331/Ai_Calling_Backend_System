@@ -15,6 +15,7 @@ import { ToolRegistry } from '../tools/tool-registry';
 import { MCPClientManager } from '../mcp/mcp-client';
 import { BaseTelephonyAdapter } from './adapters/base-adapter';
 import { PlivoAdapter } from './adapters/plivo-adapter';
+import { TataAdapter } from './adapters/tata-adapter';
 import { 
   TelephonyConfig, 
   IncomingCall, 
@@ -92,6 +93,8 @@ export class TelephonyManager extends EventEmitter {
     switch (provider) {
       case 'plivo':
         return new PlivoAdapter(this.logger);
+      case 'tata':
+        return new TataAdapter(this.logger);
       default:
         throw new Error(`Unknown telephony provider: ${provider}`);
     }

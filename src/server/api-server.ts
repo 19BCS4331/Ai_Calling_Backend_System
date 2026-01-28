@@ -19,7 +19,7 @@ import { STTProviderFactory } from '../providers/base/stt-provider';
 import { LLMProviderFactory } from '../providers/base/llm-provider';
 import { TTSProviderFactory } from '../providers/base/tts-provider';
 import { InMemoryMetrics, CostTracker } from '../utils/logger';
-import { TelephonyManager, TelephonyManagerConfig, PlivoAdapter, TelephonyConfig } from '../telephony';
+import { TelephonyManager, TelephonyManagerConfig, PlivoAdapter, TataAdapter, TelephonyConfig } from '../telephony';
 import { AudioCacheService } from '../services/audio-cache';
 import { buildSystemPrompt } from '../prompts/tts-prompts';
 import { createCallRecord, endCallRecord, findCallBySessionId, getOrgIdFromAgent } from '../saas-api/call-persistence';
@@ -384,6 +384,12 @@ export class APIServer {
       // Check if this is a Plivo stream connection
       if (url.includes('/telephony/plivo/stream')) {
         this.handlePlivoStreamConnection(ws, req);
+        return;
+      }
+      
+      // Check if this is a TATA stream connection
+      if (url.includes('/telephony/tata/stream')) {
+        this.handleTataStreamConnection(ws, req);
         return;
       }
       
@@ -1584,6 +1590,23 @@ export class APIServer {
     }
     
     // Delegate to Plivo adapter
+    adapter.handleStreamConnection(ws);
+  }
+
+  /**
+   * Handle TATA audio stream WebSocket connection
+   */
+  private handleTataStreamConnection(ws: WebSocket, req: any): void {
+    this.logger.info('TATA stream WebSocket connected', { url: req.url });
+    
+    const adapter = this.telephonyManager?.getAdapter('tata') as TataAdapter;
+    if (!adapter) {
+      this.logger.error('TATA adapter not available for stream connection');
+      ws.close(1011, 'TATA adapter not configured');
+      return;
+    }
+    
+    // Delegate to TATA adapter
     adapter.handleStreamConnection(ws);
   }
 

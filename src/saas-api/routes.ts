@@ -1322,6 +1322,65 @@ export function createSaaSRouter(): Router {
   );
 
   /**
+   * POST /orgs/:orgId/phone-numbers
+   * Manually add a phone number (for providers like TATA that don't have API sync)
+   */
+  router.post(
+    '/orgs/:orgId/phone-numbers',
+    authMiddleware,
+    orgContextMiddleware('orgId'),
+    requireRole('admin'),
+    asyncHandler(async (req, res) => {
+      const { phone_number, country_code, provider } = req.body;
+
+      if (!phone_number) {
+        throw SaaSError.validation('phone_number is required');
+      }
+
+      if (!provider || !['plivo', 'tata', 'twilio'].includes(provider)) {
+        throw SaaSError.validation('Valid provider is required (plivo, tata, or twilio)');
+      }
+
+      // Check if number already exists
+      const { data: existingNumber } = await supabaseAdmin
+        .from('phone_numbers')
+        .select('id')
+        .eq('organization_id', req.org!.organization.id)
+        .eq('phone_number', phone_number)
+        .single();
+
+      if (existingNumber) {
+        throw SaaSError.validation('Phone number already exists');
+      }
+
+      // Insert new number
+      const { data: newNumber, error: insertError } = await supabaseAdmin
+        .from('phone_numbers')
+        .insert({
+          organization_id: req.org!.organization.id,
+          phone_number,
+          country_code: country_code || 'IN',
+          telephony_provider: provider,
+          provider_number_id: phone_number,
+          capabilities: {
+            voice: true,
+            sms: false
+          },
+          monthly_cost_cents: 0,
+          is_active: true
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        throw new SaaSError('INTERNAL_ERROR', insertError.message, 500);
+      }
+
+      res.json({ phone_number: newNumber });
+    })
+  );
+
+  /**
    * POST /orgs/:orgId/phone-numbers/sync
    * Sync phone numbers from Plivo
    */
@@ -1482,29 +1541,34 @@ export function createSaaSRouter(): Router {
         throw SaaSError.notFound('Agent not found');
       }
 
-      // Get Plivo credentials and app ID
-      const credentials = await getTelephonyCredentials(
-        req.org!.organization.id,
-        'plivo'
-      );
+      // Only link via Plivo API if this is a Plivo number
+      if (phoneNumber.telephony_provider === 'plivo') {
+        // Get Plivo credentials and app ID
+        const credentials = await getTelephonyCredentials(
+          req.org!.organization.id,
+          'plivo'
+        );
 
-      const { data: orgData } = await supabaseAdmin
-        .from('organizations')
-        .select('plivo_app_id')
-        .eq('id', req.org!.organization.id)
-        .single();
+        const { data: orgData } = await supabaseAdmin
+          .from('organizations')
+          .select('plivo_app_id')
+          .eq('id', req.org!.organization.id)
+          .single();
 
-      if (!credentials || !orgData?.plivo_app_id) {
-        throw SaaSError.validation('Plivo not properly configured');
+        if (!credentials || !orgData?.plivo_app_id) {
+          throw SaaSError.validation('Plivo not properly configured');
+        }
+
+        // Link number to Plivo application
+        await linkNumberToApplication(
+          credentials.authId,
+          credentials.authToken,
+          phoneNumber.phone_number,
+          orgData.plivo_app_id
+        );
       }
-
-      // Link number to Plivo application
-      await linkNumberToApplication(
-        credentials.authId,
-        credentials.authToken,
-        phoneNumber.phone_number,
-        orgData.plivo_app_id
-      );
+      // For TATA and other providers, just update the database
+      // No external API calls needed
 
       // Update database
       const { data: updatedNumber, error: updateError } = await supabaseAdmin
@@ -1546,22 +1610,27 @@ export function createSaaSRouter(): Router {
         throw SaaSError.notFound('Phone number not found');
       }
 
-      // Get Plivo credentials
-      const credentials = await getTelephonyCredentials(
-        req.org!.organization.id,
-        'plivo'
-      );
+      // Only unlink via Plivo API if this is a Plivo number
+      if (phoneNumber.telephony_provider === 'plivo') {
+        // Get Plivo credentials
+        const credentials = await getTelephonyCredentials(
+          req.org!.organization.id,
+          'plivo'
+        );
 
-      if (!credentials) {
-        throw SaaSError.validation('Plivo not connected');
+        if (!credentials) {
+          throw SaaSError.validation('Plivo not connected');
+        }
+
+        // Unlink from Plivo application
+        await unlinkNumberFromApplication(
+          credentials.authId,
+          credentials.authToken,
+          phoneNumber.phone_number
+        );
       }
-
-      // Unlink from Plivo application
-      await unlinkNumberFromApplication(
-        credentials.authId,
-        credentials.authToken,
-        phoneNumber.phone_number
-      );
+      // For TATA and other providers, just update the database
+      // No external API calls needed
 
       // Update database
       const { data: updatedNumber, error: updateError } = await supabaseAdmin

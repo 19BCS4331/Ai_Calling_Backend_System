@@ -7,4 +7,5 @@ export * from './types';
 export * from './audio-converter';
 export * from './adapters/base-adapter';
 export * from './adapters/plivo-adapter';
+export * from './adapters/tata-adapter';
 export { TelephonyManager, TelephonyManagerConfig } from './telephony-manager';

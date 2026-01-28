@@ -23,13 +23,18 @@ export async function getPhoneNumberByNumber(
 ): Promise<PhoneNumberWithAgent | null> {
   console.log('[phone-numbers] Looking up phone number:', phoneNumber);
   
+  // Normalize phone number - remove + prefix if present
+  const normalizedNumber = phoneNumber.startsWith('+') ? phoneNumber.substring(1) : phoneNumber;
+  
+  console.log('[phone-numbers] Normalized phone number:', normalizedNumber);
+  
   const { data, error } = await supabaseAdmin
     .from('phone_numbers')
     .select(`
       *,
       agent:agents(*)
     `)
-    .eq('phone_number', phoneNumber)
+    .eq('phone_number', normalizedNumber)
     .eq('is_active', true)
     .single();
 

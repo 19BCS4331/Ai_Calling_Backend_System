@@ -66,15 +66,21 @@ async function main(): Promise<void> {
     }] : undefined,
     enableTelephony: process.env.ENABLE_TELEPHONY === 'true',
     telephonyConfig: process.env.ENABLE_TELEPHONY === 'true' ? {
-      adapters: [{
-        provider: 'plivo',
-        credentials: {
-          authId: process.env.PLIVO_AUTH_ID || '',
-          authToken: process.env.PLIVO_AUTH_TOKEN || ''
+      adapters: [
+        {
+          provider: 'plivo',
+          credentials: {
+            authId: process.env.PLIVO_AUTH_ID || '',
+            authToken: process.env.PLIVO_AUTH_TOKEN || ''
+          },
+          webhookBaseUrl: process.env.WEBHOOK_BASE_URL || '',
+          defaultFromNumber: process.env.PLIVO_FROM_NUMBER
         },
-        webhookBaseUrl: process.env.WEBHOOK_BASE_URL || '',
-        defaultFromNumber: process.env.PLIVO_FROM_NUMBER
-      }] as TelephonyConfig[],
+        {
+          provider: 'tata',
+          webhookBaseUrl: process.env.WEBHOOK_BASE_URL || ''
+        }
+      ] as TelephonyConfig[],
       defaultSTTConfig: {
         type: 'sarvam',
         credentials: { apiKey: process.env.SARVAM_API_KEY || '' },
