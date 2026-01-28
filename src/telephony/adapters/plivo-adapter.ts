@@ -55,6 +55,9 @@ export class PlivoAdapter extends BaseTelephonyAdapter {
    * Make an outbound call using Plivo API
    */
   async makeCall(to: string, from: string): Promise<string> {
+    if (!this.config.credentials) {
+      throw new Error('Plivo credentials not configured');
+    }
     const { authId, authToken } = this.config.credentials;
     const answerUrl = `${this.config.webhookBaseUrl}/telephony/plivo/answer`;
     
@@ -88,6 +91,9 @@ export class PlivoAdapter extends BaseTelephonyAdapter {
    * End a call using Plivo API
    */
   async endCall(callId: string): Promise<void> {
+    if (!this.config.credentials) {
+      throw new Error('Plivo credentials not configured');
+    }
     const { authId, authToken } = this.config.credentials;
     
     // Get the actual Plivo call UUID (remove our prefix if present)
