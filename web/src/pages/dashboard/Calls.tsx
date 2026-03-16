@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Phone, PhoneIncoming, PhoneOutgoing, Globe, Search, Play, Download, Clock, TrendingUp, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Phone, PhoneIncoming, PhoneOutgoing, Globe, Search, Play, MessageSquare, Clock, TrendingUp, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CallDetail } from '../../components/CallDetail';
 import { supabase } from '../../lib/supabase';
 import { useOrganizationStore } from '../../store/organization';
 import { useToast } from '../../hooks/useToast';
@@ -48,6 +49,7 @@ export function Calls() {
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'inbound' | 'outbound' | 'web'>('all');
+  const [selectedCall, setSelectedCall] = useState<Call | null>(null);
   const { currentOrganization } = useOrganizationStore();
   const toast = useToast();
 
@@ -249,7 +251,8 @@ export function Calls() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: i * 0.02 }}
-                    className="border-b border-white/5 hover:bg-white/[0.02] transition-colors"
+                    className="border-b border-white/5 hover:bg-white/[0.02] transition-colors cursor-pointer"
+                    onClick={() => setSelectedCall(call)}
                   >
                     <td className="p-4">
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
@@ -300,10 +303,11 @@ export function Calls() {
                           </button>
                         )}
                         <button 
+                          onClick={(e) => { e.stopPropagation(); setSelectedCall(call); }}
                           className="p-2 text-white/40 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition-colors"
-                          title="View transcript"
+                          title="View details & transcript"
                         >
-                          <Download size={16} />
+                          <MessageSquare size={16} />
                         </button>
                       </div>
                     </td>
@@ -341,6 +345,13 @@ export function Calls() {
             </div>
           )}
         </div>
+      )}
+      {/* Call Detail Panel */}
+      {selectedCall && (
+        <CallDetail
+          call={selectedCall}
+          onClose={() => setSelectedCall(null)}
+        />
       )}
     </div>
   );

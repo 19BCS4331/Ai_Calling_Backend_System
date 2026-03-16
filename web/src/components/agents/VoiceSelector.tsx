@@ -4,7 +4,8 @@ import { ChevronDown, Loader, Volume2, Edit3, Search, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 // Cache configuration
-const CACHE_KEY = 'cartesia_voices_cache';
+const CARTESIA_CACHE_KEY = 'cartesia_voices_cache';
+const GOOGLE_CACHE_KEY = 'google_voices_cache';
 const CACHE_DURATION = 1000 * 60 * 60; // 1 hour
 
 // Sarvam TTS speakers (static list)
@@ -17,6 +18,7 @@ const SARVAM_SPEAKERS: Voice[] = [
   { id: 'karun', name: 'Karun', description: 'Male voice', language: 'hi-IN' },
   { id: 'hitesh', name: 'Hitesh', description: 'Male voice', language: 'hi-IN' },
 ];
+
 
 interface Voice {
   id: string;
@@ -37,14 +39,14 @@ interface VoiceSelectorProps {
   onVoiceChange: (voiceId: string) => void;
 }
 
-function getCachedVoices(): Voice[] | null {
+function getCachedVoices(cacheKey: string): Voice[] | null {
   try {
-    const cached = localStorage.getItem(CACHE_KEY);
+    const cached = localStorage.getItem(cacheKey);
     if (!cached) return null;
     
     const { voices, timestamp }: VoiceCache = JSON.parse(cached);
     if (Date.now() - timestamp > CACHE_DURATION) {
-      localStorage.removeItem(CACHE_KEY);
+      localStorage.removeItem(cacheKey);
       return null;
     }
     return voices;
@@ -53,10 +55,10 @@ function getCachedVoices(): Voice[] | null {
   }
 }
 
-function setCachedVoices(voices: Voice[]): void {
+function setCachedVoices(cacheKey: string, voices: Voice[]): void {
   try {
     const cache: VoiceCache = { voices, timestamp: Date.now() };
-    localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+    localStorage.setItem(cacheKey, JSON.stringify(cache));
   } catch {
     // Ignore storage errors
   }
@@ -80,9 +82,17 @@ export function VoiceSelector({ provider, selectedVoiceId, onVoiceChange }: Voic
       setVoices(SARVAM_SPEAKERS);
       setIsLoading(false);
       setError(null);
+    } else if (provider === 'google') {
+      // Try to load from cache first, then fetch from API
+      const cached = getCachedVoices(GOOGLE_CACHE_KEY);
+      if (cached && cached.length > 0) {
+        setVoices(cached);
+      } else {
+        fetchGoogleVoices();
+      }
     } else if (provider === 'cartesia') {
       // Try to load from cache first
-      const cached = getCachedVoices();
+      const cached = getCachedVoices(CARTESIA_CACHE_KEY);
       if (cached && cached.length > 0) {
         setVoices(cached);
       } else {
@@ -134,9 +144,49 @@ export function VoiceSelector({ provider, selectedVoiceId, onVoiceChange }: Voic
       const data = await response.json();
       const fetchedVoices = data.voices || [];
       setVoices(fetchedVoices);
-      setCachedVoices(fetchedVoices);
+      setCachedVoices(CARTESIA_CACHE_KEY, fetchedVoices);
     } catch (err) {
       console.error('Failed to fetch Cartesia voices:', err);
+      setError(err instanceof Error ? err.message : 'Failed to fetch voices');
+      setVoices([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchGoogleVoices = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('Not authenticated');
+      }
+
+      const apiUrl = import.meta.env.VITE_SAAS_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/api/v1/providers/google/voices`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || errorData.message || `Failed to fetch voices: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const fetchedVoices: Voice[] = (data.voices || []).map((v: any) => ({
+        id: v.id,
+        name: v.name,
+        description: v.description,
+        language: v.language,
+      }));
+      setVoices(fetchedVoices);
+      setCachedVoices(GOOGLE_CACHE_KEY, fetchedVoices);
+    } catch (err) {
+      console.error('Failed to fetch Google TTS voices:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch voices');
       setVoices([]);
     } finally {
@@ -165,7 +215,7 @@ export function VoiceSelector({ provider, selectedVoiceId, onVoiceChange }: Voic
   };
 
   // For providers without dropdown support or when manual mode is enabled
-  const hasDropdownSupport = provider === 'cartesia' || provider === 'sarvam';
+  const hasDropdownSupport = provider === 'cartesia' || provider === 'sarvam' || provider === 'google';
   
   if (!hasDropdownSupport || manualMode) {
     return (
@@ -202,7 +252,7 @@ export function VoiceSelector({ provider, selectedVoiceId, onVoiceChange }: Voic
         </div>
         <p className="text-xs text-white/40">
           {hasDropdownSupport
-            ? `Enter a ${provider === 'cartesia' ? 'Cartesia voice ID' : 'Sarvam speaker name'} manually`
+            ? `Enter a ${provider === 'cartesia' ? 'Cartesia voice ID' : provider === 'google' ? 'Google Chirp 3 HD voice ID (e.g. en-US-Chirp3-HD-Kore)' : 'Sarvam speaker name'} manually`
             : 'Enter the voice ID for your TTS provider'}
         </p>
       </div>

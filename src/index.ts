@@ -13,12 +13,15 @@ import { TelephonyConfig } from './telephony';
 
 // Import providers to register them
 import './providers/stt/sarvam-stt';
+import './providers/stt/elevenlabs-stt';
 import './providers/tts/sarvam-tts';
 import './providers/tts/reverie-tts';
 import './providers/tts/cartesia-tts';
+import './providers/tts/google-tts';
 import './providers/llm/gemini-llm';
 import './providers/llm/cerebras-llm';
 import './providers/llm/groq-llm';
+import './providers/llm/openrouter-llm';
 
 const logger = createLogger('voice-agent', {
   level: (process.env.LOG_LEVEL as any) || 'info',
@@ -376,6 +379,16 @@ Say clearly (according to the conversation language):
       //   credentials: { apiKey: process.env.SARVAM_API_KEY || '' },
       //   voice: {
       //     voiceId: "anushka",
+      //     language: 'en-IN',
+      //     gender: 'female'
+      //   },
+      //   audioQuality: 'telephony'
+      // } as any,
+      // defaultTTSConfig: {
+      //   type: 'google',
+      //   credentials: { apiKey: '' },  // Uses GOOGLE_APPLICATION_CREDENTIALS
+      //   voice: {
+      //     voiceId: 'en-IN-Chirp3-HD-Kore',  // Chirp 3 HD female voice
       //     language: 'en-IN',
       //     gender: 'female'
       //   },

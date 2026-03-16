@@ -17,6 +17,9 @@ export interface DailyUsage {
   total_cost_cents: number;
   successful_calls: number;
   failed_calls: number;
+  web_calls: number;
+  inbound_calls: number;
+  outbound_calls: number;
 }
 
 export function useUsage() {

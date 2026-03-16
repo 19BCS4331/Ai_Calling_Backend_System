@@ -18,7 +18,8 @@ import {
   TataIncomingMediaMessage,
   TataIncomingStopMessage,
   TataIncomingDTMFMessage,
-  TataIncomingMarkMessage
+  TataIncomingMarkMessage,
+  TataOutgoingClearMessage
 } from '../types';
 import { pipelineToTelephony, mulawToLinear } from '../audio-converter';
 
@@ -83,9 +84,11 @@ export class TataAdapter extends BaseTelephonyAdapter {
       return;
     }
 
+    // Emit call:ended BEFORE cleanup so telephony manager can end the call record
+    this.emitCallEnded(callId, 'agent_ended');
+
     const ws = this.activeStreams.get(streamSid);
     if (ws && ws.readyState === WebSocket.OPEN) {
-      // Just close the WebSocket - TATA will send stop message to us
       ws.close();
     }
 
@@ -142,10 +145,19 @@ export class TataAdapter extends BaseTelephonyAdapter {
     // Clear local buffer
     this.audioBuffers.delete(callId);
     
-    // Note: TATA's clear message is sent FROM vendor TO us
-    // We don't send clear messages to TATA
-    // Instead, we just stop sending media messages
-    this.logger.debug('Cleared audio buffer for barge-in', { callId });
+    // Send clear event to TATA WebSocket to stop buffered audio playback
+    const streamSid = this.callToStream.get(callId);
+    if (streamSid) {
+      const ws = this.activeStreams.get(streamSid);
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        const clearMessage: TataOutgoingClearMessage = {
+          event: 'clear',
+          streamSid
+        };
+        ws.send(JSON.stringify(clearMessage));
+        this.logger.info('Sent clear event to TATA for barge-in', { callId, streamSid });
+      }
+    }
   }
 
   /**

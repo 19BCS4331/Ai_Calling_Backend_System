@@ -7,10 +7,37 @@
 
 export const TTS_PROVIDER_PROMPTS: Record<string, string> = {
   cartesia: `
-## Voice Tags (Cartesia)
-ALLOWED ONLY: [laughter], <speed ratio="0.6-1.5"/>, <volume ratio="0.5-2.0"/>, <emotion value="X"/>, <spell>text</spell>, <break time="100-2000ms"/>
-FORBIDDEN: <language>, <prosody>, <phoneme>, any other tags
-Rules: Use tags sparingly. For multi-language, just write text directly (no tags). Never mention formatting to user.
+IMPORTANT: When generating speech output, you MUST follow the Cartesia Voice Tag rules below.
+
+Voice Tags (Cartesia)
+
+Use tags sparingly and only when they improve the spoken delivery.
+
+Allowed tags only:
+
+* [laughter]
+* <speed ratio="0.6-1.5"/>
+* <volume ratio="0.5-2.0"/>
+* <emotion value="X"/>
+* <spell>text</spell>
+* <break time="100-2000ms"/>
+
+Strict rules:
+
+* Never use: <language>, <prosody>, <phoneme>, or any other tags.
+* Never mention or explain tags to the user.
+* For multilingual speech, write the text directly with no tags.
+* Use very tags smartly.
+
+Examples:
+
+Good:
+That's actually pretty funny. [laughter]
+
+Let me check that for you. <break time="400ms"/> One moment.
+
+Bad: <prosody rate="slow">Hello</prosody>
+
 `,
 
   sarvam: `
@@ -24,8 +51,17 @@ No special tags. Use punctuation for expression: ellipsis (...) for pauses, vari
 `,
 
   google: `
-## Voice Guidelines (Google TTS)
-No special tags needed. Write naturally with clear punctuation.
+## Voice Guidelines (Google Chirp 3 HD)
+NO SSML tags - streaming mode does not support them. Use punctuation and writing style to control speech:
+- Use contractions (it's, we're, don't) - never formal forms (it is, we are, do not)
+- Ellipses (...) for deliberate pauses or trailing thoughts: "And then... it happened."
+- Hyphens (-) for brief thought breaks: "I wanted to say - but let me check first."
+- Commas after transition words for breath pauses: "So, here's what I found."
+- Short sentences over long compound ones. Break complex info into 2-3 short sentences.
+- Spell out numbers naturally: "twelve thirty PM" not "12:30 PM", "eight five five" not "855"
+- Spell out abbreviations: "Doctor" not "Dr.", "Street" not "St."
+- Add "okay?" or "right?" softeners for friendly tone where appropriate
+- Never use bullet points, markdown, or formatting symbols - speak everything as flowing text
 `
 };
 

@@ -32,6 +32,9 @@ export function useWebSocket() {
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const recordingContextRef = useRef<AudioContext | null>(null);  // Track recording AudioContext
+  const bargedInRef = useRef<boolean>(false);  // Drop audio after barge-in until next turn
+  const isAIPlayingRef = useRef<boolean>(false);  // Track AI playback for client-side barge-in
+  const consecutiveLoudRef = useRef<number>(0);  // Consecutive loud audio chunks for VAD
   
   const {
     setConnectionStatus,
@@ -131,6 +134,7 @@ export function useWebSocket() {
         break;
 
       case 'llm_token':
+        bargedInRef.current = false;  // New turn started, accept audio again
         appendAIResponse(msg.token as string);
         break;
 
@@ -140,9 +144,12 @@ export function useWebSocket() {
 
       case 'barge_in':
         // Clear audio buffer immediately on barge-in
+        bargedInRef.current = true;  // Drop all audio until next turn
+        consecutiveLoudRef.current = 0;
         if (workletNodeRef.current) {
           workletNodeRef.current.port.postMessage({ type: 'clear' });
         }
+        isAIPlayingRef.current = false;
         setIsAIPlaying(false);
         setAIResponse('');  // Clear AI response for new turn
         break;
@@ -213,6 +220,10 @@ export function useWebSocket() {
   const handleAudioData = async (blob: Blob) => {
     if (!workletNodeRef.current || !audioContextRef.current) return;
     
+    // Drop audio that arrives after barge-in (stale TTS chunks still in flight)
+    if (bargedInRef.current) return;
+    
+    isAIPlayingRef.current = true;
     setIsAIPlaying(true);
     
     const arrayBuffer = await blob.arrayBuffer();
@@ -285,10 +296,39 @@ export function useWebSocket() {
         
         const input = e.inputBuffer.getChannelData(0);
         const pcm = new Int16Array(input.length);
+        let sumSquares = 0;
         for (let i = 0; i < input.length; i++) {
           pcm[i] = Math.max(-32768, Math.min(32767, input[i] * 32768));
+          sumSquares += input[i] * input[i];
         }
         wsRef.current.send(pcm.buffer);
+        
+        // Client-side VAD for barge-in: detect user speech during AI playback
+        // The browser's echoCancellation reduces AI audio but user speech still shows
+        // higher energy than silence. RMS > 0.02 is a reasonable speech threshold.
+        if (isAIPlayingRef.current && !bargedInRef.current) {
+          const rms = Math.sqrt(sumSquares / input.length);
+          if (rms > 0.02) {
+            consecutiveLoudRef.current++;
+            // Require 3 consecutive loud chunks (~192ms at 4096 samples/16kHz) to confirm speech
+            if (consecutiveLoudRef.current >= 3) {
+              console.log('[barge-in] Client-side VAD triggered, RMS:', rms.toFixed(4));
+              bargedInRef.current = true;
+              consecutiveLoudRef.current = 0;
+              // Clear audio buffer immediately
+              if (workletNodeRef.current) {
+                workletNodeRef.current.port.postMessage({ type: 'clear' });
+              }
+              isAIPlayingRef.current = false;
+              setIsAIPlaying(false);
+              setAIResponse('');
+              // Tell server about client-side barge-in
+              wsRef.current.send(JSON.stringify({ type: 'barge_in' }));
+            }
+          } else {
+            consecutiveLoudRef.current = 0;
+          }
+        }
       };
 
       source.connect(processorRef.current);

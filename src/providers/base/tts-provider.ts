@@ -21,6 +21,12 @@ export interface TTSProviderCapabilities {
   supportedAudioFormats: string[];
   supportsSSML: boolean;
   maxTextLength: number;
+  /** When true, the pipeline should stream raw LLM tokens directly to the TTS
+   *  session via sendText() instead of splitting into sentences first.
+   *  Google TTS needs this — it concatenates text fragments into one continuous
+   *  audio stream internally, so sending complete sentences as separate chunks
+   *  causes them to be processed concurrently and returned out of order. */
+  supportsTokenStreaming?: boolean;
 }
 
 export interface VoiceInfo {

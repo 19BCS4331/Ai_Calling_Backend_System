@@ -80,6 +80,16 @@ export interface VoicePipelineConfig {
 
   compressTools: boolean;        // Compress tool definitions to save tokens (default: true)
 
+  // Agent behavior settings (from UI)
+
+  firstMessage: string | null;          // AI speaks first when session starts
+
+  endCallPhrases: string[];             // Phrases that trigger call end
+
+  interruptionSensitivity: number;      // 0-1, controls barge-in threshold
+
+  maxCallDurationSeconds: number;       // Max call duration before auto-end
+
 }
 
 
@@ -156,6 +166,18 @@ export class VoicePipeline extends EventEmitter {
 
   private ttsSentText: boolean = false;  // Track if any text was sent to TTS
 
+  private pendingEndCall: boolean = false;  // True when end_call tool detected, prevents TTS teardown
+
+  // Generation ID: prevents stale TTS sessions from leaking audio.
+  // Incremented on each generateLLMResponse() and handleBargeIn().
+  // onAudioChunk captures this at creation; discards audio if stale.
+  private ttsGenerationId: number = 0;
+
+  // Token-level TTS streaming: when true, raw LLM tokens are sent directly to TTS
+  // instead of splitting into sentences. Google TTS needs this to guarantee audio ordering.
+  private useTokenStreaming: boolean = false;
+  private tokenBuffer: string = '';  // Accumulates tokens until word boundary before sending to TTS
+
 
 
   // Audio cache for filler phrases (Phase 1 optimization)
@@ -228,6 +250,10 @@ export class VoicePipeline extends EventEmitter {
 
   private isSpeculativeExecution: boolean = false;
 
+  // Deduplication: prevent same text from triggering multiple LLM calls
+  private lastProcessedText: string = '';
+  private lastProcessedTime: number = 0;
+
 
 
   constructor(
@@ -268,6 +294,13 @@ export class VoicePipeline extends EventEmitter {
 
 
 
+    // Map interruption sensitivity (0-1) to audio level threshold
+    // 0 = less sensitive (high threshold, harder to interrupt)
+    // 1 = more sensitive (low threshold, easy to interrupt)
+    const sensitivity = config?.interruptionSensitivity ?? 0.5;
+    this.bargeInThreshold = Math.round(1200 - (sensitivity * 1000)); // Range: 200-1200
+    this.bargeInChunksRequired = sensitivity >= 0.7 ? 1 : sensitivity >= 0.4 ? 2 : 3;
+
     this.config = {
 
       enableBargeIn: config?.enableBargeIn ?? true,
@@ -294,13 +327,31 @@ export class VoicePipeline extends EventEmitter {
 
       maxTools: config?.maxTools ?? 0,
 
-      compressTools: config?.compressTools ?? true
+      compressTools: config?.compressTools ?? true,
+
+      // Agent behavior settings
+
+      firstMessage: config?.firstMessage ?? null,
+
+      endCallPhrases: config?.endCallPhrases ?? [],
+
+      interruptionSensitivity: sensitivity,
+
+      maxCallDurationSeconds: config?.maxCallDurationSeconds ?? 600
 
     };
 
 
 
     this.metrics = this.createEmptyMetrics();
+
+    // Check if TTS provider supports token-level streaming
+    // Google TTS concatenates text fragments into one continuous audio stream,
+    // so we must stream raw tokens instead of splitting into sentences
+    this.useTokenStreaming = this.ttsProvider.getCapabilities().supportsTokenStreaming === true;
+    if (this.useTokenStreaming) {
+      this.logger.info('Token-level TTS streaming enabled (provider: ' + this.ttsProvider.getName() + ')');
+    }
 
   }
 
@@ -394,15 +445,59 @@ export class VoicePipeline extends EventEmitter {
 
     this.logger.info('Voice pipeline started successfully');
 
+    // AI-speaks-first: if firstMessage is configured, TTS it immediately
+    if (this.config.firstMessage) {
+      this.logger.info('AI speaks first - sending first message', {
+        message: this.config.firstMessage
+      });
+      // Add to conversation history as assistant message
+      this.session.messages.push({
+        role: 'assistant',
+        content: this.config.firstMessage
+      });
+      // Start TTS session first (normally only started during generateLLMResponse)
+      this.startTTSSessionAsync();
+      // Wait for TTS to be ready, then send
+      const waitForTTS = async () => {
+        const maxWait = 5000;
+        const start = Date.now();
+        while (!this.ttsSessionReady && Date.now() - start < maxWait) {
+          await new Promise(r => setTimeout(r, 50));
+        }
+        if (this.ttsSessionReady) {
+          this.streamSentenceToTTS(this.config.firstMessage!);
+          // Signal TTS complete so the stream closes cleanly after first message.
+          // Google TTS gRPC aborts idle streams after 5s — a new session will be
+          // created when the next LLM response arrives.
+          this.signalTTSComplete();
+        } else {
+          this.logger.warn('TTS not ready after timeout, skipping first message');
+        }
+      };
+      waitForTTS().catch(err => this.logger.error('First message TTS failed', { error: (err as Error).message }));
+    }
+
+    // Max call duration timer - auto-end call after configured duration
+    if (this.config.maxCallDurationSeconds > 0) {
+      this.maxCallDurationTimer = setTimeout(() => {
+        this.logger.info('Max call duration reached, ending call', {
+          maxSeconds: this.config.maxCallDurationSeconds
+        });
+        this.emit('session_end_requested', { reason: 'max_duration_reached' });
+      }, this.config.maxCallDurationSeconds * 1000);
+    }
+
   }
 
 
 
-  private bargeInThreshold: number = 600;  // Audio level threshold for barge-in (tuned: 1000+ = speech, 200-500 = noise)
+  private bargeInThreshold: number = 600;  // Audio level threshold for barge-in (set by interruptionSensitivity)
 
   private consecutiveLoudChunks: number = 0;
 
-  private bargeInChunksRequired: number = 3;  // Require 3 consecutive loud chunks for stability
+  private bargeInChunksRequired: number = 2;  // Consecutive loud chunks needed (set by interruptionSensitivity)
+
+  private maxCallDurationTimer: NodeJS.Timeout | null = null;  // Auto-end call after max duration
 
 
 
@@ -498,16 +593,16 @@ export class VoicePipeline extends EventEmitter {
 
 
 
-    // Phase 2: Echo suppression - skip STT only during active TTS playback
-
-    // But still allow audio through shortly after TTS ends for natural conversation
-
-    if (this.isTTSPlaying) {
-
-      // Don't send audio to STT while TTS is actively playing
-
-      return;
-
+    // Phase 2: Echo suppression — only suppress for a short window AFTER TTS ends
+    // During active TTS playback, we STILL send audio to STT because the browser's
+    // echoCancellation already filters the AI's voice from the mic. If STT produces
+    // a transcript during TTS, that triggers barge-in via onFinalTranscript.
+    // We only suppress the brief post-TTS echo window to catch residual echo.
+    if (!this.isTTSPlaying && this.ttsPlaybackEndTime > 0) {
+      const timeSinceTTSEnd = Date.now() - this.ttsPlaybackEndTime;
+      if (timeSinceTTSEnd < this.echoSuppressionWindowMs) {
+        return;
+      }
     }
 
 
@@ -626,6 +721,14 @@ export class VoicePipeline extends EventEmitter {
 
    */
 
+  private getTTSSampleRate(): number {
+    const providerName = this.ttsProvider.getName().toLowerCase();
+    if (providerName === 'cartesia') return 44100;   // Cartesia web mode
+    if (providerName === 'google') return 24000;     // Google Chirp 3 HD
+    if (providerName === 'sarvam') return 22050;     // Sarvam TTS
+    return 24000; // Conservative default
+  }
+
   private calculateAudioLevel(buffer: Buffer): number {
 
     // Assume 16-bit PCM audio
@@ -660,9 +763,17 @@ export class VoicePipeline extends EventEmitter {
 
   async stop(): Promise<void> {
 
+    this.logger.debug('Pipeline stop() called', { pendingEndCall: this.pendingEndCall, isActive: this.isActive });
+
     this.isActive = false;
 
     
+
+    // Clear max call duration timer
+    if (this.maxCallDurationTimer) {
+      clearTimeout(this.maxCallDurationTimer);
+      this.maxCallDurationTimer = null;
+    }
 
     // Phase 4: Clear silence debounce timer
 
@@ -684,7 +795,13 @@ export class VoicePipeline extends EventEmitter {
 
     this.llmSession?.abort();
 
-    this.ttsSession?.abort();
+    // Don't abort TTS if farewell audio drain is in progress —
+    // the end_call handler in executeToolCall will handle TTS lifecycle.
+    if (!this.pendingEndCall) {
+      this.ttsSession?.abort();
+    } else {
+      this.logger.debug('Skipping TTS abort — pendingEndCall, farewell drain in progress');
+    }
 
 
 
@@ -764,69 +881,11 @@ export class VoicePipeline extends EventEmitter {
 
           
 
-          // Phase 5: Abort speculative LLM execution if user continues speaking
-
-          if (this.isSpeculativeExecution && this.speculativeAbortController) {
-
-            this.logger.debug('Aborting speculative LLM - user continued speaking');
-
-            this.speculativeAbortController.abort();
-
-            this.speculativeAbortController = null;
-
-            this.isSpeculativeExecution = false;
-
-          }
-
-          
-
-          // LATENCY OPTIMIZATION: Speculative LLM execution on high-confidence partials
-
-          // Start LLM processing early if we detect a likely complete utterance
-
-          // This can save 200-400ms by overlapping STT finalization with LLM startup
-
-          if (!this.isProcessingTurn && !this.isSpeculativeExecution && result.text.length > 8) {
-
-            const isLikelyComplete = this.isLikelyCompleteUtterance(result.text);
-
-            const hasHighConfidence = result.confidence > 0.75;  // Lowered from 0.85 for faster triggering
-
-            
-
-            if (isLikelyComplete && hasHighConfidence) {
-
-              this.logger.debug('Starting speculative LLM execution', {
-
-                text: result.text,
-
-                confidence: result.confidence
-
-              });
-
-              
-
-              this.isSpeculativeExecution = true;
-
-              this.speculativeAbortController = new AbortController();
-
-              
-
-              // Start processing speculatively (will be aborted if user continues)
-
-              this.processUserInput(result.text).catch(err => {
-
-                this.logger.debug('Speculative execution aborted or failed', { 
-
-                  error: err.message 
-
-                });
-
-              });
-
-            }
-
-          }
+          // SPECULATIVE EXECUTION DISABLED:
+          // The abort controller was never wired into processUserInput/generateLLMResponse,
+          // so speculative calls ran to completion. The debounced final then triggered
+          // a SECOND identical LLM call, causing repeated bot responses.
+          // TODO: Re-enable once abort controller is properly wired through the LLM stream.
 
         },
 
@@ -844,7 +903,17 @@ export class VoicePipeline extends EventEmitter {
 
           this.lastSTTConfidence = result.confidence;
 
-          
+          // STT-based barge-in: if user speaks while TTS is playing, trigger barge-in
+          // This is more reliable than audio-level detection on web UI where browser
+          // echoCancellation suppresses audio levels but STT can still detect speech
+          if (this.isTTSPlaying && result.text.trim().length > 0) {
+            this.logger.info('STT-based barge-in triggered', {
+              transcript: result.text,
+              confidence: result.confidence
+            });
+            this.handleBargeIn();
+            // Continue processing - the transcript is the user's new input
+          }
 
           // Phase 3: If tool is executing, queue the input instead of processing
 
@@ -890,7 +959,31 @@ export class VoicePipeline extends EventEmitter {
 
           this.isSpeaking = false;  // Final transcript means this segment ended
 
-          
+          // End-call phrase detection: if user says a configured end-call phrase, end the call
+          if (this.config.endCallPhrases.length > 0 && this.accumulatedTranscript) {
+            const normalizedText = this.accumulatedTranscript.toLowerCase().trim();
+            const matchedPhrase = this.config.endCallPhrases.find(phrase =>
+              normalizedText.includes(phrase.toLowerCase())
+            );
+            if (matchedPhrase) {
+              this.logger.info('End-call phrase detected', {
+                phrase: matchedPhrase,
+                transcript: this.accumulatedTranscript
+              });
+              this.accumulatedTranscript = '';
+              if (this.silenceDebounceTimer) {
+                clearTimeout(this.silenceDebounceTimer);
+                this.silenceDebounceTimer = null;
+              }
+              // Emit event and let the caller (telephony manager or api-server) handle cleanup.
+              // Don't call this.stop() here — the caller needs to end the call record first.
+              this.emit('session_end_requested', { reason: `end_call_phrase: ${matchedPhrase}` });
+              // No farewell TTS for end-call phrases, so signal completion immediately
+              // so the web UI / telephony manager can close the connection.
+              this.emit('session_end_complete', { reason: `end_call_phrase: ${matchedPhrase}` });
+              return;
+            }
+          }
 
           // Cancel existing timer
 
@@ -1242,7 +1335,22 @@ export class VoicePipeline extends EventEmitter {
 
     }
 
-    
+    // Echo content guard: if transcript is a substring of what the bot recently said,
+    // it's likely echo from the speaker being picked up by the mic.
+    // Use Unicode-aware normalization that preserves Indic scripts (Devanagari, Tamil, etc.)
+    if (this.playedAudioText && transcript.length > 5) {
+      // Strip only punctuation/symbols, keep letters (any script), digits, and spaces
+      const normalizedTranscript = transcript.toLowerCase().replace(/[\p{P}\p{S}]/gu, '').replace(/\s+/g, ' ').trim();
+      const normalizedPlayed = this.playedAudioText.toLowerCase().replace(/[\p{P}\p{S}]/gu, '').replace(/\s+/g, ' ').trim();
+      if (normalizedTranscript.length > 5 && normalizedPlayed.length > 5 &&
+          normalizedPlayed.includes(normalizedTranscript)) {
+        this.logger.warn('Echo content guard: transcript matches bot output, skipping', {
+          transcript: transcript.substring(0, 60),
+          playedText: this.playedAudioText.substring(0, 60)
+        });
+        return;
+      }
+    }
 
     // Validate transcript
 
@@ -1280,6 +1388,14 @@ export class VoicePipeline extends EventEmitter {
 
   private async processUserInput(userText: string): Promise<void> {
 
+    // Skip if call is ending — farewell audio is playing or end_call was triggered
+    if (this.pendingEndCall) {
+      this.logger.debug('Skipping processUserInput — pendingEndCall, call is ending', {
+        text: userText.substring(0, 50)
+      });
+      return;
+    }
+
     if (this.isProcessingTurn) {
 
       this.logger.warn('Already processing a turn, queuing input');
@@ -1288,9 +1404,29 @@ export class VoicePipeline extends EventEmitter {
 
     }
 
-
+    // Deduplication: skip if we just processed the same or very similar text
+    const now = Date.now();
+    const timeSinceLastProcess = now - this.lastProcessedTime;
+    if (timeSinceLastProcess < 5000 && this.lastProcessedText) {
+      const normalized = userText.trim().toLowerCase();
+      const lastNormalized = this.lastProcessedText.trim().toLowerCase();
+      // Exact match or one is a substring of the other (e.g., partial vs full)
+      if (normalized === lastNormalized ||
+          normalized.includes(lastNormalized) ||
+          lastNormalized.includes(normalized)) {
+        this.logger.warn('Dedup: skipping duplicate processUserInput', {
+          text: userText.substring(0, 60),
+          lastText: this.lastProcessedText.substring(0, 60),
+          timeSinceLastMs: timeSinceLastProcess
+        });
+        return;
+      }
+    }
 
     this.isProcessingTurn = true;
+
+    this.lastProcessedText = userText;
+    this.lastProcessedTime = Date.now();
 
     this.currentTurnStart = Date.now();
 
@@ -1345,6 +1481,16 @@ export class VoicePipeline extends EventEmitter {
     const toolCalls: ToolCall[] = [];
 
     
+    // Increment generation ID — any audio from previous generations will be discarded
+    this.ttsGenerationId++;
+    const currentGenId = this.ttsGenerationId;
+    this.logger.debug('New LLM generation', { generationId: currentGenId });
+
+    // Abort old TTS session if still active (from previous tool call cycle)
+    if (this.ttsSession?.isSessionActive() && !this.pendingEndCall) {
+      this.ttsSession.abort();
+      this.ttsSession = null;
+    }
 
     // Reset first-byte tracking for this turn
 
@@ -1442,6 +1588,14 @@ export class VoicePipeline extends EventEmitter {
 
           this.emit('llm_token', chunk.content);
 
+          // Token-level TTS streaming: send raw tokens directly to TTS
+          // Google TTS concatenates fragments into one continuous audio stream,
+          // guaranteeing ordering. Sentence-level splitting causes concurrent
+          // processing and out-of-order audio.
+          if (this.useTokenStreaming && chunk.content) {
+            this.streamTokenToTTS(chunk.content);
+          }
+
         },
 
 
@@ -1496,11 +1650,18 @@ export class VoicePipeline extends EventEmitter {
 
           
 
-          // STREAM IMMEDIATELY: Send each sentence to TTS as soon as it arrives
-
-          // This is critical for low-latency - don't wait for full response
-
-          this.streamSentenceToTTS(sentence);
+          // For token-streaming providers (Google TTS), text is already sent via
+          // onToken → streamTokenToTTS. Only send via sentence queue for other providers.
+          if (this.useTokenStreaming) {
+            // Still track for billing and barge-in history
+            this.ttsTextQueue.push(sentence.trim());
+            this.currentAssistantMessage += sentence;
+            this.session.metrics.ttsCharacters += sentence.length;
+          } else {
+            // STREAM IMMEDIATELY: Send each sentence to TTS as soon as it arrives
+            // This is critical for low-latency - don't wait for full response
+            this.streamSentenceToTTS(sentence);
+          }
 
         },
 
@@ -1513,6 +1674,18 @@ export class VoicePipeline extends EventEmitter {
           toolCalls.push(toolCall);
 
           
+
+          // For end_call: DON'T abort TTS — farewell text needs to finish playing.
+          // Set flag so signalTTSComplete (called by onComplete) won't tear down TTS.
+          // For other tools: abort TTS to prevent Google gRPC 5s idle timeout.
+          if (toolCall.function.name === 'end_call') {
+            this.pendingEndCall = true;
+          } else {
+            if (this.ttsSession?.isSessionActive()) {
+              this.ttsSession.abort();
+              this.ttsSession = null;
+            }
+          }
 
           // IMMEDIATELY play filler before tool execution starts
 
@@ -1541,6 +1714,7 @@ export class VoicePipeline extends EventEmitter {
           
 
           // Add assistant message to history
+          // Include raw Gemini parts if present (for thoughtSignature preservation)
 
           const assistantMessage: ChatMessage = {
 
@@ -1548,7 +1722,9 @@ export class VoicePipeline extends EventEmitter {
 
             content: fullResponse,
 
-            toolCalls: response.toolCalls
+            toolCalls: response.toolCalls,
+
+            ...(response._rawGeminiParts ? { _rawGeminiParts: response._rawGeminiParts } : {})
 
           };
 
@@ -1622,13 +1798,30 @@ export class VoicePipeline extends EventEmitter {
 
     const stage = this.startStage('tts');
 
-
+    // Capture generation ID at session creation time
+    const sessionGenId = this.ttsGenerationId;
+    let sessionAudioBytes = 0;  // Track audio bytes for playback duration estimation
 
     this.ttsSession = this.ttsProvider.createStreamingSession(
 
       {
 
         onAudioChunk: (chunk: Buffer) => {
+          // Track audio bytes locally for accurate playback duration estimation
+          sessionAudioBytes += chunk.length;
+
+          // GENERATION ID GUARD: Discard audio from stale TTS sessions.
+          // When a tool call triggers a new generateLLMResponse(), the old TTS
+          // session may still be emitting audio. Without this guard, audio from
+          // the old and new sessions interleaves, causing jumbled speech.
+          if (sessionGenId !== this.ttsGenerationId) {
+            this.logger.debug('Discarding stale TTS audio', {
+              sessionGenId,
+              currentGenId: this.ttsGenerationId,
+              chunkSize: chunk.length
+            });
+            return;
+          }
 
           // Track first TTS audio byte
 
@@ -1674,16 +1867,21 @@ export class VoicePipeline extends EventEmitter {
 
           // Keep isTTSPlaying true for estimated client playback duration
 
-          // Audio is buffered on client, so server completion != client playback complete
+          // Audio is buffered on client/telephony, so server completion != playback complete
 
-          const estimatedPlaybackMs = result.durationMs || 2000;
+          // Calculate from total audio bytes since result.durationMs is often 0 for streaming
+          // Use locally-tracked sessionAudioBytes (not this.ttsSession which may be nulled by barge-in)
+          const sampleRate = result.audioFormat?.sampleRateHertz || this.getTTSSampleRate();
+          const bytesPerSecond = sampleRate * 2;
+          const bytesBasedMs = sessionAudioBytes > 0 
+            ? Math.ceil((sessionAudioBytes / bytesPerSecond) * 1000) : 0;
+          const estimatedPlaybackMs = bytesBasedMs > 0 ? bytesBasedMs : (result.durationMs || 2000);
 
-          this.logger.debug('TTS streaming complete on server, waiting for client playback', { 
-
-            durationMs: result.durationMs,
-
-            estimatedPlaybackMs
-
+          this.logger.info('TTS streaming complete, estimated playback window', { 
+            sessionAudioBytes,
+            sampleRate,
+            estimatedPlaybackMs,
+            durationMs: result.durationMs
           });
 
           
@@ -1768,6 +1966,13 @@ export class VoicePipeline extends EventEmitter {
 
     if (!sentence.trim()) return;
 
+    // Strip hallucinated function call tags from LLM output
+    // Some models (Llama 3.1 8B via Groq) output raw <function=...>...</function> as text
+    // instead of using the tool calling API, especially on follow-up turns
+    const cleaned = sentence.replace(/<function=[^>]*>\{[^}]*\}<\/function>/g, '').trim();
+    if (!cleaned) return;
+    sentence = cleaned;
+
     
 
     const queueTimestamp = Date.now();
@@ -1814,6 +2019,43 @@ export class VoicePipeline extends EventEmitter {
 
   }
 
+  /**
+   * Stream a raw LLM token directly to TTS (token-level streaming)
+   * Buffers tokens until a word boundary (space, punctuation, newline) to avoid
+   * sending partial words that cause mispronunciation.
+   */
+  private streamTokenToTTS(token: string): void {
+    if (!token) return;
+
+    this.tokenBuffer += token;
+
+    // Flush buffer when it ends with a word boundary character
+    // This ensures Google TTS receives complete words/phrases
+    if (/[\s,.\-!?;:।॥\n]$/.test(this.tokenBuffer)) {
+      this.flushTokenBuffer();
+    }
+  }
+
+  /**
+   * Flush accumulated token buffer to TTS
+   * Called on word boundaries and when LLM response completes
+   */
+  private flushTokenBuffer(): void {
+    if (!this.tokenBuffer) return;
+
+    const text = this.tokenBuffer;
+    this.tokenBuffer = '';
+
+    if (this.ttsSession?.isSessionActive()) {
+      this.ttsSession.sendText(text);
+      this.ttsSentText = true;
+    } else if (this.ttsSessionReady === false) {
+      // TTS session not ready yet — retry after short delay
+      this.tokenBuffer = text;  // Put it back
+      setTimeout(() => this.flushTokenBuffer(), 10);
+    }
+  }
+
   
 
   /**
@@ -1842,13 +2084,20 @@ export class VoicePipeline extends EventEmitter {
 
       // Check if TTS session exists and is ready
 
+      // Skip empty or punctuation-only sentences (Cartesia rejects these)
+      const trimmed = sentence.trim();
+      if (!trimmed || /^[^\w\s]+$/.test(trimmed)) {
+        this.logger.debug('Skipping empty/punctuation-only sentence for TTS', { sentence: trimmed });
+        continue;
+      }
+
       if (this.ttsSession?.isSessionActive()) {
 
         this.logger.info('🔊 SENDING TO TTS', { 
 
-          sentence: sentence.trim(),
+          sentence: trimmed,
 
-          length: sentence.length,
+          length: trimmed.length,
 
           queueRemaining: this.sentenceQueue.length,
 
@@ -1858,7 +2107,7 @@ export class VoicePipeline extends EventEmitter {
 
         });
 
-        this.ttsSession.sendText(sentence);
+        this.ttsSession.sendText(trimmed);
 
         this.ttsSentText = true;
 
@@ -1914,6 +2163,18 @@ export class VoicePipeline extends EventEmitter {
 
   private signalTTSComplete(): void {
 
+    // If end_call is pending, DON'T touch the TTS session — executeToolCall
+    // will handle waiting for TTS to finish the farewell audio.
+    if (this.pendingEndCall) {
+      this.logger.debug('Skipping TTS teardown — pendingEndCall, farewell audio still playing');
+      return;
+    }
+
+    // Flush any remaining buffered tokens (for token-level streaming)
+    if (this.useTokenStreaming) {
+      this.flushTokenBuffer();
+    }
+
     // Only end TTS session if we actually sent text to it
 
     // Otherwise Cartesia will error with "No valid transcripts passed"
@@ -1930,9 +2191,10 @@ export class VoicePipeline extends EventEmitter {
 
     }
 
-    // Reset flag for next turn
+    // Reset flags for next turn
 
     this.ttsSentText = false;
+    this.tokenBuffer = '';
 
   }
 
@@ -1997,16 +2259,57 @@ export class VoicePipeline extends EventEmitter {
 
 
       // Check if this is an end_call - trigger session end
-
       if (toolCall.function.name === 'end_call') {
 
         this.logger.info('End call requested by agent, stopping pipeline');
 
         this.emit('session_end_requested', { reason: args.reason });
 
-        // Stop the pipeline after a short delay to allow final TTS to play
+        // Wait for TTS to finish streaming the farewell message before stopping.
+        // The LLM often sends farewell text + end_call in the same response,
+        // so TTS may still be generating audio for the goodbye sentences.
+        // Note: we check isSessionActive() only — ttsSentText may have been
+        // reset by signalTTSComplete which fires synchronously after emitToolCall.
+        if (this.ttsSession?.isSessionActive()) {
+          this.logger.info('Waiting for TTS to finish farewell audio before ending call');
+          try {
+            await Promise.race([
+              this.ttsSession.end(),
+              new Promise<void>(resolve => setTimeout(resolve, 10000)) // 10s safety timeout
+            ]);
+          } catch (err) {
+            this.logger.warn('TTS end error during end_call', { error: (err as Error).message });
+          }
+        }
 
-        setTimeout(() => this.stop(), 500);
+        // TTS generates audio faster than real-time. The client has buffered audio
+        // that still needs to play out. Estimate playback duration from total bytes.
+        // PCM 24kHz 16-bit mono: bytesPerSecond = 24000 * 2 = 48000
+        // PCM 8kHz 16-bit mono (telephony): bytesPerSecond = 8000 * 2 = 16000
+        // Note: Google TTS wraps chunks in WAV headers (44 bytes each), but the
+        // overhead is negligible for duration estimation.
+        const totalBytes = this.ttsSession?.getTotalAudioBytes() || 0;
+        const bytesPerSecond = 48000; // 24kHz 16-bit mono (web mode default)
+        const estimatedPlaybackMs = totalBytes > 0
+          ? Math.ceil((totalBytes / bytesPerSecond) * 1000) + 500 // +500ms buffer for network
+          : 0;
+
+        if (estimatedPlaybackMs > 0) {
+          this.logger.info('Waiting for client to play buffered farewell audio', {
+            totalAudioBytes: totalBytes,
+            estimatedPlaybackMs
+          });
+          await new Promise<void>(resolve => setTimeout(resolve, estimatedPlaybackMs));
+        }
+
+        this.pendingEndCall = false;
+        this.logger.info('Farewell playback complete, stopping pipeline now');
+        await this.stop();
+
+        // Signal that it's now safe to close the WebSocket / end the call.
+        // session_end_requested was emitted earlier but did NOT close the WS,
+        // so TTS audio could keep flowing. Now we're done.
+        this.emit('session_end_complete', { reason: args.reason });
 
         return; // Don't continue LLM generation for end_call
 
@@ -2230,13 +2533,18 @@ export class VoicePipeline extends EventEmitter {
 
   public handleBargeIn(): void {
 
+    // Increment generation ID so stale TTS audio from this turn is discarded
+    this.ttsGenerationId++;
+
     this.logger.info('Barge-in: aborting current turn', {
 
       fullMessage: this.currentAssistantMessage.length,
 
       playedText: this.playedAudioText.length,
 
-      sentenceIndex: this.ttsSentenceIndex
+      sentenceIndex: this.ttsSentenceIndex,
+
+      newGenerationId: this.ttsGenerationId
 
     });
 
@@ -2254,13 +2562,18 @@ export class VoicePipeline extends EventEmitter {
 
     
 
-    // Stop current TTS playback
+    // Stop current TTS playback — but not during end_call farewell drain
+    if (this.pendingEndCall) {
+      this.logger.debug('Barge-in ignored — farewell TTS drain in progress');
+      return;
+    }
 
     this.ttsSession?.abort();
 
     this.ttsSession = null;
 
     this.isTTSPlaying = false;
+    this.tokenBuffer = '';  // Clear buffered tokens on barge-in
 
     this.ttsPlaybackEndTime = Date.now();
 

@@ -1,11 +1,14 @@
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Save, X, Bot, MessageSquare, Settings, Zap, Clock, Phone, Wrench } from 'lucide-react';
+import { Save, X, Bot, MessageSquare, Settings, Zap, Clock, Phone, Wrench, Database } from 'lucide-react';
 import type { Agent, CreateAgentRequest } from '../../lib/supabase-types';
 import { useProviders } from '../../hooks/useProviders';
+import { useProviderModels } from '../../hooks/useProviderModels';
 import { Select } from '../ui/Select';
 import { AgentToolsManager } from './AgentToolsManager';
 import { VoiceSelector } from './VoiceSelector';
+import { KnowledgeBaseManager } from './KnowledgeBaseManager';
+import { useOrganizationStore } from '../../store/organization';
 
 interface AgentFormProps {
   agent?: Agent;
@@ -16,7 +19,8 @@ interface AgentFormProps {
 
 export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormProps) {
   const { getProvidersByType, isLoading: providersLoading } = useProviders();
-  
+  const { getModelsForProvider, getDefaultModel, isLoading: modelsLoading } = useProviderModels();
+
   const [formData, setFormData] = useState<CreateAgentRequest>({
     name: agent?.name || '',
     slug: agent?.slug || '',
@@ -38,8 +42,20 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
     tools_config: agent?.tools_config || [],
   });
 
-  const [activeTab, setActiveTab] = useState<'basic' | 'providers' | 'behavior' | 'tools' | 'advanced'>('basic');
+  const [activeTab, setActiveTab] = useState<'basic' | 'providers' | 'behavior' | 'tools' | 'knowledge' | 'advanced'>('basic');
+  const { currentOrganization } = useOrganizationStore();
   const [endCallPhrase, setEndCallPhrase] = useState('');
+  const [customModelMode, setCustomModelMode] = useState(false);
+
+  // Build model options from DB for current LLM provider
+  const llmModelOptions = useMemo(() => {
+    const slug = formData.llm_provider || '';
+    return getModelsForProvider(slug).map(m => ({
+      value: m.model_id,
+      label: m.display_name,
+      description: m.description || undefined,
+    }));
+  }, [formData.llm_provider, getModelsForProvider]);
 
   // Check if form has changes
   const hasChanges = useMemo(() => {
@@ -93,6 +109,7 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
     { id: 'providers' as const, label: 'AI Providers', icon: Zap },
     { id: 'behavior' as const, label: 'Behavior', icon: MessageSquare },
     { id: 'tools' as const, label: 'Tools', icon: Wrench, requiresAgent: true },
+    { id: 'knowledge' as const, label: 'Knowledge Base', icon: Database, requiresAgent: true },
     { id: 'advanced' as const, label: 'Advanced', icon: Settings },
   ];
 
@@ -237,7 +254,12 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
                 <label className="block text-sm text-white/60 mb-2">Provider</label>
                 <Select
                   value={formData.llm_provider || ''}
-                  onChange={(value) => updateField('llm_provider', value)}
+                  onChange={(value) => {
+                    updateField('llm_provider', value);
+                    const defaultModel = getDefaultModel(value) || 'gemini-2.5-flash';
+                    updateField('llm_config', { ...formData.llm_config, model: defaultModel });
+                    setCustomModelMode(false);
+                  }}
                   options={getProvidersByType('llm').map(p => ({
                     value: p.slug,
                     label: p.display_name || p.name,
@@ -250,15 +272,47 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-white/60 mb-2">Model</label>
-                  <input
-                    type="text"
-                    value={(formData.llm_config as any)?.model || 'gemini-2.5-flash'}
-                    onChange={(e) =>
-                      updateField('llm_config', { ...formData.llm_config, model: e.target.value })
-                    }
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
-                  />
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm text-white/60">Model</label>
+                    {llmModelOptions.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setCustomModelMode(!customModelMode)}
+                        className="text-xs text-purple-400 hover:text-purple-300 transition-colors"
+                      >
+                        {customModelMode ? '← Select from list' : 'Enter custom model'}
+                      </button>
+                    )}
+                  </div>
+
+                  {customModelMode || llmModelOptions.length === 0 ? (
+                    <>
+                      <input
+                        type="text"
+                        value={(formData.llm_config as any)?.model || ''}
+                        onChange={(e) =>
+                          updateField('llm_config', { ...formData.llm_config, model: e.target.value })
+                        }
+                        placeholder={formData.llm_provider === 'openrouter' ? 'e.g. google/gemini-2.5-flash' : 'Enter model name'}
+                        className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
+                      />
+                      {formData.llm_provider === 'openrouter' && (
+                        <p className="text-xs text-white/40 mt-1">
+                          Format: provider/model (e.g. google/gemini-2.5-flash)
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <Select
+                      value={(formData.llm_config as any)?.model || ''}
+                      onChange={(value) =>
+                        updateField('llm_config', { ...formData.llm_config, model: value })
+                      }
+                      options={llmModelOptions}
+                      placeholder="Select model"
+                      disabled={modelsLoading}
+                    />
+                  )}
                 </div>
 
                 <div>
@@ -382,18 +436,39 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
             animate={{ opacity: 1, y: 0 }}
             className="space-y-5"
           >
-            <div>
-              <label className="block text-sm text-white/60 mb-2">First Message</label>
-              <textarea
-                value={formData.first_message}
-                onChange={(e) => updateField('first_message', e.target.value)}
-                placeholder="Hello! How can I help you today?"
-                rows={3}
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all resize-none"
-              />
-              <p className="text-xs text-white/40 mt-1">The agent's greeting message</p>
+            {/* AI Speaks First */}
+            <div className="bg-white/5 rounded-xl p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold text-white">AI Speaks First</h3>
+                  <p className="text-xs text-white/40 mt-0.5">
+                    Agent greets the caller immediately when the call connects
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => updateField('first_message', formData.first_message ? '' : 'Hello! How can I help you today?')}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    formData.first_message ? 'bg-purple-500' : 'bg-white/10'
+                  }`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    formData.first_message ? 'translate-x-6' : 'translate-x-1'
+                  }`} />
+                </button>
+              </div>
+              {formData.first_message !== undefined && formData.first_message !== '' && (
+                <textarea
+                  value={formData.first_message}
+                  onChange={(e) => updateField('first_message', e.target.value)}
+                  placeholder="Hello! How can I help you today?"
+                  rows={2}
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all resize-none text-sm"
+                />
+              )}
             </div>
 
+            {/* End Call Phrases */}
             <div>
               <label className="block text-sm text-white/60 mb-2">End Call Phrases</label>
               <div className="flex gap-2 mb-2">
@@ -431,10 +506,11 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
                 ))}
               </div>
               <p className="text-xs text-white/40 mt-2">
-                Phrases that trigger call termination
+                When the caller says any of these phrases, the call ends automatically
               </p>
             </div>
 
+            {/* Interruption Sensitivity */}
             <div>
               <label className="block text-sm text-white/60 mb-2">
                 Interruption Sensitivity: {formData.interruption_sensitivity}
@@ -449,9 +525,12 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
                 className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
               />
               <div className="flex justify-between text-xs text-white/40 mt-1">
-                <span>Less sensitive</span>
-                <span>More sensitive</span>
+                <span>Less sensitive (harder to interrupt)</span>
+                <span>More sensitive (easy to interrupt)</span>
               </div>
+              <p className="text-xs text-white/40 mt-1">
+                Controls how easily the caller can interrupt the AI while it's speaking
+              </p>
             </div>
           </motion.div>
         )}
@@ -472,6 +551,28 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
                 <p className="text-white/50 max-w-md mx-auto">
                   You need to create and save the agent before you can configure tools.
                   Complete the basic setup first, then come back to add tools.
+                </p>
+              </div>
+            )}
+          </motion.div>
+        )}
+
+        {/* Knowledge Base Tab */}
+        {activeTab === 'knowledge' && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-5"
+          >
+            {agent && currentOrganization ? (
+              <KnowledgeBaseManager agentId={agent.id} orgId={currentOrganization.id} />
+            ) : (
+              <div className="text-center py-12">
+                <Database size={48} className="text-white/20 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-white mb-2">Save Agent First</h3>
+                <p className="text-white/50 max-w-md mx-auto">
+                  You need to create and save the agent before you can add knowledge bases.
+                  Complete the basic setup first, then come back to add documents, URLs, or text.
                 </p>
               </div>
             )}

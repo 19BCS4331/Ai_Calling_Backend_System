@@ -287,11 +287,13 @@ INSERT INTO providers (type, name, slug, cost_per_minute_cents, max_concurrent, 
 ('tts', 'Sarvam', 'sarvam', 0.50, 10, false, 'Sarvam AI'),
 ('tts', 'Cartesia', 'cartesia', 3.80, 2, false, 'Cartesia'),
 ('tts', 'ElevenLabs', 'elevenlabs', 10.00, 5, true, 'ElevenLabs'),
+('tts', 'Google Cloud', 'google', 4.00, 50, false, 'Google Cloud TTS'),
 -- LLM
 ('llm', 'Gemini Flash', 'gemini-flash', 0.20, NULL, false, 'Google Gemini 2.5 Flash'),
 ('llm', 'GPT-4o-mini', 'gpt-4o-mini', 1.00, NULL, false, 'OpenAI GPT-4o-mini'),
 ('llm', 'GPT-4o', 'gpt-4o', 5.00, NULL, true, 'OpenAI GPT-4o'),
 ('llm', 'Claude Sonnet', 'claude-sonnet', 3.00, NULL, true, 'Anthropic Claude 3.5 Sonnet'),
+('llm', 'OpenRouter', 'openrouter', 0.00, NULL, false, 'OpenRouter (200+ Models)'),
 -- Telephony
 ('telephony', 'Plivo', 'plivo', 0.90, NULL, false, 'Plivo');
 

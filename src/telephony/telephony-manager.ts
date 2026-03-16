@@ -22,7 +22,8 @@ import {
   TelephonyAudioPacket 
 } from './types';
 import { telephonyToPipeline } from './audio-converter';
-import { createCallRecord, endCallRecord, findCallBySessionId, getOrgIdFromAgent } from '../saas-api/call-persistence';
+import { createCallRecord, endCallRecord, findCallBySessionId, getOrgIdFromAgent, saveTranscripts } from '../saas-api/call-persistence';
+import { CallRecorder } from '../services/call-recorder';
 
 export interface TelephonyManagerConfig {
   adapters: TelephonyConfig[];
@@ -42,6 +43,7 @@ export class TelephonyManager extends EventEmitter {
   private activePipelines: Map<string, VoicePipeline> = new Map();
   private callToSession: Map<string, string> = new Map();  // callId -> sessionId
   private callMcpClients: Map<string, string[]> = new Map();  // callId -> MCP client names
+  private activeRecorders: Map<string, CallRecorder> = new Map();  // callId -> CallRecorder
   private pendingAudio: Map<string, TelephonyAudioPacket[]> = new Map();  // Buffer for early packets
   private config: TelephonyManagerConfig;
   private audioCache: AudioCacheService;
@@ -194,6 +196,8 @@ export class TelephonyManager extends EventEmitter {
           llmProviderType = 'anthropic';
         } else if (llmProviderType.startsWith('groq')) {
           llmProviderType = 'groq';
+        } else if (llmProviderType.startsWith('openrouter')) {
+          llmProviderType = 'openrouter';
         }
         
         // Use provider-specific credentials from environment
@@ -211,6 +215,9 @@ export class TelephonyManager extends EventEmitter {
           case 'groq':
             llmCredentials = { apiKey: process.env.GROQ_API_KEY || '' };
             break;
+          case 'openrouter':
+            llmCredentials = { apiKey: process.env.OPENROUTER_API_KEY || '' };
+            break;
           case 'gemini':
           default:
             llmCredentials = { apiKey: process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || '' };
@@ -227,6 +234,8 @@ export class TelephonyManager extends EventEmitter {
           defaultModel = 'claude-3-5-sonnet-20241022';
         } else if (llmProviderType === 'groq') {
           defaultModel = 'meta-llama/llama-4-scout-17b-16e-instruct';  // Ultra-fast with tool calling
+        } else if (llmProviderType === 'openrouter') {
+          defaultModel = 'google/gemini-2.5-flash';  // Fast and affordable via OpenRouter
         }
         
         const agentLlmConfig = (agent.llm_config || {}) as any;
@@ -249,12 +258,19 @@ export class TelephonyManager extends EventEmitter {
           ttsCredentials = { apiKey: process.env.CARTESIA_API_KEY || '' };
         } else if (ttsProviderType === 'elevenlabs') {
           ttsCredentials = { apiKey: process.env.ELEVENLABS_API_KEY || '' };
+        } else if (ttsProviderType === 'google') {
+          // Google Cloud TTS uses GOOGLE_APPLICATION_CREDENTIALS (service account),
+          // not an API key. Pass empty credentials — the SDK handles auth internally.
+          ttsCredentials = { apiKey: '' };
         }
         
         // Build voice config - use agent's voice_id or default per provider
         const agentTtsConfig = (agent.tts_config || {}) as any;
+        const defaultVoiceId = ttsProviderType === 'sarvam' ? 'anushka'
+          : ttsProviderType === 'google' ? 'en-IN-Chirp3-HD-Kore'
+          : 'aura-asteria-en';
         const voiceConfig = {
-          voiceId: agent.voice_id || agentTtsConfig.voiceId || (ttsProviderType === 'sarvam' ? 'anushka' : 'aura-asteria-en'),
+          voiceId: agent.voice_id || agentTtsConfig.voiceId || defaultVoiceId,
           language: agentTtsConfig.language || 'en-IN',
           gender: agentTtsConfig.gender || 'female'
         };
@@ -323,6 +339,21 @@ export class TelephonyManager extends EventEmitter {
           sessionId: session.sessionId,
           direction: call.direction
         });
+
+        // Start call recording (non-blocking)
+        if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+          const recorder = new CallRecorder(
+            callRecord.id,
+            organizationId || '',
+            {
+              supabaseUrl: process.env.SUPABASE_URL,
+              supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+            },
+            this.logger
+          );
+          recorder.start();
+          this.activeRecorders.set(call.callId, recorder);
+        }
       }
 
       // Create providers using agent-specific or default configs
@@ -585,6 +616,7 @@ export class TelephonyManager extends EventEmitter {
       }
 
       // Create voice pipeline with session-specific tool registry
+      // Pass agent behavior settings from DB if available
       const pipeline = new VoicePipeline(
         session,
         sttProvider,
@@ -592,7 +624,14 @@ export class TelephonyManager extends EventEmitter {
         ttsProvider,
         sessionToolRegistry,
         this.logger,
-        { latencyOptimization: DEFAULT_LATENCY_CONFIG },
+        {
+          latencyOptimization: DEFAULT_LATENCY_CONFIG,
+          firstMessage: agent?.first_message || null,
+          endCallPhrases: agent?.end_call_phrases || [],
+          interruptionSensitivity: agent?.interruption_sensitivity ?? 0.5,
+          silenceTimeout: agent?.silence_timeout_ms ?? 2000,
+          maxCallDurationSeconds: agent?.max_call_duration_seconds ?? 600,
+        },
         this.audioCache
       );
 
@@ -652,6 +691,9 @@ export class TelephonyManager extends EventEmitter {
         case 'cartesia':
           sampleRate = actualTtsConfig.audioQuality === 'telephony' ? 8000 : 44100;
           break;
+        case 'google':
+          sampleRate = actualTtsConfig.audioQuality === 'telephony' ? 8000 : 24000;
+          break;
         case 'sarvam':
           sampleRate = 22050;
           break;
@@ -660,11 +702,17 @@ export class TelephonyManager extends EventEmitter {
       }
       
       adapter.sendAudio(callId, chunk, sampleRate);
+      // Non-blocking: capture agent audio for recording
+      const recorder = this.activeRecorders.get(callId);
+      if (recorder) recorder.pushAgentAudio(chunk, sampleRate);
     });
 
     // Handle barge-in
     pipeline.on('barge_in', () => {
       adapter.clearAudio(callId);
+      // Reset agent turn tracker so next TTS turn starts fresh
+      const recorder = this.activeRecorders.get(callId);
+      if (recorder) recorder.notifyBargeIn();
     });
 
     // Log pipeline events
@@ -753,6 +801,29 @@ export class TelephonyManager extends EventEmitter {
           interruptionsCount: session?.metrics?.interruptionsCount || 0
         });
         
+        // Save conversation transcripts
+        if (session?.messages) {
+          saveTranscripts(callRecord.id, session.messages).catch(err => {
+            this.logger.warn('Failed to save transcripts', { callId: callRecord.id, error: err.message });
+          });
+        }
+
+        // Stop recording and upload (fire-and-forget)
+        const recorder = this.activeRecorders.get(callId);
+        if (recorder) {
+          this.activeRecorders.delete(callId);
+          recorder.stopAndUpload().then(async (url) => {
+            if (url) {
+              const { createClient } = await import('@supabase/supabase-js');
+              const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+              await supabase.from('calls').update({ recording_url: url }).eq('id', callRecord.id);
+              this.logger.info('Recording URL saved', { callId: callRecord.id, url });
+            }
+          }).catch(err => {
+            this.logger.warn('Recording upload failed', { callId: callRecord.id, error: err.message });
+          });
+        }
+
         this.logger.info('Call record ended for telephony call', {
           callId: callRecord.id,
           sessionId,
@@ -795,6 +866,9 @@ export class TelephonyManager extends EventEmitter {
 
     // Send to pipeline
     pipeline.processAudioChunk(pipelineAudio);
+    // Non-blocking: capture user audio for recording (already 16kHz PCM)
+    const recorder = this.activeRecorders.get(packet.callId);
+    if (recorder) recorder.pushUserAudio(pipelineAudio);
   }
   
   /**

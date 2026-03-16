@@ -21,8 +21,9 @@ import { TTSProviderFactory } from '../providers/base/tts-provider';
 import { InMemoryMetrics, CostTracker } from '../utils/logger';
 import { TelephonyManager, TelephonyManagerConfig, PlivoAdapter, TataAdapter, TelephonyConfig } from '../telephony';
 import { AudioCacheService } from '../services/audio-cache';
+import { CallRecorder } from '../services/call-recorder';
 import { buildSystemPrompt } from '../prompts/tts-prompts';
-import { createCallRecord, endCallRecord, findCallBySessionId, getOrgIdFromAgent } from '../saas-api/call-persistence';
+import { createCallRecord, endCallRecord, findCallBySessionId, getOrgIdFromAgent, saveTranscripts } from '../saas-api/call-persistence';
 
 export interface APIServerConfig {
   port: number;
@@ -64,6 +65,7 @@ export class APIServer {
   private activeConnections: Map<string, WebSocket> = new Map();
   private connectionSessions: Map<string, Set<string>> = new Map();  // connectionId -> sessionIds
   private sessionMcpClients: Map<string, string[]> = new Map();  // sessionId -> MCP client names (for cleanup)
+  private activeRecorders: Map<string, CallRecorder> = new Map();  // sessionId -> CallRecorder
   private telephonyManager: TelephonyManager | null = null;
   private audioCache: AudioCacheService;
 
@@ -442,6 +444,9 @@ export class APIServer {
       const pipeline = this.findPipelineForConnection(connectionId);
       if (pipeline) {
         pipeline.processAudioChunk(data);
+        // Non-blocking: capture user audio for recording
+        const recorder = this.findRecorderForConnection(connectionId);
+        if (recorder) recorder.pushUserAudio(data);
       }
     }
   }
@@ -467,18 +472,27 @@ export class APIServer {
           const pipeline = this.findPipelineForConnection(connectionId);
           if (pipeline) {
             pipeline.processAudioChunk(audioBuffer);
+            // Non-blocking: capture user audio for recording
+            const recorder = this.findRecorderForConnection(connectionId);
+            if (recorder) recorder.pushUserAudio(audioBuffer);
           }
         }
         break;
         
-      case 'barge_in':
+      case 'barge_in': {
         // Client detected user speaking during AI audio playback
-        this.logger.info('Barge-in received from client', { sessionId: message.sessionId });
-        const pipeline = this.activePipelines.get(message.sessionId);
-        if (pipeline) {
-          pipeline.handleBargeIn();
+        // Look up pipeline by sessionId or connectionId
+        const bargeInPipeline = message.sessionId 
+          ? this.activePipelines.get(message.sessionId)
+          : this.findPipelineForConnection(connectionId);
+        if (bargeInPipeline) {
+          this.logger.info('Barge-in received from client', { connectionId });
+          bargeInPipeline.handleBargeIn();
+          // Echo back barge_in to client so it can clear audio buffer
+          ws.send(JSON.stringify({ type: 'barge_in' }));
         }
         break;
+      }
       
       case 'add_mcp_server':
         // Add MCP server connection dynamically
@@ -570,11 +584,15 @@ export class APIServer {
       llmProviderType = 'anthropic';
     } else if (llmProviderType.startsWith('groq')) {
       llmProviderType = 'groq';
+    } else if (llmProviderType.startsWith('openrouter')) {
+      llmProviderType = 'openrouter';
     }
 
     // Resolve API keys: use client-provided or fall back to environment variables
     // IMPORTANT: Select the correct API key based on the provider type
-    const sttApiKey = config.stt?.apiKey || process.env.SARVAM_API_KEY || '';
+    const sttProviderType = config.stt?.provider || 'sarvam';
+    const sttApiKey = config.stt?.apiKey || 
+      (sttProviderType === 'elevenlabs' ? process.env.ELEVENLABS_API_KEY : process.env.SARVAM_API_KEY) || '';
     
     // LLM API key - select based on provider type (not generic fallback)
     let llmApiKey = config.llm?.apiKey || '';
@@ -591,6 +609,9 @@ export class APIServer {
           break;
         case 'groq':
           llmApiKey = process.env.GROQ_API_KEY || '';
+          break;
+        case 'openrouter':
+          llmApiKey = process.env.OPENROUTER_API_KEY || '';
           break;
         case 'gemini':
         default:
@@ -622,7 +643,8 @@ export class APIServer {
       throw new Error(`LLM API key not configured for ${llmProviderType}. Set ${llmProviderType.toUpperCase()}_API_KEY in environment.`);
     }
     if (!sttApiKey) {
-      throw new Error('STT API key not configured. Set SARVAM_API_KEY in environment.');
+      const sttKeyEnv = sttProviderType === 'elevenlabs' ? 'ELEVENLABS_API_KEY' : 'SARVAM_API_KEY';
+      throw new Error(`STT API key not configured for ${sttProviderType}. Set ${sttKeyEnv} in environment.`);
     }
 
     // Create provider configs from dynamic credentials
@@ -651,6 +673,8 @@ export class APIServer {
       defaultModel = 'claude-3-5-sonnet-20241022';
     } else if (llmProviderType === 'groq') {
       defaultModel = 'meta-llama/llama-4-scout-17b-16e-instruct';  // Ultra-fast with tool calling
+    } else if (llmProviderType === 'openrouter') {
+      defaultModel = 'google/gemini-2.5-flash';  // Fast and affordable via OpenRouter
     }
     
     const llmConfig: LLMConfig = {
@@ -758,6 +782,21 @@ export class APIServer {
         callId: callRecord.id,
         sessionId: session.sessionId
       });
+
+      // Start call recording (non-blocking)
+      if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        const recorder = new CallRecorder(
+          callRecord.id,
+          organizationId || '',
+          {
+            supabaseUrl: process.env.SUPABASE_URL,
+            supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+          },
+          this.logger
+        );
+        recorder.start();
+        this.activeRecorders.set(session.sessionId, recorder);
+      }
     }
 
     this.logger.info('Creating providers', { sessionId: session.sessionId });
@@ -928,6 +967,68 @@ export class APIServer {
       }
     }
 
+    // Register knowledge base search tool if agent has linked KBs
+    try {
+      const { getAgentKnowledgeBaseIds, searchKnowledgeBase } = await import('../saas-api/knowledge-base');
+      const kbIds = await getAgentKnowledgeBaseIds(agentId);
+      if (kbIds.length > 0) {
+        sessionToolRegistry.register({
+          definition: {
+            name: 'search_knowledge_base',
+            description: 'Search the knowledge base for information about products, services, policies, FAQs, or any domain-specific question the user asks.',
+            parameters: {
+              type: 'object',
+              properties: {
+                query: {
+                  type: 'string',
+                  description: 'The search query based on what the user is asking about'
+                }
+              },
+              required: ['query']
+            }
+          },
+          handler: async (args: any) => {
+            this.logger.info('Knowledge base search invoked', {
+              sessionId: session.sessionId,
+              query: args.query,
+              kbCount: kbIds.length,
+              kbIds
+            });
+            const results = await searchKnowledgeBase(kbIds, args.query, 5, 0.3);
+            this.logger.info('Knowledge base search results', {
+              sessionId: session.sessionId,
+              query: args.query,
+              resultCount: results.length,
+              topSimilarity: results[0]?.similarity,
+              sources: results.map(r => ({ source: r.source_name, similarity: r.similarity }))
+            });
+            if (results.length === 0) {
+              return { found: false, message: 'No relevant information found in the knowledge base for this query.' };
+            }
+            return {
+              found: true,
+              results: results.map(r => ({
+                content: r.content,
+                source: r.source_name,
+                relevance: Math.round(r.similarity * 100) + '%'
+              }))
+            };
+          }
+        });
+        this.logger.info('Registered knowledge base search tool', {
+          sessionId: session.sessionId,
+          agentId,
+          knowledgeBaseCount: kbIds.length
+        });
+      }
+    } catch (error) {
+      this.logger.warn('Failed to register knowledge base tool', {
+        sessionId: session.sessionId,
+        agentId,
+        error: (error as Error).message
+      });
+    }
+
     // Create pipeline with session-specific tool registry
     const pipeline = new VoicePipeline(
       session,
@@ -936,7 +1037,15 @@ export class APIServer {
       ttsProvider,
       sessionToolRegistry,
       this.logger,
-      { latencyOptimization: latencyConfig },
+      {
+        latencyOptimization: latencyConfig,
+        // Agent behavior settings from client config
+        firstMessage: config.firstMessage || null,
+        endCallPhrases: config.endCallPhrases || [],
+        interruptionSensitivity: config.interruptionSensitivity ?? 0.5,
+        silenceTimeout: config.silenceTimeoutMs ?? 2000,
+        maxCallDurationSeconds: config.maxCallDurationSeconds ?? 600,
+      },
       this.audioCache
     );
 
@@ -1082,10 +1191,13 @@ export class APIServer {
     // Send audio format info so client can configure playback correctly
     // Sample rate depends on TTS provider:
     // - Cartesia: 44100Hz (web) or 8000Hz (telephony)
+    // - Google: 24000Hz (web) or 8000Hz (telephony)
     // - Sarvam: 22050Hz
     let sampleRate = 44100;
     if (ttsConfig.type === 'sarvam') {
       sampleRate = 22050;
+    } else if (ttsConfig.type === 'google') {
+      sampleRate = ttsConfig.audioQuality === 'telephony' ? 8000 : 24000;
     } else if (ttsConfig.type === 'cartesia' && ttsConfig.audioQuality === 'telephony') {
       sampleRate = 8000;
     }
@@ -1181,6 +1293,17 @@ export class APIServer {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(chunk);
       }
+      // Non-blocking: capture agent audio for recording
+      // Web TTS audio has WAV headers; recorder strips them and resamples
+      const recorder = this.activeRecorders.get(sessionId);
+      if (recorder) {
+        // Detect sample rate from WAV header if present, else use 24000 default
+        let sampleRate = 24000;
+        if (chunk.length > 44 && chunk.toString('ascii', 0, 4) === 'RIFF') {
+          sampleRate = chunk.readUInt32LE(24);
+        }
+        recorder.pushAgentAudio(chunk, sampleRate);
+      }
     });
 
     pipeline.on('first_audio_byte', (data: { latencyMs: number }) => {
@@ -1201,11 +1324,22 @@ export class APIServer {
 
     pipeline.on('barge_in', () => {
       ws.send(JSON.stringify({ type: 'barge_in', sessionId }));
+      // Reset agent turn tracker so next TTS turn starts fresh
+      const recorder = this.activeRecorders.get(sessionId);
+      if (recorder) recorder.notifyBargeIn();
     });
 
     pipeline.on('session_end_requested', async (data: { reason?: string }) => {
-      this.logger.info('Agent requested call end', { sessionId, reason: data?.reason });
+      this.logger.info('Agent requested call end — keeping WS open for farewell TTS audio', { sessionId, reason: data?.reason });
       
+      // NOTE: Do NOT close the WebSocket or end the session here!
+      // The pipeline still needs to stream farewell TTS audio through the WS.
+      // Cleanup happens when session_end_complete fires after TTS drains.
+    });
+
+    pipeline.on('session_end_complete', async (data: { reason?: string }) => {
+      this.logger.info('Agent call end complete — farewell audio finished, closing', { sessionId });
+
       // Send session_ended message to client
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
@@ -1214,14 +1348,14 @@ export class APIServer {
           reason: data?.reason || 'Call ended by agent'
         }));
       }
-      
+
       // Clean up pipeline and session
       const pipeline = this.activePipelines.get(sessionId);
       if (pipeline) {
         this.activePipelines.delete(sessionId);
       }
       await this.sessionManager.endSession(sessionId);
-      
+
       // Close WebSocket connection
       if (ws.readyState === WebSocket.OPEN) {
         ws.close(1000, 'Call ended by agent');
@@ -1266,6 +1400,30 @@ export class APIServer {
         interruptionsCount: session?.metrics?.interruptionsCount || 0
       });
       
+      // Save conversation transcripts
+      if (session?.messages) {
+        saveTranscripts(callRecord.id, session.messages).catch(err => {
+          this.logger.warn('Failed to save transcripts', { callId: callRecord.id, error: err.message });
+        });
+      }
+
+      // Stop recording and upload (fire-and-forget)
+      const recorder = this.activeRecorders.get(sessionId);
+      if (recorder) {
+        this.activeRecorders.delete(sessionId);
+        recorder.stopAndUpload().then(async (url) => {
+          if (url) {
+            // Update call record with recording URL
+            const { createClient } = await import('@supabase/supabase-js');
+            const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+            await supabase.from('calls').update({ recording_url: url }).eq('id', callRecord.id);
+            this.logger.info('Recording URL saved', { callId: callRecord.id, url });
+          }
+        }).catch(err => {
+          this.logger.warn('Recording upload failed', { callId: callRecord.id, error: err.message });
+        });
+      }
+
       this.logger.info('Call record ended via end_session', { 
         callId: callRecord.id, 
         sessionId,
@@ -1450,6 +1608,29 @@ export class APIServer {
           interruptionsCount: session?.metrics?.interruptionsCount || 0
         });
         
+        // Save conversation transcripts
+        if (session?.messages) {
+          saveTranscripts(callRecord.id, session.messages).catch(err => {
+            this.logger.warn('Failed to save transcripts', { callId: callRecord.id, error: err.message });
+          });
+        }
+
+        // Stop recording and upload (fire-and-forget)
+        const recorder = this.activeRecorders.get(sessionId);
+        if (recorder) {
+          this.activeRecorders.delete(sessionId);
+          recorder.stopAndUpload().then(async (url) => {
+            if (url) {
+              const { createClient } = await import('@supabase/supabase-js');
+              const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+              await supabase.from('calls').update({ recording_url: url }).eq('id', callRecord.id);
+              this.logger.info('Recording URL saved', { callId: callRecord.id, url });
+            }
+          }).catch(err => {
+            this.logger.warn('Recording upload failed', { callId: callRecord.id, error: err.message });
+          });
+        }
+
         this.logger.info('Call record ended', { 
           callId: callRecord.id, 
           sessionId,
@@ -1497,6 +1678,18 @@ export class APIServer {
       const lastSessionId = sessionArray[sessionArray.length - 1];
       if (lastSessionId) {
         return this.activePipelines.get(lastSessionId);
+      }
+    }
+    return undefined;
+  }
+
+  private findRecorderForConnection(connectionId: string): CallRecorder | undefined {
+    const sessionIds = this.connectionSessions.get(connectionId);
+    if (sessionIds) {
+      const sessionArray = Array.from(sessionIds);
+      const lastSessionId = sessionArray[sessionArray.length - 1];
+      if (lastSessionId) {
+        return this.activeRecorders.get(lastSessionId);
       }
     }
     return undefined;

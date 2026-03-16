@@ -316,6 +316,7 @@ class GroqStreamSession extends LLMStreamSession {
     let firstChunkTime: number | null = null;
     let accumulatedContent = '';
     let currentSentence = '';
+    let streamUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
     
     // Tool call accumulation
     const toolCallsMap = new Map<number, {
@@ -327,9 +328,10 @@ class GroqStreamSession extends LLMStreamSession {
       };
     }>();
 
+    const groqMessages = this.convertMessages(this.messages, this.systemPrompt);
+    const groqTools = this.tools ? this.convertTools(this.tools) : undefined;
+
     try {
-      const groqMessages = this.convertMessages(this.messages, this.systemPrompt);
-      const groqTools = this.tools ? this.convertTools(this.tools) : undefined;
 
       this.logger.info('Starting Groq stream', {
         model: this.config.model,
@@ -400,6 +402,16 @@ class GroqStreamSession extends LLMStreamSession {
           }
         }
 
+        // Capture usage from chunk (Groq sends it on the final chunk via x_groq)
+        const chunkUsage = (chunk as any).x_groq?.usage || (chunk as any).usage;
+        if (chunkUsage) {
+          streamUsage = {
+            promptTokens: chunkUsage.prompt_tokens || 0,
+            completionTokens: chunkUsage.completion_tokens || 0,
+            totalTokens: chunkUsage.total_tokens || 0,
+          };
+        }
+
         // Handle completion
         if (finishReason) {
           let toolCalls: ToolCall[] | undefined = undefined;
@@ -430,11 +442,7 @@ class GroqStreamSession extends LLMStreamSession {
             content: accumulatedContent,
             finishReason: (finishReason === 'function_call' ? 'tool_calls' : finishReason) as 'stop' | 'length' | 'tool_calls' | 'error',
             toolCalls,
-            usage: {
-              promptTokens: 0,
-              completionTokens: 0,
-              totalTokens: 0
-            },
+            usage: streamUsage,
             latencyMs: Date.now() - startTime
           });
 
@@ -442,8 +450,70 @@ class GroqStreamSession extends LLMStreamSession {
         }
       }
     } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+
+      // Groq-specific: "Failed to call a function" means the model generated
+      // malformed tool call output. Retry without tools so it can produce text.
+      if (errMsg.includes('Failed to call a function') && groqTools && groqTools.length > 0) {
+        this.logger.warn('Groq failed_generation — retrying without tools', {
+          error: errMsg
+        });
+
+        try {
+          const retryStream = await this.client.chat.completions.create({
+            model: this.config.model,
+            messages: groqMessages,
+            // No tools, no tool_choice
+            temperature: this.config.temperature ?? 0.3,
+            max_tokens: this.config.maxTokens ?? 2048,
+            top_p: this.config.topP ?? 0.9,
+            stream: true
+          });
+
+          for await (const chunk of retryStream) {
+            if (this.aborted) break;
+
+            const delta = chunk.choices[0]?.delta;
+            const finishReason = chunk.choices[0]?.finish_reason;
+            if (!delta) continue;
+
+            if (delta.content) {
+              accumulatedContent += delta.content;
+              this.processToken(delta.content);
+            }
+
+            // Capture usage from retry stream
+            const retryUsage = (chunk as any).x_groq?.usage || (chunk as any).usage;
+            if (retryUsage) {
+              streamUsage = {
+                promptTokens: retryUsage.prompt_tokens || 0,
+                completionTokens: retryUsage.completion_tokens || 0,
+                totalTokens: retryUsage.total_tokens || 0,
+              };
+            }
+
+            if (finishReason) {
+              this.emitComplete({
+                content: accumulatedContent,
+                finishReason: 'stop',
+                usage: streamUsage,
+                latencyMs: Date.now() - startTime
+              });
+              break;
+            }
+          }
+          return; // Success on retry
+        } catch (retryError) {
+          this.logger.error('Groq retry without tools also failed', {
+            error: retryError instanceof Error ? retryError.message : String(retryError)
+          });
+          this.emitError(retryError as Error);
+          return;
+        }
+      }
+
       this.logger.error('Groq stream error', {
-        error: error instanceof Error ? error.message : String(error),
+        error: errMsg,
         stack: error instanceof Error ? error.stack : undefined
       });
       this.emitError(error as Error);

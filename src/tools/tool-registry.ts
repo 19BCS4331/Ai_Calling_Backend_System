@@ -266,16 +266,16 @@ export const builtInTools: RegisteredTool[] = [
   {
     definition: {
       name: 'end_call',
-      description: 'End the current call politely',
+      description: 'End the current call. ONLY use this when the user explicitly says goodbye, asks to hang up, or clearly indicates they want to end the conversation. NEVER call this during normal conversation or when the user is asking questions or making requests.',
       parameters: {
         type: 'object',
         properties: {
           reason: {
             type: 'string',
-            description: 'Reason for ending the call'
+            description: 'Brief reason for ending the call (e.g. "user said goodbye")'
           }
         },
-        required: []
+        required: ['reason']
       }
     },
     handler: async (args, context) => {

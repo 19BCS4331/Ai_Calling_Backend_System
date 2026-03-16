@@ -97,6 +97,20 @@ import {
   linkNumberToApplication,
   unlinkNumberFromApplication
 } from './telephony-integration';
+import {
+  createKnowledgeBase,
+  getKnowledgeBase,
+  listKnowledgeBases,
+  updateKnowledgeBase,
+  deleteKnowledgeBase,
+  listSources,
+  deleteSource,
+  addTextSource,
+  addDocumentSource,
+  addURLSource,
+  searchKnowledgeBase,
+  getAgentKnowledgeBaseIds,
+} from './knowledge-base';
 import { createLogger } from '../utils/logger';
 
 const logger = createLogger('saas-routes');
@@ -411,6 +425,218 @@ export function createSaaSRouter(): Router {
     asyncHandler(async (req, res) => {
       const stats = await getAgentStats(req.org!, req.params.agentId);
       res.json({ stats });
+    })
+  );
+
+  // ===========================================
+  // KNOWLEDGE BASE ROUTES
+  // ===========================================
+
+  /**
+   * GET /orgs/:orgId/knowledge-bases
+   * List knowledge bases (optionally filtered by agent_id query param)
+   */
+  router.get(
+    '/orgs/:orgId/knowledge-bases',
+    authMiddleware,
+    orgContextMiddleware('orgId'),
+    asyncHandler(async (req, res) => {
+      const agentId = req.query.agent_id as string | undefined;
+      const kbs = await listKnowledgeBases(req.org!, agentId);
+      res.json({ knowledge_bases: kbs });
+    })
+  );
+
+  /**
+   * POST /orgs/:orgId/knowledge-bases
+   * Create a new knowledge base
+   */
+  router.post(
+    '/orgs/:orgId/knowledge-bases',
+    authMiddleware,
+    orgContextMiddleware('orgId'),
+    requireRole('admin'),
+    asyncHandler(async (req, res) => {
+      const kb = await createKnowledgeBase(req.org!, req.body);
+      res.status(201).json({ knowledge_base: kb });
+    })
+  );
+
+  /**
+   * GET /orgs/:orgId/knowledge-bases/:kbId
+   * Get a single knowledge base with its sources
+   */
+  router.get(
+    '/orgs/:orgId/knowledge-bases/:kbId',
+    authMiddleware,
+    orgContextMiddleware('orgId'),
+    asyncHandler(async (req, res) => {
+      const kb = await getKnowledgeBase(req.org!, req.params.kbId);
+      if (!kb) {
+        res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Knowledge base not found' } });
+        return;
+      }
+      const sources = await listSources(kb.id);
+      res.json({ knowledge_base: kb, sources });
+    })
+  );
+
+  /**
+   * PATCH /orgs/:orgId/knowledge-bases/:kbId
+   * Update a knowledge base
+   */
+  router.patch(
+    '/orgs/:orgId/knowledge-bases/:kbId',
+    authMiddleware,
+    orgContextMiddleware('orgId'),
+    requireRole('admin'),
+    asyncHandler(async (req, res) => {
+      const kb = await updateKnowledgeBase(req.org!, req.params.kbId, req.body);
+      res.json({ knowledge_base: kb });
+    })
+  );
+
+  /**
+   * DELETE /orgs/:orgId/knowledge-bases/:kbId
+   * Delete a knowledge base and all its sources/chunks
+   */
+  router.delete(
+    '/orgs/:orgId/knowledge-bases/:kbId',
+    authMiddleware,
+    orgContextMiddleware('orgId'),
+    requireRole('admin'),
+    asyncHandler(async (req, res) => {
+      await deleteKnowledgeBase(req.org!, req.params.kbId);
+      res.status(204).send();
+    })
+  );
+
+  /**
+   * POST /orgs/:orgId/knowledge-bases/:kbId/sources/text
+   * Add a plain text source
+   */
+  router.post(
+    '/orgs/:orgId/knowledge-bases/:kbId/sources/text',
+    authMiddleware,
+    orgContextMiddleware('orgId'),
+    requireRole('admin'),
+    asyncHandler(async (req, res) => {
+      const { name, content } = req.body;
+      if (!name || !content) {
+        res.status(400).json({ error: { code: 'INVALID_INPUT', message: 'name and content are required' } });
+        return;
+      }
+      const source = await addTextSource(req.params.kbId, { name, content });
+      res.status(201).json({ source });
+    })
+  );
+
+  /**
+   * POST /orgs/:orgId/knowledge-bases/:kbId/sources/url
+   * Add a URL source
+   */
+  router.post(
+    '/orgs/:orgId/knowledge-bases/:kbId/sources/url',
+    authMiddleware,
+    orgContextMiddleware('orgId'),
+    requireRole('admin'),
+    asyncHandler(async (req, res) => {
+      const { name, url } = req.body;
+      if (!name || !url) {
+        res.status(400).json({ error: { code: 'INVALID_INPUT', message: 'name and url are required' } });
+        return;
+      }
+      const source = await addURLSource(req.params.kbId, { name, url });
+      res.status(201).json({ source });
+    })
+  );
+
+  /**
+   * POST /orgs/:orgId/knowledge-bases/:kbId/sources/document
+   * Upload a document source (multipart/form-data)
+   */
+  router.post(
+    '/orgs/:orgId/knowledge-bases/:kbId/sources/document',
+    authMiddleware,
+    orgContextMiddleware('orgId'),
+    requireRole('admin'),
+    asyncHandler(async (req, res) => {
+      // Express doesn't parse multipart by default — check for raw body or multer
+      const file = (req as any).file;
+      if (!file) {
+        // Fallback: accept base64 JSON body
+        const { name, content_base64, mime_type } = req.body;
+        if (!name || !content_base64) {
+          res.status(400).json({ error: { code: 'INVALID_INPUT', message: 'Upload a file or provide name + content_base64 + mime_type' } });
+          return;
+        }
+        const buffer = Buffer.from(content_base64, 'base64');
+        const source = await addDocumentSource(req.params.kbId, req.org!.organization.id, name, buffer, mime_type || 'application/octet-stream');
+        res.status(201).json({ source });
+        return;
+      }
+
+      const source = await addDocumentSource(
+        req.params.kbId,
+        req.org!.organization.id,
+        file.originalname,
+        file.buffer,
+        file.mimetype
+      );
+      res.status(201).json({ source });
+    })
+  );
+
+  /**
+   * GET /orgs/:orgId/knowledge-bases/:kbId/sources
+   * List sources for a knowledge base
+   */
+  router.get(
+    '/orgs/:orgId/knowledge-bases/:kbId/sources',
+    authMiddleware,
+    orgContextMiddleware('orgId'),
+    asyncHandler(async (req, res) => {
+      const sources = await listSources(req.params.kbId);
+      res.json({ sources });
+    })
+  );
+
+  /**
+   * DELETE /orgs/:orgId/knowledge-bases/:kbId/sources/:sourceId
+   * Delete a source and its chunks
+   */
+  router.delete(
+    '/orgs/:orgId/knowledge-bases/:kbId/sources/:sourceId',
+    authMiddleware,
+    orgContextMiddleware('orgId'),
+    requireRole('admin'),
+    asyncHandler(async (req, res) => {
+      await deleteSource(req.params.kbId, req.params.sourceId);
+      res.status(204).send();
+    })
+  );
+
+  /**
+   * POST /orgs/:orgId/knowledge-bases/:kbId/search
+   * Search a knowledge base (for testing)
+   */
+  router.post(
+    '/orgs/:orgId/knowledge-bases/:kbId/search',
+    authMiddleware,
+    orgContextMiddleware('orgId'),
+    asyncHandler(async (req, res) => {
+      const { query, match_count, match_threshold } = req.body;
+      if (!query) {
+        res.status(400).json({ error: { code: 'INVALID_INPUT', message: 'query is required' } });
+        return;
+      }
+      const results = await searchKnowledgeBase(
+        [req.params.kbId],
+        query,
+        match_count || 5,
+        match_threshold || 0.3
+      );
+      res.json({ results });
     })
   );
 
@@ -1224,6 +1450,111 @@ export function createSaaSRouter(): Router {
         })),
         has_more: false,
       });
+    })
+  );
+
+  // ===========================================
+  // GOOGLE CLOUD TTS VOICES
+  // ===========================================
+
+  // Server-side cache for Google TTS voices (rarely changes)
+  let googleVoicesCache: { voices: any[]; timestamp: number } | null = null;
+  const GOOGLE_VOICES_CACHE_TTL = 1000 * 60 * 60; // 1 hour
+
+  /**
+   * GET /providers/google/voices
+   * Fetch available Chirp 3: HD voices from Google Cloud TTS API
+   * Uses client.listVoices() with server-side caching
+   */
+  router.get(
+    '/providers/google/voices',
+    authMiddleware,
+    asyncHandler(async (req: Request, res: Response) => {
+      // Check server-side cache first
+      if (googleVoicesCache && (Date.now() - googleVoicesCache.timestamp) < GOOGLE_VOICES_CACHE_TTL) {
+        res.json({ voices: googleVoicesCache.voices, cached: true });
+        return;
+      }
+
+      // Resolve Google credentials
+      const credPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+      if (!credPath) {
+        throw new SaaSError(
+          'INTERNAL_ERROR',
+          'Google Cloud credentials not configured. Set GOOGLE_APPLICATION_CREDENTIALS in environment.',
+          500
+        );
+      }
+
+      try {
+        const path = await import('path');
+        const keyFilename = path.default.isAbsolute(credPath)
+          ? credPath
+          : path.default.resolve(process.cwd(), credPath);
+
+        const { TextToSpeechClient } = await import('@google-cloud/text-to-speech');
+        const client = new TextToSpeechClient({ keyFilename });
+
+        const [result] = await client.listVoices({});
+        await client.close();
+
+        if (!result.voices) {
+          res.json({ voices: [] });
+          return;
+        }
+
+        // Filter to only Chirp 3: HD voices and map to our Voice format
+        const chirpVoices = result.voices
+          .filter((v: any) => v.name && v.name.includes('Chirp3-HD'))
+          .map((v: any) => {
+            const name = v.name || '';
+            const langCodes: string[] = v.languageCodes || [];
+            const lang = langCodes[0] || '';
+
+            // Extract voice persona name: "en-US-Chirp3-HD-Kore" -> "Kore"
+            const personaMatch = name.match(/Chirp3-HD-(.+)$/);
+            const persona = personaMatch ? personaMatch[1] : name;
+
+            // Map ssmlGender enum (1=MALE, 2=FEMALE, 3=NEUTRAL, 0=UNSPECIFIED)
+            let gender = 'unknown';
+            if (v.ssmlGender === 'MALE' || v.ssmlGender === 1) gender = 'male';
+            else if (v.ssmlGender === 'FEMALE' || v.ssmlGender === 2) gender = 'female';
+            else if (v.ssmlGender === 'NEUTRAL' || v.ssmlGender === 3) gender = 'neutral';
+
+            // Build a readable display name: "Kore (en-IN)"
+            const langLabel = lang || 'unknown';
+            const displayName = `${persona} (${langLabel})`;
+
+            return {
+              id: name,
+              name: displayName,
+              description: `Chirp 3 HD - ${gender} voice`,
+              language: lang,
+              gender,
+              sampleRate: v.naturalSampleRateHertz || 24000,
+            };
+          })
+          // Sort: by language, then persona name
+          .sort((a: any, b: any) => {
+            const langCmp = (a.language || '').localeCompare(b.language || '');
+            if (langCmp !== 0) return langCmp;
+            return (a.name || '').localeCompare(b.name || '');
+          });
+
+        // Update server-side cache
+        googleVoicesCache = { voices: chirpVoices, timestamp: Date.now() };
+
+        console.log(`Google TTS: fetched ${chirpVoices.length} Chirp 3 HD voices from API`);
+
+        res.json({ voices: chirpVoices, cached: false });
+      } catch (error) {
+        console.error('Google TTS listVoices error:', error);
+        throw new SaaSError(
+          'EXTERNAL_API_ERROR',
+          `Failed to fetch voices from Google Cloud TTS: ${(error as Error).message}`,
+          502
+        );
+      }
     })
   );
 

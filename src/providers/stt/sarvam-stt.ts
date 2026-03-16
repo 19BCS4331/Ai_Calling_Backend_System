@@ -131,6 +131,10 @@ class SarvamSTTStreamSession extends STTStreamSession {
   private sessionConfig: SarvamSessionConfig;
   private pendingChunks: Buffer[] = [];
   private isConnected: boolean = false;
+  private reconnectAttempts: number = 0;
+  private maxReconnectAttempts: number = 3;
+  private isReconnecting: boolean = false;
+  private inactiveWriteWarned: boolean = false;
 
   constructor(
     events: STTStreamEvents,
@@ -208,6 +212,18 @@ class SarvamSTTStreamSession extends STTStreamSession {
       this.ws.on('close', (code, reason) => {
         this.logger.info('Sarvam STT WebSocket closed', { code, reason: reason.toString() });
         this.isConnected = false;
+
+        // Auto-reconnect on unexpected close (not user-initiated)
+        if (code !== 1000 && this.isActive && !this.isReconnecting && this.reconnectAttempts < this.maxReconnectAttempts) {
+          this.logger.warn('Sarvam STT unexpected disconnect, attempting reconnect', {
+            code,
+            attempt: this.reconnectAttempts + 1,
+            maxAttempts: this.maxReconnectAttempts
+          });
+          this.reconnect();
+          return;
+        }
+
         this.isActive = false;
         this.emitEnd();
       });
@@ -218,11 +234,15 @@ class SarvamSTTStreamSession extends STTStreamSession {
   
   write(audioChunk: Buffer): void {
     if (!this.isActive) {
-      this.logger.warn('Attempted to write to inactive STT session', {
-        isConnected: this.isConnected,
-        wsState: this.ws?.readyState,
-        chunkSize: audioChunk.length
-      });
+      // Only warn once to avoid log spam (audio chunks arrive every ~250ms)
+      if (!this.inactiveWriteWarned) {
+        this.inactiveWriteWarned = true;
+        this.logger.warn('STT session inactive, dropping audio chunks', {
+          isConnected: this.isConnected,
+          wsState: this.ws?.readyState,
+          chunkSize: audioChunk.length
+        });
+      }
       return;
     }
 
@@ -283,10 +303,87 @@ class SarvamSTTStreamSession extends STTStreamSession {
 
   abort(): void {
     this.isActive = false;
+    this.isReconnecting = false;
     if (this.ws) {
       this.ws.close(1000, 'Aborted');
       this.ws = null;
     }
+  }
+
+  private reconnect(): void {
+    this.isReconnecting = true;
+    this.reconnectAttempts++;
+
+    setTimeout(() => {
+      if (!this.isActive) {
+        this.isReconnecting = false;
+        return;
+      }
+
+      this.logger.info('Sarvam STT reconnecting', { attempt: this.reconnectAttempts });
+
+      const languageCode = this.mapLanguageCode(this.sessionConfig.language);
+      const params = new URLSearchParams({
+        'language-code': languageCode,
+        'model': this.sessionConfig.model,
+        'sample_rate': this.sessionConfig.sampleRate.toString(),
+        'input_audio_codec': 'pcm_s16le',
+        'high_vad_sensitivity': this.sessionConfig.highVadSensitivity ? 'true' : 'false',
+        'vad_signals': 'true'
+      });
+
+      const wsUrl = `${this.sessionConfig.wsUrl}?${params.toString()}`;
+
+      this.ws = new WebSocket(wsUrl, {
+        headers: {
+          'Api-Subscription-Key': this.sessionConfig.apiKey
+        }
+      });
+
+      this.ws.on('open', () => {
+        this.isConnected = true;
+        this.isReconnecting = false;
+        this.inactiveWriteWarned = false;
+        this.logger.info('Sarvam STT reconnected successfully', { attempt: this.reconnectAttempts });
+
+        // Flush any chunks that queued during reconnect
+        for (const chunk of this.pendingChunks) {
+          const audioMessage = {
+            audio: {
+              data: chunk.toString('base64'),
+              sample_rate: this.sessionConfig.sampleRate.toString(),
+              encoding: 'audio/wav'
+            }
+          };
+          this.ws?.send(JSON.stringify(audioMessage));
+        }
+        this.pendingChunks = [];
+      });
+
+      this.ws.on('message', (data: Buffer) => {
+        this.handleMessage(data);
+      });
+
+      this.ws.on('error', (error) => {
+        this.logger.error('Sarvam STT reconnect error', { error: error.message, attempt: this.reconnectAttempts });
+        this.isReconnecting = false;
+      });
+
+      this.ws.on('close', (code, reason) => {
+        this.logger.info('Sarvam STT WebSocket closed (reconnected session)', { code, reason: reason.toString() });
+        this.isConnected = false;
+
+        if (code !== 1000 && this.isActive && !this.isReconnecting && this.reconnectAttempts < this.maxReconnectAttempts) {
+          this.logger.warn('Sarvam STT reconnected session dropped, retrying', { attempt: this.reconnectAttempts + 1 });
+          this.reconnect();
+          return;
+        }
+
+        this.isActive = false;
+        this.isReconnecting = false;
+        this.emitEnd();
+      });
+    }, 500); // 500ms delay before reconnect
   }
 
   private handleMessage(data: Buffer): void {

@@ -32,8 +32,8 @@ export interface VoiceConfig {
 // PROVIDER TYPES
 // ============================================================================
 
-export type STTProviderType = 'sarvam' | 'reverie' | 'google' | 'deepgram';
-export type LLMProviderType = 'gemini' | 'openai' | 'anthropic' | 'groq' | 'cerebras';
+export type STTProviderType = 'sarvam' | 'reverie' | 'google' | 'deepgram' | 'elevenlabs';
+export type LLMProviderType = 'gemini' | 'openai' | 'anthropic' | 'groq' | 'cerebras' | 'openrouter';
 export type TTSProviderType = 'sarvam' | 'reverie' | 'google' | 'elevenlabs';
 
 export interface ProviderCredentials {
@@ -119,6 +119,8 @@ export interface ChatMessage {
   toolCallId?: string;
   toolCalls?: ToolCall[];
   name?: string;
+  /** Raw Gemini API response parts — preserved verbatim to maintain thoughtSignature for function calling */
+  _rawGeminiParts?: any[];
 }
 
 export interface ToolCall {
@@ -128,6 +130,7 @@ export interface ToolCall {
     name: string;
     arguments: string;
   };
+  thought_signature?: string;
 }
 
 export interface ToolDefinition {
@@ -159,6 +162,8 @@ export interface LLMResponse {
     cachedContentTokenCount?: number;  // For Gemini explicit caching
   };
   latencyMs?: number;
+  /** Raw Gemini API response parts — preserved verbatim to maintain thoughtSignature */
+  _rawGeminiParts?: any[];
 }
 
 export interface LLMStreamChunk {

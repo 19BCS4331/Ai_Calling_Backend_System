@@ -8,6 +8,7 @@ export * from './base';
 
 // STT Providers
 export { SarvamSTTProvider } from './stt/sarvam-stt';
+export { ElevenLabsSTTProvider } from './stt/elevenlabs-stt';
 
 // LLM Providers
 export { GeminiLLMProvider } from './llm/gemini-llm';

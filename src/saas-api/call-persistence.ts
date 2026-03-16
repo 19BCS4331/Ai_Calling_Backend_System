@@ -142,10 +142,10 @@ async function calculateCallCosts(
   ttsCharacters: number
 ): Promise<{ stt: number; tts: number; llm: number; total: number }> {
   try {
-    // Get the call record to find provider names
+    // Get the call record to find provider names and agent
     const { data: call } = await supabaseAdmin
       .from('calls')
-      .select('stt_provider, tts_provider, llm_provider')
+      .select('stt_provider, tts_provider, llm_provider, agent_id')
       .eq('id', callId)
       .single();
 
@@ -153,67 +153,107 @@ async function calculateCallCosts(
       return { stt: 0, tts: 0, llm: 0, total: 0 };
     }
 
-    // Get provider costs from database
-    const { data: providers } = await supabaseAdmin
-      .from('providers')
-      .select('slug, type, cost_per_minute_cents, cost_per_1k_tokens_cents, cost_per_1k_chars_cents, cost_cache_write_per_1k_tokens_cents, cost_cache_storage_per_1k_tokens_per_hour_cents')
-      .in('slug', [call.stt_provider, call.tts_provider, call.llm_provider].filter(Boolean));
+    // Get LLM model from agent config
+    let llmModelId: string | null = null;
+    if (call.agent_id) {
+      const { data: agent } = await supabaseAdmin
+        .from('agents')
+        .select('llm_config')
+        .eq('id', call.agent_id)
+        .single();
+      if (agent?.llm_config) {
+        llmModelId = (agent.llm_config as any).model || null;
+      }
+    }
 
-    // Build provider cost map by type
-    const providerCostMap: Record<string, { 
-      type: string; 
-      perMinute?: number; 
-      per1kTokens?: number; 
-      per1kChars?: number;
-      cacheWrite?: number;
-      cacheStorage?: number;
+    // Try to get per-model pricing from provider_models table
+    const providerSlugs = [call.stt_provider, call.tts_provider, call.llm_provider].filter(Boolean);
+    const { data: providerModels } = await supabaseAdmin
+      .from('provider_models')
+      .select('model_id, cost_input_per_1m_tokens, cost_output_per_1m_tokens, cost_cached_input_per_1m_tokens, cost_per_minute_cents, cost_per_1k_chars_cents, providers!inner(slug, type)')
+      .eq('is_active', true);
+
+    // Build model cost lookup: key = provider_slug + model_id
+    const modelCostMap: Record<string, {
+      type: string;
+      inputPer1m: number;
+      outputPer1m: number;
+      cachedPer1m: number;
+      perMinute: number;
+      per1kChars: number;
     }> = {};
-    if (providers) {
-      for (const p of providers) {
-        providerCostMap[p.slug] = {
-          type: p.type,
-          perMinute: p.cost_per_minute_cents,
-          per1kTokens: p.cost_per_1k_tokens_cents,
-          per1kChars: p.cost_per_1k_chars_cents,
-          cacheWrite: p.cost_cache_write_per_1k_tokens_cents,
-          cacheStorage: p.cost_cache_storage_per_1k_tokens_per_hour_cents
+    if (providerModels) {
+      for (const pm of providerModels) {
+        const prov = (pm as any).providers;
+        const key = `${prov.slug}:${pm.model_id}`;
+        modelCostMap[key] = {
+          type: prov.type,
+          inputPer1m: Number(pm.cost_input_per_1m_tokens) || 0,
+          outputPer1m: Number(pm.cost_output_per_1m_tokens) || 0,
+          cachedPer1m: Number(pm.cost_cached_input_per_1m_tokens) || 0,
+          perMinute: Number(pm.cost_per_minute_cents) || 0,
+          per1kChars: Number(pm.cost_per_1k_chars_cents) || 0,
         };
       }
     }
 
-    // Calculate STT cost (per minute) - uses cost_per_minute_cents
+    // Also fallback to provider-level costs
+    const { data: providers } = await supabaseAdmin
+      .from('providers')
+      .select('slug, type, cost_per_minute_cents, cost_per_1k_tokens_cents, cost_per_1k_chars_cents')
+      .in('slug', providerSlugs);
+
+    const providerCostMap: Record<string, { perMinute?: number; per1kTokens?: number; per1kChars?: number }> = {};
+    if (providers) {
+      for (const p of providers) {
+        providerCostMap[p.slug] = {
+          perMinute: p.cost_per_minute_cents,
+          per1kTokens: p.cost_per_1k_tokens_cents,
+          per1kChars: p.cost_per_1k_chars_cents,
+        };
+      }
+    }
+
+    // Calculate STT cost (per minute)
     const durationMinutes = durationSeconds / 60;
     const sttProvider = call.stt_provider;
-    const sttDbCost = providerCostMap[sttProvider]?.perMinute;
-    const sttRate = sttDbCost ?? DEFAULT_PROVIDER_COSTS[sttProvider]?.stt ?? 1.0;
+    // Try model-level cost first (find first STT model for this provider)
+    const sttModelKey = Object.keys(modelCostMap).find(k => k.startsWith(`${sttProvider}:`) && modelCostMap[k].perMinute > 0);
+    const sttRate = sttModelKey
+      ? modelCostMap[sttModelKey].perMinute
+      : (providerCostMap[sttProvider]?.perMinute ?? DEFAULT_PROVIDER_COSTS[sttProvider]?.stt ?? 1.0);
     const sttCost = durationMinutes * sttRate;
 
-    // Calculate TTS cost (per 1k characters) - uses cost_per_1k_chars_cents
+    // Calculate TTS cost (per 1k characters)
     const ttsProvider = call.tts_provider;
-    const ttsDbCost = providerCostMap[ttsProvider]?.per1kChars;
-    const ttsRate = ttsDbCost ?? DEFAULT_PROVIDER_COSTS[ttsProvider]?.tts ?? 1.5;
+    const ttsModelKey = Object.keys(modelCostMap).find(k => k.startsWith(`${ttsProvider}:`) && modelCostMap[k].per1kChars > 0);
+    const ttsRate = ttsModelKey
+      ? modelCostMap[ttsModelKey].per1kChars
+      : (providerCostMap[ttsProvider]?.per1kChars ?? DEFAULT_PROVIDER_COSTS[ttsProvider]?.tts ?? 1.5);
     const ttsCost = (ttsCharacters / 1000) * ttsRate;
 
-    // Calculate LLM cost (per 1k tokens) - uses cost_per_1k_tokens_cents
-    // Apply 75% discount to cached tokens (Gemini explicit caching)
+    // Calculate LLM cost using per-model input/output pricing
     const llmProvider = call.llm_provider;
-    const llmDbCost = providerCostMap[llmProvider]?.per1kTokens;
-    const llmRate = llmDbCost ?? DEFAULT_PROVIDER_COSTS[llmProvider]?.llm ?? 1.0;
-    
-    // Effective tokens: full price for non-cached, 25% price for cached (75% discount)
-    const nonCachedPromptTokens = llmPromptTokens - llmCachedTokens;
-    const effectivePromptTokens = nonCachedPromptTokens + (llmCachedTokens * 0.25);
-    const totalTokens = effectivePromptTokens + llmCompletionTokens;
-    let llmCost = (totalTokens / 1000) * llmRate;
-    
-    // Add cache costs if using explicit caching (from provider config)
-    if (llmCachedTokens > 0) {
-      const cacheWriteRate = providerCostMap[llmProvider]?.cacheWrite ?? 0.003; // Default: $0.03/1M
-      const cacheStorageRate = providerCostMap[llmProvider]?.cacheStorage ?? 0.0001; // Default: $1/1M/hr
-      
-      const cacheCreationCost = (llmCachedTokens / 1000) * cacheWriteRate;
-      const cacheStorageCost = (llmCachedTokens / 1000) * cacheStorageRate; // 1 hour TTL
-      llmCost += cacheCreationCost + cacheStorageCost;
+    const llmModelKey = llmModelId ? `${llmProvider}:${llmModelId}` : null;
+    const llmModel = llmModelKey ? modelCostMap[llmModelKey] : null;
+
+    let llmCost: number;
+    if (llmModel && (llmModel.inputPer1m > 0 || llmModel.outputPer1m > 0)) {
+      // Per-model pricing: separate input/output/cached rates (costs are per 1M tokens)
+      const nonCachedPromptTokens = llmPromptTokens - llmCachedTokens;
+      const inputCost = (nonCachedPromptTokens / 1_000_000) * llmModel.inputPer1m;
+      const outputCost = (llmCompletionTokens / 1_000_000) * llmModel.outputPer1m;
+      const cachedCost = llmCachedTokens > 0
+        ? (llmCachedTokens / 1_000_000) * (llmModel.cachedPer1m > 0 ? llmModel.cachedPer1m : llmModel.inputPer1m * 0.25)
+        : 0;
+      llmCost = inputCost + outputCost + cachedCost;
+    } else {
+      // Fallback: flat per-1k-token rate from provider or defaults
+      const llmRate = providerCostMap[llmProvider]?.per1kTokens ?? DEFAULT_PROVIDER_COSTS[llmProvider]?.llm ?? 1.0;
+      const nonCachedPromptTokens = llmPromptTokens - llmCachedTokens;
+      const effectivePromptTokens = nonCachedPromptTokens + (llmCachedTokens * 0.25);
+      const totalTokens = effectivePromptTokens + llmCompletionTokens;
+      llmCost = (totalTokens / 1000) * llmRate;
     }
 
     const totalCost = sttCost + ttsCost + llmCost;
@@ -222,9 +262,10 @@ async function calculateCallCosts(
       callId,
       durationMinutes,
       ttsCharacters,
-      llmTokens: { prompt: llmPromptTokens, cached: llmCachedTokens, completion: llmCompletionTokens, effective: totalTokens },
+      llmTokens: { prompt: llmPromptTokens, cached: llmCachedTokens, completion: llmCompletionTokens },
+      llmModel: llmModelId,
       providers: { stt: sttProvider, tts: ttsProvider, llm: llmProvider },
-      rates: { stt: sttRate, tts: ttsRate, llm: llmRate },
+      rates: { stt: sttRate, tts: ttsRate },
       costs: { stt: sttCost, tts: ttsCost, llm: llmCost, total: totalCost }
     });
 
@@ -278,10 +319,55 @@ async function calculateUserCost(
 
     // If credit-based plan, deduct from balance
     if (subscription && (subscription.plans as any)?.is_credit_based) {
-      await supabaseAdmin.rpc('deduct_credit', {
+      const { data: deducted } = await supabaseAdmin.rpc('deduct_credit', {
         p_subscription_id: subscription.id,
         p_amount_cents: userCost
       });
+
+      const amountDeducted = deducted || 0;
+      logger.info('Credit deduction result', {
+        callId,
+        requested: userCost,
+        deducted: amountDeducted,
+        subscriptionId: subscription.id
+      });
+
+      // If we couldn't deduct the full amount, credits are exhausted — auto-switch to PAYG
+      if (amountDeducted < userCost) {
+        logger.info('Trial credits exhausted, auto-switching to PAYG', {
+          callId,
+          organizationId: call.organization_id,
+          subscriptionId: subscription.id,
+          shortfall: userCost - amountDeducted
+        });
+
+        // Find the PAYG plan
+        const { data: paygPlan } = await supabaseAdmin
+          .from('plans')
+          .select('id')
+          .eq('slug', 'payg')
+          .single();
+
+        if (paygPlan) {
+          await supabaseAdmin
+            .from('subscriptions')
+            .update({
+              plan_id: paygPlan.id,
+              status: 'active',
+              updated_at: new Date().toISOString(),
+              current_period_start: new Date().toISOString(),
+              current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+            })
+            .eq('id', subscription.id);
+
+          logger.info('Subscription switched to PAYG', {
+            subscriptionId: subscription.id,
+            organizationId: call.organization_id
+          });
+        } else {
+          logger.warn('PAYG plan not found in database — cannot auto-switch');
+        }
+      }
     }
 
     return userCost;
@@ -372,6 +458,50 @@ export async function endCallRecord(params: EndCallParams): Promise<boolean> {
       error: (err as Error).message 
     });
     return false;
+  }
+}
+
+/**
+ * Save conversation transcripts to the database.
+ * Called when a call ends to persist the conversation history.
+ */
+export async function saveTranscripts(
+  callId: string,
+  messages: Array<{ role: string; content: string; toolCalls?: any[] }>
+): Promise<void> {
+  try {
+    // Filter out system messages, keep user/assistant/tool
+    const transcriptMessages = messages.filter(
+      m => m.role !== 'system' && m.content?.trim()
+    );
+
+    if (transcriptMessages.length === 0) {
+      logger.debug('No transcript messages to save', { callId });
+      return;
+    }
+
+    const rows = transcriptMessages.map((msg, index) => ({
+      id: uuidv4(),
+      call_id: callId,
+      sequence: index + 1,
+      role: msg.role,
+      content: msg.content,
+      is_final: true,
+      tool_calls: msg.toolCalls ? JSON.stringify(msg.toolCalls) : null,
+      created_at: new Date().toISOString()
+    }));
+
+    const { error } = await supabaseAdmin
+      .from('transcripts')
+      .insert(rows);
+
+    if (error) {
+      logger.error('Failed to save transcripts', { callId, error: error.message, count: rows.length });
+    } else {
+      logger.info('Transcripts saved', { callId, count: rows.length });
+    }
+  } catch (err) {
+    logger.error('Exception saving transcripts', { callId, error: (err as Error).message });
   }
 }
 

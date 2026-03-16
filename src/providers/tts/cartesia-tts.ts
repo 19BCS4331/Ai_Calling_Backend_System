@@ -392,6 +392,10 @@ class CartesiaTTSStreamSession extends TTSStreamSession {
 
   private qualityPreset: AudioQualityPreset;
 
+  private pendingSentences: number = 0;  // Track in-flight sentences for FIFO ordering
+
+  private endRequested: boolean = false;  // True after end() is called
+
 
 
   constructor(
@@ -537,6 +541,8 @@ class CartesiaTTSStreamSession extends TTSStreamSession {
     }
 
 
+
+    this.pendingSentences++;
 
     if (this.isConnected && this.ws?.readyState === WebSocket.OPEN) {
 
@@ -720,13 +726,19 @@ class CartesiaTTSStreamSession extends TTSStreamSession {
 
     if (!this.isActive) return;
 
-
+    this.endRequested = true;
 
     return new Promise((resolve) => {
 
+      // If all sentences already completed, finalize immediately
+      if (this.pendingSentences <= 0) {
+        this.sendEndSignal();
+        this.finalizeSession();
+        resolve();
+        return;
+      }
+
       this.completionResolver = resolve;
-
-
 
       // Send end signal to close the context
 
@@ -734,13 +746,15 @@ class CartesiaTTSStreamSession extends TTSStreamSession {
 
       
 
-      // Wait for done message or timeout
+      // Wait for all sentences to complete or timeout
 
       setTimeout(() => {
 
         if (this.completionResolver) {
 
-          this.logger.debug('Cartesia TTS session end timeout - finalizing');
+          this.logger.debug('Cartesia TTS session end timeout - finalizing', {
+            pendingSentences: this.pendingSentences
+          });
 
           this.completionResolver = null;
 
@@ -815,6 +829,9 @@ class CartesiaTTSStreamSession extends TTSStreamSession {
   
 
   private handleMessage(data: WebSocket.Data): void {
+    // Ignore messages arriving after abort — Cartesia may still send
+    // "Invalid context ID" errors for cancelled contexts.
+    if (!this.isActive) return;
 
     try {
 
@@ -872,19 +889,25 @@ class CartesiaTTSStreamSession extends TTSStreamSession {
 
           
 
-          this.logger.debug('Cartesia TTS generation complete', { 
+          this.pendingSentences = Math.max(0, this.pendingSentences - 1);
+
+          this.logger.debug('Cartesia TTS sentence complete', { 
 
             contextId: this.contextId,
 
             pcmChunks: this.pcmBuffer.length,
 
-            totalBytes: this.pcmBuffer.reduce((sum, b) => sum + b.length, 0)
+            totalBytes: this.pcmBuffer.reduce((sum, b) => sum + b.length, 0),
+
+            pendingSentences: this.pendingSentences,
+
+            endRequested: this.endRequested
 
           });
 
           
 
-          // Reset for next stream
+          // Reset buffer for next sentence
 
           this.pcmBuffer = [];
 
@@ -894,15 +917,21 @@ class CartesiaTTSStreamSession extends TTSStreamSession {
 
           
 
-          if (this.completionResolver) {
+          // Only finalize when end() was called AND all sentences are done
 
-            this.completionResolver();
+          if (this.endRequested && this.pendingSentences <= 0) {
 
-            this.completionResolver = null;
+            if (this.completionResolver) {
+
+              this.completionResolver();
+
+              this.completionResolver = null;
+
+            }
+
+            this.finalizeSession();
 
           }
-
-          this.finalizeSession();
 
           break;
 

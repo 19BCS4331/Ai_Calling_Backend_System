@@ -318,16 +318,10 @@ export class GeminiLLMProvider extends LLMProvider {
 
   private convertMessages(messages: ChatMessage[]): Content[] {
     return messages.map(msg => {
-      const parts: Part[] = [];
-
-      if (msg.content) {
-        parts.push({ text: msg.content });
-      }
-
-      // Handle tool results
+      // Handle tool results — Gemini expects role: 'user' for functionResponse
       if (msg.role === 'tool' && msg.toolCallId) {
         return {
-          role: 'function' as const,
+          role: 'user' as const,
           parts: [{
             functionResponse: {
               name: msg.name || 'unknown',
@@ -337,7 +331,24 @@ export class GeminiLLMProvider extends LLMProvider {
         };
       }
 
-      // Handle tool calls in assistant messages
+      // For assistant messages with tool calls: use raw Gemini parts if available
+      // This preserves thoughtSignature exactly as returned by the API
+      // Per docs: "Return the entire response with all parts back to the model"
+      if (msg.role === 'assistant' && msg._rawGeminiParts && msg._rawGeminiParts.length > 0) {
+        return {
+          role: 'model' as const,
+          parts: msg._rawGeminiParts
+        };
+      }
+
+      // Standard message conversion (no raw parts available)
+      const parts: Part[] = [];
+
+      if (msg.content) {
+        parts.push({ text: msg.content });
+      }
+
+      // Fallback: reconstruct tool calls if no raw parts stored
       if (msg.toolCalls) {
         for (const tc of msg.toolCalls) {
           parts.push({
@@ -345,7 +356,7 @@ export class GeminiLLMProvider extends LLMProvider {
               name: tc.function.name,
               args: JSON.parse(tc.function.arguments)
             }
-          });
+          } as any);
         }
       }
 
@@ -457,9 +468,13 @@ export class GeminiLLMProvider extends LLMProvider {
     
     let textContent = '';
     const toolCalls: ToolCall[] = [];
+    const rawParts: any[] = [];
 
     if (content?.parts) {
       for (const part of content.parts) {
+        // Store raw part verbatim for thoughtSignature preservation
+        rawParts.push(JSON.parse(JSON.stringify(part)));
+
         if (part.text) {
           textContent += part.text;
         }
@@ -487,6 +502,7 @@ export class GeminiLLMProvider extends LLMProvider {
       content: textContent,
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
       finishReason,
+      _rawGeminiParts: rawParts.length > 0 ? rawParts : undefined,
       usage: {
         promptTokens: response.usageMetadata?.promptTokenCount || 0,
         completionTokens: response.usageMetadata?.candidatesTokenCount || 0,
@@ -563,6 +579,7 @@ class GeminiStreamSession extends LLMStreamSession {
 
       let fullContent = '';
       const toolCalls: ToolCall[] = [];
+      const rawModelParts: any[] = [];  // Store raw parts verbatim for thoughtSignature preservation
       let promptTokens = 0;
       let completionTokens = 0;
       let cachedContentTokenCount = 0;
@@ -575,14 +592,24 @@ class GeminiStreamSession extends LLMStreamSession {
 
         if (content?.parts) {
           for (const part of content.parts) {
+            // Store raw part verbatim — includes thoughtSignature, thought, etc.
+            // Per Google docs: "Return the entire response with all parts back
+            // to the model in subsequent turns."
+            rawModelParts.push(JSON.parse(JSON.stringify(part)));
+
             if (part.text) {
               fullContent += part.text;
               this.processToken(part.text);
             }
             if (part.functionCall) {
+              const rawPart = part as any;
+              const hasThoughtSig = !!rawPart.thoughtSignature || !!rawPart.thought_signature;
+
               this.logger.info('Gemini function call detected', {
                 name: part.functionCall.name,
-                args: part.functionCall.args
+                args: part.functionCall.args,
+                hasThoughtSignature: hasThoughtSig,
+                partKeys: Object.keys(rawPart)
               });
               
               const toolCall: ToolCall = {
@@ -631,7 +658,9 @@ class GeminiStreamSession extends LLMStreamSession {
           totalTokens: promptTokens + completionTokens,
           cachedContentTokenCount
         },
-        latencyMs: Date.now() - this.startTime
+        latencyMs: Date.now() - this.startTime,
+        // Preserve raw Gemini parts verbatim for thoughtSignature support
+        _rawGeminiParts: rawModelParts.length > 0 ? rawModelParts : undefined
       };
 
       this.emitComplete(finalResponse);

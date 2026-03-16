@@ -116,6 +116,9 @@ export class PlivoAdapter extends BaseTelephonyAdapter {
       this.logger.error('Error ending Plivo call', { callId, error: (error as Error).message });
     }
 
+    // Emit call:ended BEFORE cleanup so telephony manager can end the call record
+    this.emitCallEnded(callId, 'agent_ended');
+
     // Clean up local state
     const streamId = this.callToStream.get(callId);
     if (streamId) {

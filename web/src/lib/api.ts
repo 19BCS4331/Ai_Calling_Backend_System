@@ -72,6 +72,9 @@ async function handleResponse<T>(response: Response): Promise<T> {
     const error = await response.json().catch(() => ({ error: 'Unknown error' }));
     throw { error: error.error || 'Request failed', status: response.status } as ApiError;
   }
+  if (response.status === 204) {
+    return undefined as T;
+  }
   return response.json();
 }
 
@@ -153,6 +156,18 @@ export const saasApi = {
     return handleResponse<T>(response);
   },
 
+  async patch<T>(endpoint: string, data?: unknown, token?: string): Promise<T> {
+    const headers: HeadersInit = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    
+    const response = await fetch(`${SAAS_API_URL}${endpoint}`, {
+      method: 'PATCH',
+      headers,
+      body: data ? JSON.stringify(data) : undefined,
+    });
+    return handleResponse<T>(response);
+  },
+
   async delete<T>(endpoint: string, token?: string): Promise<T> {
     const headers: HeadersInit = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -212,4 +227,14 @@ export const saasEndpoints = {
   // Calls (extended)
   callStats: (orgId: string) => `/api/v1/orgs/${orgId}/calls/stats`,
   callTranscript: (orgId: string, callId: string) => `/api/v1/orgs/${orgId}/calls/${callId}/transcript`,
+
+  // Knowledge Bases
+  knowledgeBases: (orgId: string) => `/api/v1/orgs/${orgId}/knowledge-bases`,
+  knowledgeBase: (orgId: string, kbId: string) => `/api/v1/orgs/${orgId}/knowledge-bases/${kbId}`,
+  kbSources: (orgId: string, kbId: string) => `/api/v1/orgs/${orgId}/knowledge-bases/${kbId}/sources`,
+  kbSourceDelete: (orgId: string, kbId: string, sourceId: string) => `/api/v1/orgs/${orgId}/knowledge-bases/${kbId}/sources/${sourceId}`,
+  kbAddText: (orgId: string, kbId: string) => `/api/v1/orgs/${orgId}/knowledge-bases/${kbId}/sources/text`,
+  kbAddUrl: (orgId: string, kbId: string) => `/api/v1/orgs/${orgId}/knowledge-bases/${kbId}/sources/url`,
+  kbAddDocument: (orgId: string, kbId: string) => `/api/v1/orgs/${orgId}/knowledge-bases/${kbId}/sources/document`,
+  kbSearch: (orgId: string, kbId: string) => `/api/v1/orgs/${orgId}/knowledge-bases/${kbId}/search`,
 };
