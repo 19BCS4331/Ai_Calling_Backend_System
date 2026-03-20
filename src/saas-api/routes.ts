@@ -1466,98 +1466,97 @@ export function createSaaSRouter(): Router {
    * Fetch available Chirp 3: HD voices from Google Cloud TTS API
    * Uses client.listVoices() with server-side caching
    */
-  router.get(
-    '/providers/google/voices',
-    authMiddleware,
-    asyncHandler(async (req: Request, res: Response) => {
-      // Check server-side cache first
-      if (googleVoicesCache && (Date.now() - googleVoicesCache.timestamp) < GOOGLE_VOICES_CACHE_TTL) {
-        res.json({ voices: googleVoicesCache.voices, cached: true });
+ router.get(
+  '/providers/google/voices',
+  authMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    // Check server-side cache first
+    if (googleVoicesCache && (Date.now() - googleVoicesCache.timestamp) < GOOGLE_VOICES_CACHE_TTL) {
+      res.json({ voices: googleVoicesCache.voices, cached: true });
+      return;
+    }
+
+    try {
+      const { TextToSpeechClient } = await import('@google-cloud/text-to-speech');
+
+      let clientConfig: any = {};
+
+      // ✅ Use ENV-based credentials if available
+      if (process.env.GOOGLE_CREDENTIALS_JSON) {
+        try {
+          clientConfig.credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
+        } catch (err) {
+          throw new SaaSError(
+            'INTERNAL_ERROR',
+            'Invalid GOOGLE_CREDENTIALS_JSON format',
+            500
+          );
+        }
+      }
+
+      // ✅ Otherwise fallback to ADC (GCP IAM)
+      const client = new TextToSpeechClient(clientConfig);
+
+      const [result] = await client.listVoices({});
+      await client.close();
+
+      if (!result.voices) {
+        res.json({ voices: [] });
         return;
       }
 
-      // Resolve Google credentials
-      const credPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-      if (!credPath) {
-        throw new SaaSError(
-          'INTERNAL_ERROR',
-          'Google Cloud credentials not configured. Set GOOGLE_APPLICATION_CREDENTIALS in environment.',
-          500
-        );
-      }
+      // Filter to only Chirp 3: HD voices and map to our Voice format
+      const chirpVoices = result.voices
+        .filter((v: any) => v.name && v.name.includes('Chirp3-HD'))
+        .map((v: any) => {
+          const name = v.name || '';
+          const langCodes: string[] = v.languageCodes || [];
+          const lang = langCodes[0] || '';
 
-      try {
-        const path = await import('path');
-        const keyFilename = path.default.isAbsolute(credPath)
-          ? credPath
-          : path.default.resolve(process.cwd(), credPath);
+          const personaMatch = name.match(/Chirp3-HD-(.+)$/);
+          const persona = personaMatch ? personaMatch[1] : name;
 
-        const { TextToSpeechClient } = await import('@google-cloud/text-to-speech');
-        const client = new TextToSpeechClient({ keyFilename });
+          let gender = 'unknown';
+          if (v.ssmlGender === 'MALE' || v.ssmlGender === 1) gender = 'male';
+          else if (v.ssmlGender === 'FEMALE' || v.ssmlGender === 2) gender = 'female';
+          else if (v.ssmlGender === 'NEUTRAL' || v.ssmlGender === 3) gender = 'neutral';
 
-        const [result] = await client.listVoices({});
-        await client.close();
+          const langLabel = lang || 'unknown';
+          const displayName = `${persona} (${langLabel})`;
 
-        if (!result.voices) {
-          res.json({ voices: [] });
-          return;
-        }
+          return {
+            id: name,
+            name: displayName,
+            description: `Chirp 3 HD - ${gender} voice`,
+            language: lang,
+            gender,
+            sampleRate: v.naturalSampleRateHertz || 24000,
+          };
+        })
+        .sort((a: any, b: any) => {
+          const langCmp = (a.language || '').localeCompare(b.language || '');
+          if (langCmp !== 0) return langCmp;
+          return (a.name || '').localeCompare(b.name || '');
+        });
 
-        // Filter to only Chirp 3: HD voices and map to our Voice format
-        const chirpVoices = result.voices
-          .filter((v: any) => v.name && v.name.includes('Chirp3-HD'))
-          .map((v: any) => {
-            const name = v.name || '';
-            const langCodes: string[] = v.languageCodes || [];
-            const lang = langCodes[0] || '';
+      // Cache result
+      googleVoicesCache = { voices: chirpVoices, timestamp: Date.now() };
 
-            // Extract voice persona name: "en-US-Chirp3-HD-Kore" -> "Kore"
-            const personaMatch = name.match(/Chirp3-HD-(.+)$/);
-            const persona = personaMatch ? personaMatch[1] : name;
+      console.log(`Google TTS: fetched ${chirpVoices.length} Chirp 3 HD voices from API`);
 
-            // Map ssmlGender enum (1=MALE, 2=FEMALE, 3=NEUTRAL, 0=UNSPECIFIED)
-            let gender = 'unknown';
-            if (v.ssmlGender === 'MALE' || v.ssmlGender === 1) gender = 'male';
-            else if (v.ssmlGender === 'FEMALE' || v.ssmlGender === 2) gender = 'female';
-            else if (v.ssmlGender === 'NEUTRAL' || v.ssmlGender === 3) gender = 'neutral';
+      res.json({ voices: chirpVoices, cached: false });
 
-            // Build a readable display name: "Kore (en-IN)"
-            const langLabel = lang || 'unknown';
-            const displayName = `${persona} (${langLabel})`;
+    } catch (error) {
+      console.error('Google TTS listVoices error:', error);
 
-            return {
-              id: name,
-              name: displayName,
-              description: `Chirp 3 HD - ${gender} voice`,
-              language: lang,
-              gender,
-              sampleRate: v.naturalSampleRateHertz || 24000,
-            };
-          })
-          // Sort: by language, then persona name
-          .sort((a: any, b: any) => {
-            const langCmp = (a.language || '').localeCompare(b.language || '');
-            if (langCmp !== 0) return langCmp;
-            return (a.name || '').localeCompare(b.name || '');
-          });
-
-        // Update server-side cache
-        googleVoicesCache = { voices: chirpVoices, timestamp: Date.now() };
-
-        console.log(`Google TTS: fetched ${chirpVoices.length} Chirp 3 HD voices from API`);
-
-        res.json({ voices: chirpVoices, cached: false });
-      } catch (error) {
-        console.error('Google TTS listVoices error:', error);
-        throw new SaaSError(
-          'EXTERNAL_API_ERROR',
-          `Failed to fetch voices from Google Cloud TTS: ${(error as Error).message}`,
-          502
-        );
-      }
-    })
-  );
-
+      throw new SaaSError(
+        'EXTERNAL_API_ERROR',
+        `Failed to fetch voices from Google Cloud TTS: ${(error as Error).message}`,
+        502
+      );
+    }
+  })
+);
   // ===========================================
   // TELEPHONY INTEGRATION ROUTES
   // ===========================================
