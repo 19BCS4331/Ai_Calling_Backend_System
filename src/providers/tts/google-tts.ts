@@ -189,23 +189,18 @@ export class GoogleTTSProvider extends TTSProvider {
   }
 
   async initialize(): Promise<void> {
-    // Google Cloud TTS uses a service account JSON file for auth.
-    // Resolve the path from GOOGLE_APPLICATION_CREDENTIALS env var.
-    const credPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-    if (credPath) {
-      // Resolve relative paths against cwd
-      this.keyFilename = path.isAbsolute(credPath) ? credPath : path.resolve(process.cwd(), credPath);
-    }
+  const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON!);
 
-    this.client = new TextToSpeechClient(
-      this.keyFilename ? { keyFilename: this.keyFilename } : undefined
-    );
-    this.isInitialized = true;
-    this.logger.info('Google Cloud TTS provider initialized', {
-      audioQuality: this.audioQuality,
-      keyFilename: this.keyFilename ? '***set***' : 'default (ADC)'
-    });
-  }
+  this.client = new TextToSpeechClient({
+    credentials,
+  });
+
+  this.isInitialized = true;
+
+  this.logger.info('Google Cloud TTS provider initialized', {
+    auth: 'ENV JSON'
+  });
+}
 
   async synthesize(
     text: string,
