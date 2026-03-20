@@ -193,6 +193,7 @@ export class GoogleTTSProvider extends TTSProvider {
 
   this.client = new TextToSpeechClient({
     credentials,
+    projectId: credentials.project_id,
   });
 
   this.isInitialized = true;
