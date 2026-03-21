@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Building2, Zap, Check, ArrowRight, ArrowLeft } from 'lucide-react';
@@ -63,6 +63,8 @@ export function Onboarding() {
     },
   ];
 
+  const isSubmittingRef = useRef(false);
+
   const handleCreateOrganization = async () => {
     if (!orgName.trim()) {
       setError('Please enter an organization name');
@@ -73,6 +75,10 @@ export function Onboarding() {
       setError('Please select a plan');
       return;
     }
+
+    // Prevent double-submit
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
 
     setIsLoading(true);
     setError('');
@@ -119,6 +125,7 @@ export function Onboarding() {
       console.error('Onboarding error:', err);
       setError(err instanceof Error ? err.message : 'Failed to create organization');
       setIsLoading(false);
+      isSubmittingRef.current = false;
     }
   };
 
