@@ -82,8 +82,8 @@ export function Agents() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-1">Voice Agents</h1>
-          <p className="text-white/50">Manage your AI voice agents</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Voice Agents</h1>
+          <p className="text-gray-500 dark:text-white/50">Manage your AI voice agents</p>
         </div>
         <button
           onClick={() => navigate('/dashboard/agents/new')}
@@ -98,13 +98,13 @@ export function Agents() {
       <div className="flex flex-col sm:flex-row gap-4">
         {/* Search */}
         <div className="flex-1 relative">
-          <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
+          <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-white/30" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search agents..."
-            className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
+            className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 transition-all"
           />
         </div>
 
@@ -130,10 +130,10 @@ export function Agents() {
           <div className="w-8 h-8 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
         </div>
       ) : filteredAgents.length === 0 ? (
-        <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-12 text-center">
-          <Bot size={48} className="mx-auto text-white/20 mb-4" />
-          <h3 className="text-lg font-semibold text-white mb-2">No agents found</h3>
-          <p className="text-white/50 mb-6">
+        <div className="bg-white border border-gray-200 dark:bg-white/[0.02] dark:border-white/5 rounded-2xl p-12 text-center shadow-sm dark:shadow-none">
+          <Bot size={48} className="mx-auto text-gray-200 dark:text-white/20 mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No agents found</h3>
+          <p className="text-gray-500 dark:text-white/50 mb-6">
             {searchQuery || statusFilter
               ? 'Try adjusting your filters'
               : 'Create your first AI voice agent to get started'}
@@ -155,7 +155,7 @@ export function Agents() {
               key={agent.id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-white/[0.02] border border-white/5 rounded-2xl p-6 hover:bg-white/[0.04] transition-all group"
+              className="bg-white border border-gray-200 dark:bg-white/[0.02] dark:border-white/5 rounded-2xl p-6 hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-all group shadow-sm dark:shadow-none"
             >
               {/* Header */}
               <div className="flex items-start justify-between mb-4">
@@ -164,8 +164,8 @@ export function Agents() {
                     <Bot size={20} className="text-white" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-white">{agent.name}</h3>
-                    <p className="text-xs text-white/40">{agent.slug}</p>
+                    <h3 className="font-semibold text-gray-900 dark:text-white">{agent.name}</h3>
+                    <p className="text-xs text-gray-400 dark:text-white/40">{agent.slug}</p>
                   </div>
                 </div>
                 <span className={`px-2 py-1 rounded-lg text-xs font-medium border ${getStatusColor(agent.status)}`}>
@@ -175,18 +175,18 @@ export function Agents() {
 
               {/* Description */}
               {agent.description && (
-                <p className="text-sm text-white/60 mb-4 line-clamp-2">{agent.description}</p>
+                <p className="text-sm text-gray-500 dark:text-white/60 mb-4 line-clamp-2">{agent.description}</p>
               )}
 
               {/* Config Info */}
               <div className="grid grid-cols-2 gap-2 mb-4 text-xs">
-                <div className="bg-white/5 rounded-lg p-2">
-                  <p className="text-white/40 mb-0.5">Language</p>
-                  <p className="text-white font-medium">{agent.language}</p>
+                <div className="bg-gray-50 dark:bg-white/5 rounded-lg p-2">
+                  <p className="text-gray-400 dark:text-white/40 mb-0.5">Language</p>
+                  <p className="text-gray-900 dark:text-white font-medium">{agent.language}</p>
                 </div>
-                <div className="bg-white/5 rounded-lg p-2">
-                  <p className="text-white/40 mb-0.5">Version</p>
-                  <p className="text-white font-medium">
+                <div className="bg-gray-50 dark:bg-white/5 rounded-lg p-2">
+                  <p className="text-gray-400 dark:text-white/40 mb-0.5">Version</p>
+                  <p className="text-gray-900 dark:text-white font-medium">
                     v{agent.published_version || agent.version}
                     {agent.status === 'draft' && ' (draft)'}
                   </p>
@@ -207,10 +207,10 @@ export function Agents() {
               </div>
 
               {/* Actions */}
-              <div className="flex items-center gap-2 pt-4 border-t border-white/5">
+              <div className="flex items-center gap-2 pt-4 border-t border-gray-100 dark:border-white/5">
                 <button
                   onClick={() => navigate(`/dashboard/agents/${agent.id}`)}
-                  className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm font-medium text-white hover:bg-white/10 transition-all flex items-center justify-center gap-2"
+                  className="flex-1 px-3 py-2 bg-gray-100 border border-gray-200 dark:bg-white/5 dark:border-white/10 rounded-lg text-sm font-medium text-gray-700 dark:text-white hover:bg-gray-200 dark:hover:bg-white/10 transition-all flex items-center justify-center gap-2"
                 >
                   <Edit size={14} />
                   Edit

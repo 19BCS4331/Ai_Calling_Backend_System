@@ -221,12 +221,12 @@ export function VoiceSelector({ provider, selectedVoiceId, onVoiceChange }: Voic
     return (
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <label className="block text-sm text-white/60">Voice ID</label>
+          <label className="block text-sm text-gray-600 dark:text-white/60">Voice ID</label>
           {hasDropdownSupport && (
             <button
               type="button"
               onClick={() => setManualMode(false)}
-              className="text-xs text-purple-400 hover:text-purple-300 transition-colors"
+              className="text-xs text-purple-500 dark:text-purple-400 hover:text-purple-600 dark:hover:text-purple-300 transition-colors"
             >
               ← Back to voice list
             </button>
@@ -238,7 +238,7 @@ export function VoiceSelector({ provider, selectedVoiceId, onVoiceChange }: Voic
             value={manualVoiceId}
             onChange={(e) => setManualVoiceId(e.target.value)}
             placeholder="Enter voice ID manually"
-            className="flex-1 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
+            className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 transition-all"
           />
           {manualVoiceId !== selectedVoiceId && (
             <button
@@ -250,7 +250,7 @@ export function VoiceSelector({ provider, selectedVoiceId, onVoiceChange }: Voic
             </button>
           )}
         </div>
-        <p className="text-xs text-white/40">
+        <p className="text-xs text-gray-400 dark:text-white/40">
           {hasDropdownSupport
             ? `Enter a ${provider === 'cartesia' ? 'Cartesia voice ID' : provider === 'google' ? 'Google Chirp 3 HD voice ID (e.g. en-US-Chirp3-HD-Kore)' : 'Sarvam speaker name'} manually`
             : 'Enter the voice ID for your TTS provider'}
@@ -263,11 +263,11 @@ export function VoiceSelector({ provider, selectedVoiceId, onVoiceChange }: Voic
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <label className="block text-sm text-white/60">Voice</label>
+        <label className="block text-sm text-gray-600 dark:text-white/60">Voice</label>
         <button
           type="button"
           onClick={() => setManualMode(true)}
-          className="text-xs text-purple-400 hover:text-purple-300 transition-colors flex items-center gap-1"
+          className="text-xs text-purple-500 dark:text-purple-400 hover:text-purple-600 dark:hover:text-purple-300 transition-colors flex items-center gap-1"
         >
           <Edit3 size={12} />
           Enter manually
@@ -275,9 +275,9 @@ export function VoiceSelector({ provider, selectedVoiceId, onVoiceChange }: Voic
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-8 bg-white/5 rounded-xl border border-white/10">
+        <div className="flex items-center justify-center py-8 bg-gray-50 border border-gray-200 rounded-xl dark:bg-white/5 dark:border-white/10">
           <Loader size={20} className="text-purple-400 animate-spin" />
-          <span className="ml-2 text-sm text-white/50">Loading voices...</span>
+          <span className="ml-2 text-sm text-gray-400 dark:text-white/50">Loading voices...</span>
         </div>
       ) : error ? (
         <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
@@ -285,7 +285,7 @@ export function VoiceSelector({ provider, selectedVoiceId, onVoiceChange }: Voic
           <button
             type="button"
             onClick={() => setManualMode(true)}
-            className="mt-2 text-xs text-purple-400 hover:text-purple-300 transition-colors"
+            className="mt-2 text-xs text-purple-500 dark:text-purple-400 hover:text-purple-600 dark:hover:text-purple-300 transition-colors"
           >
             Enter voice ID manually instead
           </button>
@@ -295,22 +295,22 @@ export function VoiceSelector({ provider, selectedVoiceId, onVoiceChange }: Voic
           <button
             type="button"
             onClick={() => setIsOpen(!isOpen)}
-            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-left flex items-center justify-between hover:bg-white/10 transition-all focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20"
+            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-left flex items-center justify-between hover:bg-gray-100 dark:bg-white/5 dark:border-white/10 dark:hover:bg-white/10 transition-all focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20"
           >
             <div className="flex items-center gap-2">
               <Volume2 size={16} className="text-purple-400" />
               <div>
-                <p className="text-white font-medium">
+                <p className="text-gray-900 dark:text-white font-medium">
                   {selectedVoice?.name || 'Select a voice'}
                 </p>
                 {selectedVoice?.description && (
-                  <p className="text-xs text-white/40 mt-0.5">{selectedVoice.description}</p>
+                  <p className="text-xs text-gray-400 dark:text-white/40 mt-0.5">{selectedVoice.description}</p>
                 )}
               </div>
             </div>
             <ChevronDown
               size={18}
-              className={`text-white/40 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+              className={`text-gray-400 dark:text-white/40 transition-transform ${isOpen ? 'rotate-180' : ''}`}
             />
           </button>
 
@@ -320,25 +320,25 @@ export function VoiceSelector({ provider, selectedVoiceId, onVoiceChange }: Voic
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="absolute z-10 w-full mt-2 bg-[#0A0A0A] border border-white/10 rounded-xl shadow-2xl overflow-hidden"
+                className="absolute z-10 w-full mt-2 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden dark:bg-[#0A0A0A] dark:border-white/10 dark:shadow-2xl"
               >
                 {/* Search Input */}
-                <div className="p-2 border-b border-white/10 sticky top-0 bg-[#0A0A0A]">
+                <div className="p-2 border-b border-gray-200 dark:border-white/10 sticky top-0 bg-white dark:bg-[#0A0A0A]">
                   <div className="relative">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-white/40" />
                     <input
                       ref={searchInputRef}
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       placeholder="Search voices..."
-                      className="w-full pl-9 pr-8 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder-white/40 focus:outline-none focus:border-purple-500/50"
+                      className="w-full pl-9 pr-8 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/40"
                     />
                     {searchQuery && (
                       <button
                         type="button"
                         onClick={() => setSearchQuery('')}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/60"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 dark:text-white/40 hover:text-gray-600 dark:hover:text-white/60"
                       >
                         <X size={14} />
                       </button>
@@ -349,7 +349,7 @@ export function VoiceSelector({ provider, selectedVoiceId, onVoiceChange }: Voic
                 {/* Voice List */}
                 <div className="max-h-64 overflow-y-auto">
                 {filteredVoices.length === 0 ? (
-                  <div className="p-4 text-center text-white/50 text-sm">
+                  <div className="p-4 text-center text-gray-400 dark:text-white/50 text-sm">
                     {searchQuery ? 'No voices match your search' : 'No voices available'}
                   </div>
                 ) : (
@@ -361,21 +361,21 @@ export function VoiceSelector({ provider, selectedVoiceId, onVoiceChange }: Voic
                         onVoiceChange(voice.id);
                         setIsOpen(false);
                       }}
-                      className={`w-full px-4 py-3 text-left hover:bg-white/5 transition-colors border-b border-white/5 last:border-b-0 ${
+                      className={`w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-white/5 transition-colors border-b border-gray-100 dark:border-white/5 last:border-b-0 ${
                         voice.id === selectedVoiceId ? 'bg-purple-500/10' : ''
                       }`}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
-                          <p className="text-white font-medium truncate">{voice.name}</p>
+                          <p className="text-gray-900 dark:text-white font-medium truncate">{voice.name}</p>
                           {voice.description && (
-                            <p className="text-xs text-white/50 mt-0.5 line-clamp-2">
+                            <p className="text-xs text-gray-400 dark:text-white/50 mt-0.5 line-clamp-2">
                               {voice.description}
                             </p>
                           )}
                           <div className="flex items-center gap-2 mt-1">
                             {voice.language && (
-                              <span className="text-xs text-white/40 px-2 py-0.5 bg-white/5 rounded">
+                              <span className="text-xs text-gray-400 dark:text-white/40 px-2 py-0.5 bg-gray-100 dark:bg-white/5 rounded">
                                 {voice.language}
                               </span>
                             )}
@@ -401,8 +401,8 @@ export function VoiceSelector({ provider, selectedVoiceId, onVoiceChange }: Voic
       )}
 
       {selectedVoice && (
-        <div className="text-xs text-white/40">
-          Voice ID: <code className="text-white/60">{selectedVoice.id}</code>
+        <div className="text-xs text-gray-400 dark:text-white/40">
+          Voice ID: <code className="text-gray-500 dark:text-white/60">{selectedVoice.id}</code>
         </div>
       )}
     </div>

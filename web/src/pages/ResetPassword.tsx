@@ -89,10 +89,10 @@ export function ResetPassword() {
   // Loading state while checking session
   if (isValidSession === null) {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+      <div className="min-h-screen bg-white dark:bg-[#0a0a0f] flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="w-10 h-10 border-3 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
-          <p className="text-white/50 text-sm">Verifying reset link...</p>
+          <p className="text-gray-400 dark:text-white/50 text-sm">Verifying reset link...</p>
         </div>
       </div>
     );
@@ -101,18 +101,18 @@ export function ResetPassword() {
   // Invalid or expired link
   if (isValidSession === false) {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center p-6">
+      <div className="min-h-screen bg-white dark:bg-[#0a0a0f] flex items-center justify-center p-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="w-full max-w-md"
         >
-          <div className="bg-white/[0.02] border border-white/10 rounded-2xl p-8 text-center">
+          <div className="bg-gray-50 border border-gray-200 rounded-2xl p-8 text-center dark:bg-white/[0.02] dark:border-white/10">
             <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-6">
               <AlertCircle size={32} className="text-red-400" />
             </div>
-            <h1 className="text-2xl font-bold text-white mb-2">Invalid or Expired Link</h1>
-            <p className="text-white/50 mb-8">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Invalid or Expired Link</h1>
+            <p className="text-gray-500 dark:text-white/50 mb-8">
               This password reset link is invalid or has expired. Please request a new one.
             </p>
             <Link
@@ -129,14 +129,14 @@ export function ResetPassword() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] flex">
+    <div className="min-h-screen bg-white dark:bg-[#0a0a0f] flex">
       {/* Left Panel - Branding */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
         {/* Background gradients */}
         <div className="absolute inset-0">
           <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-600/30 rounded-full blur-[150px]" />
           <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-pink-500/20 rounded-full blur-[120px]" />
-          <div className="absolute inset-0 bg-[linear-gradient(rgba(168,85,247,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(168,85,247,0.03)_1px,transparent_1px)] bg-[size:32px_32px]" />
+          <div className="absolute inset-0 bg-[linear-gradient(rgba(168,85,247,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(168,85,247,0.06)_1px,transparent_1px)] dark:bg-[linear-gradient(rgba(168,85,247,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(168,85,247,0.03)_1px,transparent_1px)] bg-[size:32px_32px]" />
         </div>
 
         <div className="relative z-10 flex flex-col justify-center px-16">
@@ -145,16 +145,16 @@ export function ResetPassword() {
             <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/30">
               <Zap size={24} className="text-white" />
             </div>
-            <span className="text-2xl font-bold text-white">VocaCore AI</span>
+            <span className="text-2xl font-bold text-gray-900 dark:text-white">VocaCore AI</span>
           </Link>
 
-          <h1 className="text-4xl font-bold text-white mb-4">
+          <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
             Set your new<br />
             <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
               password
             </span>
           </h1>
-          <p className="text-white/50 text-lg mb-12 max-w-md">
+          <p className="text-gray-500 dark:text-white/50 text-lg mb-12 max-w-md">
             Choose a strong password to secure your account. You can use this to login alongside Google.
           </p>
 
@@ -165,7 +165,7 @@ export function ResetPassword() {
                 <div className="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center">
                   <Check size={14} className="text-purple-400" />
                 </div>
-                <span className="text-white/60">{feature}</span>
+                <span className="text-gray-600 dark:text-white/60">{feature}</span>
               </div>
             ))}
           </div>
@@ -184,18 +184,18 @@ export function ResetPassword() {
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
               <Zap size={20} className="text-white" />
             </div>
-            <span className="text-xl font-bold text-white">VocaCore AI</span>
+            <span className="text-xl font-bold text-gray-900 dark:text-white">VocaCore AI</span>
           </Link>
 
           {/* Card */}
-          <div className="bg-white/[0.02] border border-white/10 rounded-2xl p-8">
+          <div className="bg-gray-50 border border-gray-200 rounded-2xl p-8 dark:bg-white/[0.02] dark:border-white/10">
             {success ? (
               <>
                 <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-6">
                   <Check size={32} className="text-green-400" />
                 </div>
-                <h1 className="text-2xl font-bold text-white mb-2 text-center">Password Updated!</h1>
-                <p className="text-white/50 mb-6 text-center">
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2 text-center">Password Updated!</h1>
+                <p className="text-gray-500 dark:text-white/50 mb-6 text-center">
                   Your password has been set successfully. Redirecting to dashboard...
                 </p>
                 <div className="flex justify-center">
@@ -204,33 +204,33 @@ export function ResetPassword() {
               </>
             ) : (
               <>
-                <h1 className="text-2xl font-bold text-white mb-2">Set new password</h1>
-                <p className="text-white/50 mb-8">Enter your new password below</p>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Set new password</h1>
+                <p className="text-gray-500 dark:text-white/50 mb-8">Enter your new password below</p>
 
                 <form onSubmit={handleSubmit} className="space-y-5">
                   <div>
-                    <label className="block text-sm text-white/60 mb-2">New password</label>
+                    <label className="block text-sm text-gray-500 dark:text-white/60 mb-2">New password</label>
                     <div className="relative">
-                      <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
+                      <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-white/30" />
                       <input
                         type="password"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
+                        className="w-full pl-11 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/70 focus:ring-1 focus:ring-purple-500/20 transition-all dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 dark:focus:border-purple-500/50"
                         placeholder="Min. 6 characters"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-sm text-white/60 mb-2">Confirm password</label>
+                    <label className="block text-sm text-gray-500 dark:text-white/60 mb-2">Confirm password</label>
                     <div className="relative">
-                      <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
+                      <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-white/30" />
                       <input
                         type="password"
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
-                        className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
+                        className="w-full pl-11 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/70 focus:ring-1 focus:ring-purple-500/20 transition-all dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 dark:focus:border-purple-500/50"
                         placeholder="Re-enter password"
                       />
                     </div>
@@ -258,7 +258,7 @@ export function ResetPassword() {
                   </button>
                 </form>
 
-                <p className="text-center text-white/50 mt-6">
+                <p className="text-center text-gray-500 dark:text-white/50 mt-6">
                   Remember your password?{' '}
                   <Link to="/login" className="text-purple-400 hover:text-purple-300 transition-colors">
                     Sign in

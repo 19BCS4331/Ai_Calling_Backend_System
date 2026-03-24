@@ -69,8 +69,8 @@ export function Select({ value, onChange, options, placeholder = 'Select...', di
         type="button"
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
-        className={`w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-left focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all flex items-center justify-between ${
-          disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-white/[0.07]'
+        className={`w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 text-left focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all flex items-center justify-between dark:bg-white/5 dark:border-white/10 dark:text-white ${
+          disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100 dark:hover:bg-white/[0.07]'
         }`}
       >
         <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -83,7 +83,7 @@ export function Select({ value, onChange, options, placeholder = 'Select...', di
         </div>
         <ChevronDown
           size={16}
-          className={`flex-shrink-0 text-white/40 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          className={`flex-shrink-0 text-gray-400 dark:text-white/40 transition-transform ${isOpen ? 'rotate-180' : ''}`}
         />
       </button>
 
@@ -95,20 +95,20 @@ export function Select({ value, onChange, options, placeholder = 'Select...', di
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.15 }}
-            className="absolute z-50 w-full mt-2 bg-[#1a1a2e] border border-white/10 rounded-xl shadow-2xl overflow-hidden"
+            className="absolute z-50 w-full mt-2 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden dark:bg-[#1a1a2e] dark:border-white/10 dark:shadow-2xl"
           >
             {/* Search Input */}
             {searchable && options.length > 5 && (
-              <div className="p-2 border-b border-white/10">
+              <div className="p-2 border-b border-gray-200 dark:border-white/10">
                 <div className="relative">
-                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-white/40" />
                   <input
                     ref={searchInputRef}
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search..."
-                    className="w-full pl-9 pr-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-purple-500/50"
+                    className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-purple-500/50 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder:text-white/40"
                     onClick={(e) => e.stopPropagation()}
                   />
                 </div>
@@ -118,7 +118,7 @@ export function Select({ value, onChange, options, placeholder = 'Select...', di
             {/* Options List */}
             <div className="max-h-60 overflow-y-auto">
               {filteredOptions.length === 0 ? (
-                <div className="px-4 py-8 text-center text-white/40 text-sm">
+                <div className="px-4 py-8 text-center text-gray-400 dark:text-white/40 text-sm">
                   No results found
                 </div>
               ) : (
@@ -131,8 +131,8 @@ export function Select({ value, onChange, options, placeholder = 'Select...', di
                       onClick={() => handleSelect(option.value)}
                       className={`w-full px-4 py-3 text-left transition-colors flex items-center gap-3 ${
                         isSelected
-                          ? 'bg-purple-500/10 text-purple-400'
-                          : 'text-white hover:bg-white/5'
+                          ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
+                          : 'text-gray-800 hover:bg-gray-50 dark:text-white dark:hover:bg-white/5'
                       }`}
                     >
                       {option.icon && (
@@ -141,7 +141,7 @@ export function Select({ value, onChange, options, placeholder = 'Select...', di
                       <div className="flex-1 min-w-0">
                         <div className="font-medium truncate">{option.label}</div>
                         {option.description && (
-                          <div className="text-xs text-white/40 truncate mt-0.5">
+                          <div className="text-xs text-gray-400 dark:text-white/40 truncate mt-0.5">
                             {option.description}
                           </div>
                         )}

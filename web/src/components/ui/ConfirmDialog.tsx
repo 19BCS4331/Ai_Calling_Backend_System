@@ -88,7 +88,7 @@ export function ConfirmDialog({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
           transition={{ type: 'spring', duration: 0.3 }}
-          className="relative bg-[#0A0A0A] border border-white/10 rounded-xl shadow-2xl max-w-md w-full overflow-hidden"
+          className="relative bg-white dark:bg-[#0A0A0A] border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl max-w-md w-full overflow-hidden"
         >
           {/* Header */}
           <div className={`p-6 border-b ${colors.border} ${colors.bg}`}>
@@ -97,16 +97,16 @@ export function ConfirmDialog({
                 <AlertTriangle className={colors.icon} size={24} />
               </div>
               <div className="flex-1">
-                <h3 className="text-lg font-semibold text-white mb-1">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
                   {title}
                 </h3>
-                <p className="text-sm text-white/80 whitespace-pre-wrap">
+                <p className="text-sm text-gray-700 dark:text-white/80 whitespace-pre-wrap">
                   {message}
                 </p>
               </div>
               <button
                 onClick={onClose}
-                className="flex-shrink-0 text-white/40 hover:text-white/80 transition-colors"
+                className="flex-shrink-0 text-gray-400 dark:text-white/40 hover:text-gray-700 dark:hover:text-white/80 transition-colors"
               >
                 <X size={18} />
               </button>
@@ -114,10 +114,10 @@ export function ConfirmDialog({
           </div>
 
           {/* Footer */}
-          <div className="p-4 bg-white/[0.02] flex justify-end gap-3">
+          <div className="p-4 bg-gray-50 dark:bg-white/[0.02] border-t border-gray-100 dark:border-white/5 flex justify-end gap-3">
             <button
               onClick={onClose}
-              className="px-6 py-2 rounded-lg text-white/80 font-medium hover:bg-white/5 transition-all focus:outline-none focus:ring-2 focus:ring-white/20 focus:ring-offset-2 focus:ring-offset-gray-900"
+              className="px-6 py-2 rounded-lg text-gray-600 dark:text-white/80 font-medium hover:bg-gray-100 dark:hover:bg-white/5 transition-all focus:outline-none focus:ring-2 focus:ring-gray-300 dark:focus:ring-white/20 focus:ring-offset-2"
             >
               {cancelText}
             </button>

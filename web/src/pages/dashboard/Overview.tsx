@@ -225,8 +225,8 @@ export function Overview() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-1">Dashboard</h1>
-          <p className="text-white/50">Monitor your AI voice agent performance</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Dashboard</h1>
+          <p className="text-gray-500 dark:text-white/50">Monitor your AI voice agent performance</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 px-4 py-2 bg-green-500/10 border border-green-500/20 rounded-xl">
@@ -247,7 +247,7 @@ export function Overview() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.1 }}
-            className="relative overflow-hidden bg-white/[0.02] border border-white/5 rounded-2xl p-5 hover:bg-white/[0.04] transition-all duration-300"
+            className="relative overflow-hidden bg-white border border-gray-200 dark:bg-white/[0.02] dark:border-white/5 rounded-2xl p-5 hover:bg-gray-50 dark:hover:bg-white/[0.04] shadow-sm dark:shadow-none transition-all duration-300"
           >
             {/* Gradient accent */}
             <div className={`absolute top-0 right-0 w-24 h-24 bg-gradient-to-br ${stat.gradient} opacity-10 blur-2xl`} />
@@ -258,8 +258,8 @@ export function Overview() {
                   <stat.icon size={20} className="text-white" />
                 </div>
               </div>
-              <p className="text-2xl font-bold text-white mb-1">{stat.value}</p>
-              <p className="text-sm text-white/40">{stat.label}</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white mb-1">{stat.value}</p>
+              <p className="text-sm text-gray-400 dark:text-white/40">{stat.label}</p>
             </div>
           </motion.div>
         ))}
@@ -274,11 +274,11 @@ export function Overview() {
         >
           <div className="flex items-center gap-2 mb-4">
             <Activity size={20} className="text-purple-400" />
-            <h2 className="text-lg font-semibold text-white">Recent Calls</h2>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Recent Calls</h2>
           </div>
-          <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-4 space-y-3">
+          <div className="bg-white border border-gray-200 dark:bg-white/[0.02] dark:border-white/5 rounded-2xl p-4 shadow-sm dark:shadow-none space-y-3">
             {calls.length === 0 ? (
-              <div className="text-center py-8 text-white/40">
+              <div className="text-center py-8 text-gray-400 dark:text-white/40">
                 <Phone size={32} className="mx-auto mb-2 opacity-50" />
                 <p className="text-sm">No calls yet</p>
               </div>
@@ -289,7 +289,7 @@ export function Overview() {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.7 + i * 0.1 }}
-                className="flex items-center gap-3 p-3 bg-white/[0.02] border border-white/5 rounded-xl hover:bg-white/[0.04] transition-colors"
+                className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-100 dark:bg-white/[0.02] dark:border-white/5 rounded-xl hover:bg-gray-100 dark:hover:bg-white/[0.04] transition-colors"
               >
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
                   call.direction === 'inbound' 
@@ -308,12 +308,12 @@ export function Overview() {
                 </div>
                 <div className="flex-1 min-w-0">
                   {call.direction === 'web' && (
-                    <p className="text-xs text-white/40">Web Call</p>
+                    <p className="text-xs text-gray-400 dark:text-white/40">Web Call</p>
                   )}
-                  <p className="text-sm text-white truncate">
+                  <p className="text-sm text-gray-800 dark:text-white truncate">
                     {call.from_number || call.to_number}
                   </p>
-                  <p className="text-xs text-white/40">{formatDuration(call.duration_seconds || undefined)}</p>
+                  <p className="text-xs text-gray-400 dark:text-white/40">{formatDuration(call.duration_seconds || undefined)}</p>
                 </div>
                 <span className={`text-xs px-2 py-1 rounded-full ${
                   call.status === 'completed' 
@@ -336,12 +336,12 @@ export function Overview() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.8 }}
-        className="bg-white/[0.02] border border-white/5 rounded-2xl p-6"
+        className="bg-white border border-gray-200 dark:bg-white/[0.02] dark:border-white/5 rounded-2xl p-6 shadow-sm dark:shadow-none"
       >
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
             <BarChart3 size={20} className="text-purple-400" />
-            <h2 className="text-lg font-semibold text-white">Call Volume</h2>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Call Volume</h2>
           </div>
           <Select
             value={timeRange}
@@ -381,7 +381,7 @@ export function Overview() {
                 );
               })}
             </div>
-            <div className="flex justify-between mt-4 text-xs text-white/40">
+            <div className="flex justify-between mt-4 text-xs text-gray-400 dark:text-white/40">
               {callVolumeData.map((dataPoint) => {
                 const date = new Date(dataPoint.date);
                 const label = parseInt(timeRange) <= 7 
@@ -392,7 +392,7 @@ export function Overview() {
             </div>
           </>
         ) : (
-          <div className="h-48 flex items-center justify-center text-white/40">
+          <div className="h-48 flex items-center justify-center text-gray-400 dark:text-white/40">
             <div className="text-center">
               <BarChart3 size={32} className="mx-auto mb-2 opacity-50" />
               <p className="text-sm">No call data available</p>

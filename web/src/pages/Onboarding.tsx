@@ -130,7 +130,7 @@ export function Onboarding() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center p-6">
+    <div className="min-h-screen bg-white dark:bg-[#0a0a0f] flex items-center justify-center p-6">
       <div className="w-full max-w-4xl">
         {/* Progress indicator */}
         <div className="flex items-center justify-center mb-12">
@@ -141,7 +141,7 @@ export function Onboarding() {
                   className={`w-10 h-10 rounded-full flex items-center justify-center font-medium transition-all ${
                     step >= s
                       ? 'bg-gradient-to-r from-purple-600 to-purple-500 text-white'
-                      : 'bg-white/5 text-white/30'
+                      : 'bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-200'
                   }`}
                 >
                   {step > s ? <Check size={20} /> : s}
@@ -149,7 +149,7 @@ export function Onboarding() {
                 {s < 2 && (
                   <div
                     className={`w-16 h-0.5 transition-all ${
-                      step > s ? 'bg-purple-500' : 'bg-white/10'
+                      step > s ? 'bg-purple-500' : 'bg-gray-200 dark:bg-white/10'
                     }`}
                   />
                 )}
@@ -165,27 +165,27 @@ export function Onboarding() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
-              className="bg-white/[0.02] border border-white/10 rounded-2xl p-8"
+              className="bg-gray-50 border border-gray-200 rounded-2xl p-8 dark:bg-white/[0.02] dark:border-white/10"
             >
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
                   <Building2 size={24} className="text-white" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-white">Create your organization</h1>
-                  <p className="text-white/50">Let's get you set up with VocaCore AI</p>
+                  <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Create your organization</h1>
+                  <p className="text-gray-500 dark:text-white/50">Let's get you set up with VocaCore AI</p>
                 </div>
               </div>
 
               <div className="space-y-6">
                 <div>
-                  <label className="block text-sm text-white/60 mb-2">Organization name</label>
+                  <label className="block text-sm text-gray-500 dark:text-white/60 mb-2">Organization name</label>
                   <input
                     type="text"
                     value={orgName}
                     onChange={(e) => setOrgName(e.target.value)}
                     placeholder="e.g., Acme Inc"
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
+                    className="w-full px-4 py-3 bg-white border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/70 focus:ring-1 focus:ring-purple-500/20 transition-all dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 dark:focus:border-purple-500/50"
                   />
                 </div>
 
@@ -219,15 +219,15 @@ export function Onboarding() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
-              className="bg-white/[0.02] border border-white/10 rounded-2xl p-8"
+              className="bg-gray-50 border border-gray-200 rounded-2xl p-8 dark:bg-white/[0.02] dark:border-white/10"
             >
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
                   <Zap size={24} className="text-white" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-white">Choose your plan</h1>
-                  <p className="text-white/50">Select the plan that fits your needs</p>
+                  <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Choose your plan</h1>
+                  <p className="text-gray-500 dark:text-white/50">Select the plan that fits your needs</p>
                 </div>
               </div>
 
@@ -241,13 +241,13 @@ export function Onboarding() {
                     className={`p-6 rounded-xl border-2 transition-all text-left ${
                       selectedPlan === plan.id
                         ? 'border-purple-500 bg-purple-500/10'
-                        : 'border-white/10 bg-white/[0.02] hover:border-white/20'
+                        : 'border-gray-200 bg-white hover:border-gray-300 dark:border-white/10 dark:bg-white/[0.02] dark:hover:border-white/20'
                     }`}
                   >
                     <div className="flex items-start justify-between mb-4">
                       <div>
-                        <h3 className="text-lg font-bold text-white">{plan.name}</h3>
-                        <p className="text-sm text-white/50">{plan.description}</p>
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">{plan.name}</h3>
+                        <p className="text-sm text-gray-500 dark:text-white/50">{plan.description}</p>
                       </div>
                       {selectedPlan === plan.id && (
                         <div className="w-6 h-6 rounded-full bg-purple-500 flex items-center justify-center">
@@ -257,15 +257,15 @@ export function Onboarding() {
                     </div>
 
                     <div className="mb-4">
-                      <span className="text-3xl font-bold text-white">
+                      <span className="text-3xl font-bold text-gray-900 dark:text-white">
                         ${plan.price}
                       </span>
-                      <span className="text-white/50 text-sm">/month</span>
+                      <span className="text-gray-500 dark:text-white/50 text-sm">/month</span>
                     </div>
 
                     <ul className="space-y-2">
                       {plan.features.map((feature) => (
-                        <li key={feature} className="flex items-center gap-2 text-sm text-white/60">
+                        <li key={feature} className="flex items-center gap-2 text-sm text-gray-600 dark:text-white/60">
                           <Check size={14} className="text-purple-400" />
                           {feature}
                         </li>
@@ -285,7 +285,7 @@ export function Onboarding() {
                 <button
                   onClick={() => setStep(1)}
                   disabled={isLoading}
-                  className="px-6 py-3 bg-white/5 border border-white/10 rounded-xl font-medium text-white hover:bg-white/10 transition-all flex items-center gap-2"
+                  className="px-6 py-3 bg-gray-100 border border-gray-200 rounded-xl font-medium text-gray-700 hover:bg-gray-200 dark:bg-white/5 dark:border-white/10 dark:text-white dark:hover:bg-white/10 transition-all flex items-center gap-2"
                 >
                   <ArrowLeft size={18} />
                   Back

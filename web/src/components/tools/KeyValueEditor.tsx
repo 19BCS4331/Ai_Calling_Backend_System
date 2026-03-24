@@ -40,7 +40,7 @@ export function KeyValueEditor({
     <div className="space-y-3">
       {label && (
         <div className="flex items-center justify-between">
-          <label className="block text-sm font-medium text-white/70">{label}</label>
+          <label className="block text-sm font-medium text-gray-600 dark:text-white/70">{label}</label>
           <button
             type="button"
             onClick={addItem}
@@ -54,16 +54,16 @@ export function KeyValueEditor({
       )}
       
       {description && (
-        <p className="text-xs text-white/40">{description}</p>
+        <p className="text-xs text-gray-400 dark:text-white/40">{description}</p>
       )}
 
       {items.length === 0 ? (
-        <div className="flex items-center justify-center py-6 border border-dashed border-white/10 rounded-xl">
+        <div className="flex items-center justify-center py-6 border border-dashed border-gray-200 dark:border-white/10 rounded-xl">
           <button
             type="button"
             onClick={addItem}
             disabled={disabled}
-            className="flex items-center gap-2 text-sm text-white/40 hover:text-white/60 transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 text-sm text-gray-400 dark:text-white/40 hover:text-gray-600 dark:hover:text-white/60 transition-colors disabled:opacity-50"
           >
             <Plus size={16} />
             Add your first item
@@ -79,7 +79,7 @@ export function KeyValueEditor({
                 onChange={(e) => updateItem(item.id, 'key', e.target.value)}
                 placeholder={keyPlaceholder}
                 disabled={disabled}
-                className="flex-1 px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm placeholder-white/30 focus:outline-none focus:border-purple-500/50 disabled:opacity-50"
+                className="flex-1 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:border-purple-500/50 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 disabled:opacity-50"
               />
               <input
                 type="text"
@@ -87,13 +87,13 @@ export function KeyValueEditor({
                 onChange={(e) => updateItem(item.id, 'value', e.target.value)}
                 placeholder={valuePlaceholder}
                 disabled={disabled}
-                className="flex-1 px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm placeholder-white/30 focus:outline-none focus:border-purple-500/50 disabled:opacity-50"
+                className="flex-1 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:border-purple-500/50 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 disabled:opacity-50"
               />
               <button
                 type="button"
                 onClick={() => removeItem(item.id)}
                 disabled={disabled}
-                className="p-2.5 text-white/40 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-50"
+                className="p-2.5 text-gray-300 dark:text-white/40 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-50"
               >
                 <Trash2 size={16} />
               </button>

@@ -125,7 +125,7 @@ export function AuthConfigEditor({
     required?: boolean
   ) => (
     <div>
-      <label className="block text-sm font-medium text-white/70 mb-2">
+      <label className="block text-sm font-medium text-gray-600 dark:text-white/70 mb-2">
         {label} {required && <span className="text-red-400">*</span>}
       </label>
       <div className="relative">
@@ -135,12 +135,12 @@ export function AuthConfigEditor({
           onChange={(e) => updateConfig(field, e.target.value)}
           placeholder={placeholder}
           disabled={disabled}
-          className="w-full px-4 py-3 pr-12 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 disabled:opacity-50"
+          className="w-full px-4 py-3 pr-12 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 disabled:opacity-50"
         />
         <button
           type="button"
           onClick={() => toggleSecret(field)}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/60 transition-colors"
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-white/40 hover:text-gray-600 dark:hover:text-white/60 transition-colors"
         >
           {showSecrets[field] ? <EyeOff size={18} /> : <Eye size={18} />}
         </button>
@@ -156,7 +156,7 @@ export function AuthConfigEditor({
     description?: string
   ) => (
     <div>
-      <label className="block text-sm font-medium text-white/70 mb-2">
+      <label className="block text-sm font-medium text-gray-600 dark:text-white/70 mb-2">
         {label} {required && <span className="text-red-400">*</span>}
       </label>
       <input
@@ -165,10 +165,10 @@ export function AuthConfigEditor({
         onChange={(e) => updateConfig(field, e.target.value)}
         placeholder={placeholder}
         disabled={disabled}
-        className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 disabled:opacity-50"
+        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 disabled:opacity-50"
       />
       {description && (
-        <p className="text-xs text-white/40 mt-1">{description}</p>
+        <p className="text-xs text-gray-400 dark:text-white/40 mt-1">{description}</p>
       )}
     </div>
   );
@@ -197,7 +197,7 @@ export function AuthConfigEditor({
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="space-y-4 p-4 bg-white/5 rounded-xl border border-white/10"
+                className="space-y-4 p-4 bg-gray-50 border border-gray-200 dark:bg-white/5 dark:border-white/10 rounded-xl"
               >
                 {renderSecretInput('Bearer Token', 'token', 'Enter your bearer token', true)}
               </motion.div>
@@ -207,7 +207,7 @@ export function AuthConfigEditor({
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="space-y-4 p-4 bg-white/5 rounded-xl border border-white/10"
+                className="space-y-4 p-4 bg-gray-50 border border-gray-200 dark:bg-white/5 dark:border-white/10 rounded-xl"
               >
                 {renderSecretInput('API Key', 'key', 'Enter your API key', true)}
                 {renderTextInput('Header/Parameter Name', 'header_name', 'X-API-Key', true)}
@@ -225,7 +225,7 @@ export function AuthConfigEditor({
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="space-y-4 p-4 bg-white/5 rounded-xl border border-white/10"
+                className="space-y-4 p-4 bg-gray-50 border border-gray-200 dark:bg-white/5 dark:border-white/10 rounded-xl"
               >
                 {renderTextInput('Username', 'username', 'Enter username', true)}
                 {renderSecretInput('Password', 'password', 'Enter password', true)}
@@ -236,9 +236,9 @@ export function AuthConfigEditor({
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="space-y-4 p-4 bg-white/5 rounded-xl border border-white/10"
+                className="space-y-4 p-4 bg-gray-50 border border-gray-200 dark:bg-white/5 dark:border-white/10 rounded-xl"
               >
-                <p className="text-xs text-white/50 mb-2">
+                <p className="text-xs text-gray-400 dark:text-white/50 mb-2">
                   Using Client Credentials flow for server-to-server authentication
                 </p>
                 {renderTextInput('Client ID', 'client_id', 'Enter client ID', true)}
@@ -252,7 +252,7 @@ export function AuthConfigEditor({
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="space-y-4 p-4 bg-white/5 rounded-xl border border-white/10"
+                className="space-y-4 p-4 bg-gray-50 border border-gray-200 dark:bg-white/5 dark:border-white/10 rounded-xl"
               >
                 {renderSecretInput('Secret Key', 'secret_key', 'Enter HMAC secret key', true)}
                 <CustomDropdown

@@ -294,12 +294,15 @@ export class VoicePipeline extends EventEmitter {
 
 
 
-    // Map interruption sensitivity (0-1) to audio level threshold
-    // 0 = less sensitive (high threshold, harder to interrupt)
-    // 1 = more sensitive (low threshold, easy to interrupt)
+    // Map interruption sensitivity (0-1) to VAD aggressiveness
+    // 0 = less sensitive (requires more speech frames, stricter thresholds)
+    // 1 = more sensitive (fewer frames required, looser thresholds)
     const sensitivity = config?.interruptionSensitivity ?? 0.5;
-    this.bargeInThreshold = Math.round(1200 - (sensitivity * 1000)); // Range: 200-1200
-    this.bargeInChunksRequired = sensitivity >= 0.7 ? 1 : sensitivity >= 0.4 ? 2 : 3;
+    this.bargeInSensitivity = sensitivity;
+    // Require 4 frames at low sensitivity, 2 at high — prevents AC/noise false triggers
+    this.bargeInFramesRequired = sensitivity >= 0.7 ? 2 : sensitivity >= 0.4 ? 3 : 4;
+    // More silence frames required to reset at low sensitivity (sticky barge-in)
+    this.bargeInCooldownFrames = sensitivity >= 0.7 ? 5 : 8;
 
     this.config = {
 
@@ -491,11 +494,16 @@ export class VoicePipeline extends EventEmitter {
 
 
 
-  private bargeInThreshold: number = 600;  // Audio level threshold for barge-in (set by interruptionSensitivity)
-
-  private consecutiveLoudChunks: number = 0;
-
-  private bargeInChunksRequired: number = 2;  // Consecutive loud chunks needed (set by interruptionSensitivity)
+  // ── Smart VAD state ──────────────────────────────────────────────────────
+  // Replaces the old single RMS threshold with a multi-feature speech detector.
+  // Features: RMS energy gate → high-band energy ratio → ZCR speech range.
+  // Requires `bargeInFramesRequired` consecutive speech-like frames before
+  // triggering, and a `bargeInCooldownFrames` silence hangover to reset.
+  private bargeInSensitivity: number = 0.5;   // 0-1 from interruptionSensitivity
+  private vadSpeechFrames: number = 0;        // Consecutive frames classified as speech
+  private vadSilenceFrames: number = 0;       // Consecutive frames classified as non-speech
+  private bargeInFramesRequired: number = 3;  // Speech frames needed before triggering
+  private bargeInCooldownFrames: number = 8;  // Silence frames needed to reset speech counter
 
   private maxCallDurationTimer: NodeJS.Timeout | null = null;  // Auto-end call after max duration
 
@@ -525,67 +533,51 @@ export class VoicePipeline extends EventEmitter {
 
     if (this.config.enableBargeIn && this.isTTSPlaying) {
 
-      const audioLevel = this.calculateAudioLevel(audioChunk);
+      const vadResult = this.classifySpeechFrame(audioChunk);
 
-      
+      if (vadResult.isSpeech) {
 
-      // Use lower threshold for more sensitive barge-in detection
+        this.vadSpeechFrames++;
 
-      const threshold = this.bargeInThreshold;
+        this.vadSilenceFrames = 0;
 
-      
+        if (this.vadSpeechFrames >= this.bargeInFramesRequired) {
 
-      // Debug: Log audio levels periodically during TTS
+          this.logger.info('Barge-in triggered by smart VAD', {
 
-      if (Math.random() < 0.1) {
+            speechFrames: this.vadSpeechFrames,
 
-        this.logger.debug('Barge-in check', { 
+            rms: vadResult.rms.toFixed(1),
 
-          audioLevel, 
+            zcr: vadResult.zcr.toFixed(1),
 
-          threshold,
+            bandRatio: vadResult.bandRatio.toFixed(3),
 
-          consecutiveLoud: this.consecutiveLoudChunks,
-
-          isTTSPlaying: this.isTTSPlaying
-
-        });
-
-      }
-
-      
-
-      if (audioLevel > threshold) {
-
-        this.consecutiveLoudChunks++;
-
-        
-
-        // Trigger barge-in after 2 consecutive loud chunks (reduced from 3)
-
-        if (this.consecutiveLoudChunks >= 2) {
-
-          this.logger.info('Barge-in triggered', { 
-
-            audioLevel, 
-
-            chunks: this.consecutiveLoudChunks,
-
-            threshold
+            required: this.bargeInFramesRequired
 
           });
 
           this.handleBargeIn();
 
-          this.consecutiveLoudChunks = 0;
+          this.vadSpeechFrames = 0;
 
-          // Don't return - let the audio go to STT for the new turn
+          this.vadSilenceFrames = 0;
+
+          // Don't return — let audio go to STT for the new turn
 
         }
 
       } else {
 
-        this.consecutiveLoudChunks = 0;
+        this.vadSilenceFrames++;
+
+        // Reset speech counter only after sustained silence (hangover)
+
+        if (this.vadSilenceFrames >= this.bargeInCooldownFrames) {
+
+          this.vadSpeechFrames = 0;
+
+        }
 
       }
 
@@ -729,27 +721,74 @@ export class VoicePipeline extends EventEmitter {
     return 24000; // Conservative default
   }
 
-  private calculateAudioLevel(buffer: Buffer): number {
+  /**
+   * Multi-feature speech frame classifier.
+   *
+   * Layer 1 — RMS energy gate: reject frames that are true silence.
+   * Layer 2 — High-band energy ratio: speech energy sits in 300-3400 Hz.
+   *   AC hum / fan noise concentrates energy in <120 Hz fundamentals.
+   *   We compute the ratio of "speech-band" samples (high-pass proxy via
+   *   first-difference) vs total energy. Speech ratio > 0.25 required.
+   * Layer 3 — Zero Crossing Rate: human speech crosses zero 50-250 times
+   *   per 10ms frame at 16kHz. Pure tones (AC hum) have very low ZCR.
+   *   Broadband impulse noise (coughs) has very high ZCR but fails
+   *   the energy gate or band-ratio check.
+   *
+   * Sensitivity mapping:
+   *   high (0.7-1.0) → RMS > 180,  bandRatio > 0.20, ZCR 20-300
+   *   mid  (0.4-0.7) → RMS > 280,  bandRatio > 0.28, ZCR 30-280
+   *   low  (0.0-0.4) → RMS > 420,  bandRatio > 0.35, ZCR 40-260
+   */
+  private classifySpeechFrame(buffer: Buffer): { isSpeech: boolean; rms: number; zcr: number; bandRatio: number } {
 
-    // Assume 16-bit PCM audio
+    const sampleCount = buffer.length >> 1;  // 16-bit samples
+    if (sampleCount < 2) return { isSpeech: false, rms: 0, zcr: 0, bandRatio: 0 };
 
-    let sum = 0;
+    const s = this.bargeInSensitivity;
+    const rmsThreshold  = s >= 0.7 ? 180  : s >= 0.4 ? 280  : 420;
+    const bandThreshold = s >= 0.7 ? 0.20 : s >= 0.4 ? 0.28 : 0.35;
+    const zcrMin        = s >= 0.7 ? 20   : s >= 0.4 ? 30   : 40;
+    const zcrMax        = s >= 0.7 ? 300  : s >= 0.4 ? 280  : 260;
 
-    const samples = buffer.length / 2;
+    let sumSq = 0;
+    let zeroCrossings = 0;
+    let highBandSumSq = 0;
 
-    
+    let prevSample = buffer.readInt16LE(0);
 
-    for (let i = 0; i < buffer.length; i += 2) {
-
+    for (let i = 2; i < buffer.length - 1; i += 2) {
       const sample = buffer.readInt16LE(i);
+      sumSq += sample * sample;
 
-      sum += sample * sample;
+      // Zero crossing
+      if ((prevSample >= 0) !== (sample >= 0)) zeroCrossings++;
 
+      // High-band energy proxy: first-difference approximates a high-pass filter.
+      // diff[i] = sample[i] - sample[i-1] correlates with high-frequency content.
+      const diff = sample - prevSample;
+      highBandSumSq += diff * diff;
+
+      prevSample = sample;
     }
 
-    
+    const rms = Math.sqrt(sumSq / sampleCount);
 
-    return Math.sqrt(sum / samples);
+    // ZCR normalized to crossings-per-10ms at 16kHz
+    // sampleCount samples = (sampleCount/16000)*1000 ms
+    const durationMs = (sampleCount / 16000) * 1000;
+    const zcrNorm = (zeroCrossings / durationMs) * 10;
+
+    // Band ratio: high-band energy relative to total energy
+    // Avoid division by zero
+    const bandRatio = sumSq > 0 ? Math.sqrt(highBandSumSq / sumSq) : 0;
+
+    // All three layers must pass
+    const isSpeech =
+      rms > rmsThreshold &&
+      bandRatio > bandThreshold &&
+      zcrNorm >= zcrMin && zcrNorm <= zcrMax;
+
+    return { isSpeech, rms, zcr: zcrNorm, bandRatio };
 
   }
 
@@ -903,16 +942,34 @@ export class VoicePipeline extends EventEmitter {
 
           this.lastSTTConfidence = result.confidence;
 
-          // STT-based barge-in: if user speaks while TTS is playing, trigger barge-in
-          // This is more reliable than audio-level detection on web UI where browser
-          // echoCancellation suppresses audio levels but STT can still detect speech
+          // STT-based barge-in: if user speaks while TTS is playing, trigger barge-in.
+          // Echo guard: first verify the transcript is NOT the AI's own voice leaking
+          // back through the speakers (common on web without hardware AEC).
+          // Check against both currentAssistantMessage (being generated now) and
+          // playedAudioText (recently spoken), since echoes can arrive with slight delay.
           if (this.isTTSPlaying && result.text.trim().length > 0) {
-            this.logger.info('STT-based barge-in triggered', {
-              transcript: result.text,
-              confidence: result.confidence
-            });
-            this.handleBargeIn();
-            // Continue processing - the transcript is the user's new input
+            const rawTranscript = result.text.trim();
+            const normT = rawTranscript.toLowerCase().replace(/[\p{P}\p{S}]/gu, '').replace(/\s+/g, ' ').trim();
+            const normAI = (this.currentAssistantMessage + ' ' + this.playedAudioText)
+              .toLowerCase().replace(/[\p{P}\p{S}]/gu, '').replace(/\s+/g, ' ').trim();
+
+            // Treat as echo if the transcript (≥4 chars) is contained in what the AI said.
+            // 4-char minimum avoids false suppression of very short genuine replies like "yes".
+            const isEcho = normT.length >= 4 && normAI.length > 0 && normAI.includes(normT);
+
+            if (isEcho) {
+              this.logger.warn('STT barge-in suppressed: transcript is AI echo', {
+                transcript: rawTranscript,
+                matchedIn: normAI.substring(0, 80)
+              });
+            } else {
+              this.logger.info('STT-based barge-in triggered', {
+                transcript: rawTranscript,
+                confidence: result.confidence
+              });
+              this.handleBargeIn();
+              // Continue processing - the transcript is the user's new input
+            }
           }
 
           // Phase 3: If tool is executing, queue the input instead of processing

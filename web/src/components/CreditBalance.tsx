@@ -72,10 +72,10 @@ export function CreditBalance() {
       >
         <div className="flex items-center gap-2 mb-2">
           <Wallet size={16} className="text-purple-400" />
-          <span className="text-sm font-medium text-white/70">Credit Balance</span>
+          <span className="text-sm font-medium text-gray-600 dark:text-white/70">Credit Balance</span>
         </div>
-        <div className="text-2xl font-bold text-white mb-1">Loading...</div>
-        <div className="text-sm text-white/40">Checking your balance</div>
+        <div className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Loading...</div>
+        <div className="text-sm text-gray-400 dark:text-white/40">Checking your balance</div>
       </motion.div>
     );
   }
@@ -108,10 +108,10 @@ export function CreditBalance() {
             )}
           </div>
           <div>
-            <p className="text-sm text-white/60 mb-1">Trial Credit Balance</p>
-            <p className="text-2xl font-bold text-white">
+            <p className="text-sm text-gray-500 dark:text-white/60 mb-1">Trial Credit Balance</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">
               ${balance.toFixed(2)}
-              <span className="text-sm text-white/40 font-normal ml-2">
+              <span className="text-sm text-gray-400 dark:text-white/40 font-normal ml-2">
                 of ${total.toFixed(2)}
               </span>
             </p>
@@ -127,14 +127,14 @@ export function CreditBalance() {
 
       {/* Progress Bar */}
       <div className="mt-4">
-        <div className="flex items-center justify-between text-xs text-white/40 mb-2">
+        <div className="flex items-center justify-between text-xs text-gray-400 dark:text-white/40 mb-2">
           <span className="flex items-center gap-1">
             <TrendingDown size={12} />
             ${used.toFixed(2)} used
           </span>
           <span>{percentUsed.toFixed(0)}% consumed</span>
         </div>
-        <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+        <div className="h-2 bg-gray-200 dark:bg-white/5 rounded-full overflow-hidden">
           <motion.div
             initial={{ width: 0 }}
             animate={{ width: `${percentUsed}%` }}

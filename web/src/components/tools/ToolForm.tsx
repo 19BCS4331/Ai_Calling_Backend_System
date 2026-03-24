@@ -177,7 +177,7 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Tabs */}
-      <div className="flex gap-2 p-1 bg-white/5 rounded-xl">
+      <div className="flex gap-2 p-1 bg-gray-100 dark:bg-white/5 rounded-xl">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           return (
@@ -188,7 +188,7 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
               className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all ${
                 activeTab === tab.id
                   ? 'bg-purple-600 text-white'
-                  : 'text-white/60 hover:text-white hover:bg-white/5'
+                  : 'text-gray-500 dark:text-white/60 hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-white/5'
               }`}
             >
               <Icon size={16} />
@@ -203,14 +203,14 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
         key={activeTab}
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white/5 border border-white/10 rounded-2xl p-6"
+        className="bg-white border border-gray-200 dark:bg-white/5 dark:border-white/10 rounded-2xl p-6 shadow-sm dark:shadow-none"
       >
         {activeTab === 'basic' && (
           <div className="space-y-6">
             {/* Tool Type Selection */}
             {!tool && (
               <div>
-                <label className="block text-sm font-medium text-white/70 mb-3">Tool Type</label>
+                <label className="block text-sm font-medium text-gray-600 dark:text-white/70 mb-3">Tool Type</label>
                 <div className="grid gap-3 sm:grid-cols-3">
                   {toolTypeOptions.map((type) => (
                     <button
@@ -220,14 +220,14 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
                       className={`p-4 rounded-xl border text-left transition-all ${
                         formData.type === type.value || (formData.type === 'function' && type.value === 'api_request')
                           ? 'border-purple-500 bg-purple-500/10'
-                          : 'border-white/10 bg-white/5 hover:border-white/20'
+                          : 'border-gray-200 bg-gray-50 hover:border-gray-300 dark:border-white/10 dark:bg-white/5 dark:hover:border-white/20'
                       }`}
                     >
                       <div className="flex items-center gap-3 mb-2">
                         {type.icon}
-                        <span className="font-medium text-white">{type.label}</span>
+                        <span className="font-medium text-gray-900 dark:text-white">{type.label}</span>
                       </div>
-                      <p className="text-xs text-white/50">{type.description}</p>
+                      <p className="text-xs text-gray-500 dark:text-white/50">{type.description}</p>
                     </button>
                   ))}
                 </div>
@@ -237,7 +237,7 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
             {/* Name - only for non-builtin */}
             {formData.type !== 'builtin' && (
               <div>
-                <label className="block text-sm font-medium text-white/70 mb-2">
+                <label className="block text-sm font-medium text-gray-600 dark:text-white/70 mb-2">
                   Tool Name <span className="text-red-400">*</span>
                 </label>
                 <input
@@ -246,7 +246,7 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
                   onChange={(e) => updateField('name', e.target.value)}
                   placeholder="e.g., Weather Lookup, Book Appointment"
                   required
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50"
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30"
                 />
               </div>
             )}
@@ -254,15 +254,15 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
             {/* Description - only for non-builtin */}
             {formData.type !== 'builtin' && (
               <div>
-                <label className="block text-sm font-medium text-white/70 mb-2">Description</label>
+                <label className="block text-sm font-medium text-gray-600 dark:text-white/70 mb-2">Description</label>
                 <textarea
                   value={formData.description || ''}
                   onChange={(e) => updateField('description', e.target.value)}
                   placeholder="Describe what this tool does..."
                   rows={3}
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 resize-none"
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 resize-none dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30"
                 />
-                <p className="text-xs text-white/40 mt-1">
+                <p className="text-xs text-gray-400 dark:text-white/40 mt-1">
                   This description helps the AI understand when to use this tool
                 </p>
               </div>
@@ -294,7 +294,7 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
               <>
                 {/* Endpoint URL */}
                 <div>
-                  <label className="block text-sm font-medium text-white/70 mb-2">
+                  <label className="block text-sm font-medium text-gray-600 dark:text-white/70 mb-2">
                     Endpoint URL <span className="text-red-400">*</span>
                   </label>
                   <input
@@ -303,7 +303,7 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
                     onChange={(e) => updateField('function_server_url', e.target.value)}
                     placeholder="https://api.example.com/endpoint"
                     required
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30"
                   />
                 </div>
 
@@ -316,7 +316,7 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
                     label="HTTP Method"
                   />
                   <div>
-                    <label className="block text-sm font-medium text-white/70 mb-2">
+                    <label className="block text-sm font-medium text-gray-600 dark:text-white/70 mb-2">
                       Timeout (ms)
                     </label>
                     <input
@@ -325,13 +325,13 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
                       onChange={(e) => updateField('function_timeout_ms', parseInt(e.target.value))}
                       min={1000}
                       max={120000}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-purple-500/50 dark:bg-white/5 dark:border-white/10 dark:text-white"
                     />
                   </div>
                 </div>
 
                 {/* Authentication */}
-                <div className="border-t border-white/10 pt-6">
+                <div className="border-t border-gray-200 dark:border-white/10 pt-6">
                   <AuthConfigEditor
                     authType={formData.function_auth_type || 'none'}
                     authConfig={formData.function_auth_config || {}}
@@ -341,7 +341,7 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
                 </div>
 
                 {/* Headers */}
-                <div className="border-t border-white/10 pt-6">
+                <div className="border-t border-gray-200 dark:border-white/10 pt-6">
                   <KeyValueEditor
                     items={headers}
                     onChange={setHeaders}
@@ -353,7 +353,7 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
                 </div>
 
                 {/* Body Parameters */}
-                <div className="border-t border-white/10 pt-6">
+                <div className="border-t border-gray-200 dark:border-white/10 pt-6">
                   <BodyParameterBuilder
                     parameters={bodyParameters}
                     onChange={setBodyParameters}
@@ -371,7 +371,7 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
               <>
                 {/* MCP Server URL */}
                 <div>
-                  <label className="block text-sm font-medium text-white/70 mb-2">
+                  <label className="block text-sm font-medium text-gray-600 dark:text-white/70 mb-2">
                     MCP Server URL <span className="text-red-400">*</span>
                   </label>
                   <input
@@ -380,7 +380,7 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
                     onChange={(e) => updateField('mcp_server_url', e.target.value)}
                     placeholder="https://your-mcp-server.com/sse"
                     required
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30"
                   />
                 </div>
 
@@ -393,7 +393,7 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
                     label="Transport"
                   />
                   <div>
-                    <label className="block text-sm font-medium text-white/70 mb-2">
+                    <label className="block text-sm font-medium text-gray-600 dark:text-white/70 mb-2">
                       Timeout (ms)
                     </label>
                     <input
@@ -402,13 +402,13 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
                       onChange={(e) => updateField('mcp_timeout_ms', parseInt(e.target.value))}
                       min={1000}
                       max={120000}
-                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-purple-500/50 dark:bg-white/5 dark:border-white/10 dark:text-white"
                     />
                   </div>
                 </div>
 
                 {/* MCP Authentication */}
-                <div className="border-t border-white/10 pt-6">
+                <div className="border-t border-gray-200 dark:border-white/10 pt-6">
                   <AuthConfigEditor
                     authType={formData.mcp_auth_type || 'none'}
                     authConfig={formData.mcp_auth_config || {}}
@@ -438,7 +438,7 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
             {formData.type === 'builtin' && !formData.builtin_type && (
               <div className="text-center py-8">
                 <Zap size={48} className="text-yellow-400 mx-auto mb-4 opacity-50" />
-                <p className="text-white/50">
+                <p className="text-gray-500 dark:text-white/50">
                   Please select a built-in tool from the Basic Info tab first
                 </p>
               </div>
@@ -448,12 +448,12 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
 
         {activeTab === 'messages' && (
           <div className="space-y-6">
-            <p className="text-sm text-white/50 mb-4">
+            <p className="text-sm text-gray-500 dark:text-white/50 mb-4">
               Configure messages the assistant will speak during tool execution
             </p>
 
             <div>
-              <label className="block text-sm font-medium text-white/70 mb-2">
+              <label className="block text-sm font-medium text-gray-600 dark:text-white/70 mb-2">
                 Request Start Message
               </label>
               <input
@@ -461,15 +461,15 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
                 value={formData.messages?.request_start || ''}
                 onChange={(e) => updateMessages('request_start', e.target.value)}
                 placeholder="e.g., Let me check that for you..."
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50"
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30"
               />
-              <p className="text-xs text-white/40 mt-1">
+              <p className="text-xs text-gray-400 dark:text-white/40 mt-1">
                 Spoken when the tool starts executing
               </p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-white/70 mb-2">
+              <label className="block text-sm font-medium text-gray-600 dark:text-white/70 mb-2">
                 Request Complete Message
               </label>
               <input
@@ -477,15 +477,15 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
                 value={formData.messages?.request_complete || ''}
                 onChange={(e) => updateMessages('request_complete', e.target.value)}
                 placeholder="e.g., I've got the information..."
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50"
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30"
               />
-              <p className="text-xs text-white/40 mt-1">
+              <p className="text-xs text-gray-400 dark:text-white/40 mt-1">
                 Spoken when the tool completes successfully
               </p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-white/70 mb-2">
+              <label className="block text-sm font-medium text-gray-600 dark:text-white/70 mb-2">
                 Request Failed Message
               </label>
               <input
@@ -493,15 +493,15 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
                 value={formData.messages?.request_failed || ''}
                 onChange={(e) => updateMessages('request_failed', e.target.value)}
                 placeholder="e.g., I couldn't complete that request..."
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50"
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30"
               />
-              <p className="text-xs text-white/40 mt-1">
+              <p className="text-xs text-gray-400 dark:text-white/40 mt-1">
                 Spoken when the tool fails
               </p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-white/70 mb-2">
+              <label className="block text-sm font-medium text-gray-600 dark:text-white/70 mb-2">
                 Request Delayed Message
               </label>
               <input
@@ -509,9 +509,9 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
                 value={formData.messages?.request_delayed || ''}
                 onChange={(e) => updateMessages('request_delayed', e.target.value)}
                 placeholder="e.g., This is taking a moment..."
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50"
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30"
               />
-              <p className="text-xs text-white/40 mt-1">
+              <p className="text-xs text-gray-400 dark:text-white/40 mt-1">
                 Spoken when the tool takes longer than expected
               </p>
             </div>
@@ -520,10 +520,10 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
 
         {activeTab === 'advanced' && (
           <div className="space-y-6">
-            <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl">
+            <div className="flex items-center justify-between p-4 bg-gray-50 border border-gray-100 dark:bg-white/5 dark:border-transparent rounded-xl">
               <div>
-                <h4 className="font-medium text-white">Async Mode</h4>
-                <p className="text-sm text-white/50">
+                <h4 className="font-medium text-gray-900 dark:text-white">Async Mode</h4>
+                <p className="text-sm text-gray-500 dark:text-white/50">
                   Run the tool asynchronously without waiting for results
                 </p>
               </div>
@@ -539,7 +539,7 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-white/70 mb-2">
+              <label className="block text-sm font-medium text-gray-600 dark:text-white/70 mb-2">
                 Max Retries
               </label>
               <input
@@ -551,12 +551,12 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
                 })}
                 min={0}
                 max={10}
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-purple-500/50 dark:bg-white/5 dark:border-white/10 dark:text-white"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-white/70 mb-2">
+              <label className="block text-sm font-medium text-gray-600 dark:text-white/70 mb-2">
                 Retry Delay (ms)
               </label>
               <input
@@ -568,7 +568,7 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
                 })}
                 min={100}
                 max={30000}
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-purple-500/50 dark:bg-white/5 dark:border-white/10 dark:text-white"
               />
             </div>
           </div>
@@ -576,12 +576,12 @@ export function ToolForm({ tool, onSubmit, onCancel, isLoading }: ToolFormProps)
       </motion.div>
 
       {/* Actions */}
-      <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
+      <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-white/10">
         <button
           type="button"
           onClick={onCancel}
           disabled={isLoading}
-          className="px-6 py-2.5 rounded-xl font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all disabled:opacity-50"
+          className="px-6 py-2.5 rounded-xl font-medium text-gray-500 dark:text-white/60 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 transition-all disabled:opacity-50"
         >
           Cancel
         </button>

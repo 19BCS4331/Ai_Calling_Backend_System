@@ -81,7 +81,7 @@ export function AgentDetail() {
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <Loader size={32} className="text-purple-500 animate-spin mx-auto mb-4" />
-          <p className="text-white/50">Loading agent...</p>
+          <p className="text-gray-500 dark:text-white/50">Loading agent...</p>
         </div>
       </div>
     );
@@ -92,7 +92,7 @@ export function AgentDetail() {
       <div className="space-y-6">
         <button
           onClick={() => navigate('/dashboard/agents')}
-          className="flex items-center gap-2 text-white/60 hover:text-white transition-colors"
+          className="flex items-center gap-2 text-gray-500 dark:text-white/60 hover:text-gray-900 dark:hover:text-white transition-colors"
         >
           <ArrowLeft size={18} />
           Back to Agents
@@ -128,7 +128,7 @@ export function AgentDetail() {
       <div className="flex items-center justify-between">
         <button
           onClick={() => navigate('/dashboard/agents')}
-          className="flex items-center gap-2 text-white/60 hover:text-white transition-colors"
+          className="flex items-center gap-2 text-gray-500 dark:text-white/60 hover:text-gray-900 dark:hover:text-white transition-colors"
         >
           <ArrowLeft size={18} />
           Back to Agents
@@ -184,13 +184,13 @@ export function AgentDetail() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-white/10">
+      <div className="flex gap-2 border-b border-gray-200 dark:border-white/10">
         <button
           onClick={() => setActiveTab('edit')}
           className={`px-4 py-3 font-medium transition-all border-b-2 ${
             activeTab === 'edit'
-              ? 'text-purple-400 border-purple-500'
-              : 'text-white/50 border-transparent hover:text-white/70'
+              ? 'text-purple-600 dark:text-purple-400 border-purple-500'
+              : 'text-gray-400 dark:text-white/50 border-transparent hover:text-gray-700 dark:hover:text-white/70'
           }`}
         >
           Edit Configuration
@@ -199,8 +199,8 @@ export function AgentDetail() {
           onClick={() => setActiveTab('test')}
           className={`px-4 py-3 font-medium transition-all flex items-center gap-2 border-b-2 ${
             activeTab === 'test'
-              ? 'text-purple-400 border-purple-500'
-              : 'text-white/50 border-transparent hover:text-white/70'
+              ? 'text-purple-600 dark:text-purple-400 border-purple-500'
+              : 'text-gray-400 dark:text-white/50 border-transparent hover:text-gray-700 dark:hover:text-white/70'
           }`}
         >
           <Phone size={18} />
@@ -210,8 +210,8 @@ export function AgentDetail() {
           onClick={() => setActiveTab('versions')}
           className={`px-4 py-3 font-medium transition-all flex items-center gap-2 border-b-2 ${
             activeTab === 'versions'
-              ? 'text-purple-400 border-purple-500'
-              : 'text-white/50 border-transparent hover:text-white/70'
+              ? 'text-purple-600 dark:text-purple-400 border-purple-500'
+              : 'text-gray-400 dark:text-white/50 border-transparent hover:text-gray-700 dark:hover:text-white/70'
           }`}
         >
           <History size={18} />
@@ -233,8 +233,8 @@ export function AgentDetail() {
         ) : activeTab === 'test' ? (
           <AgentTestCall agent={agent} />
         ) : (
-          <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-6">
-            <h3 className="text-lg font-semibold text-white mb-4">Version History</h3>
+          <div className="bg-white border border-gray-200 dark:bg-white/[0.02] dark:border-white/5 rounded-2xl p-6 shadow-sm dark:shadow-none">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Version History</h3>
             <VersionHistory
               agentId={id!}
               currentVersion={agent.version}
@@ -251,24 +251,24 @@ export function AgentDetail() {
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-[#0a0a0f] border border-white/10 rounded-2xl p-6 max-w-md w-full"
+            className="bg-white dark:bg-[#0a0a0f] border border-gray-200 dark:border-white/10 rounded-2xl p-6 max-w-md w-full shadow-xl"
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-white">Publish Agent</h3>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white">Publish Agent</h3>
               <button
                 onClick={() => setShowPublishDialog(false)}
-                className="text-white/40 hover:text-white transition-colors"
+                className="text-gray-400 dark:text-white/40 hover:text-gray-900 dark:hover:text-white transition-colors"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <p className="text-white/60 text-sm mb-4">
+            <p className="text-gray-500 dark:text-white/60 text-sm mb-4">
               Publishing will activate this agent and create a version snapshot. You can rollback to this version later if needed.
             </p>
 
             <div className="mb-6">
-              <label className="block text-sm text-white/60 mb-2">
+              <label className="block text-sm text-gray-600 dark:text-white/60 mb-2">
                 Change Summary (optional)
               </label>
               <textarea
@@ -276,7 +276,7 @@ export function AgentDetail() {
                 onChange={(e) => setChangeSummary(e.target.value)}
                 placeholder="Describe what changed in this version..."
                 rows={3}
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all resize-none"
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 transition-all resize-none"
               />
             </div>
 
@@ -284,7 +284,7 @@ export function AgentDetail() {
               <button
                 onClick={() => setShowPublishDialog(false)}
                 disabled={isPublishing}
-                className="flex-1 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl font-medium text-white hover:bg-white/10 transition-all disabled:opacity-50"
+                className="flex-1 px-4 py-2.5 bg-gray-100 border border-gray-200 dark:bg-white/5 dark:border-white/10 rounded-xl font-medium text-gray-700 dark:text-white hover:bg-gray-200 dark:hover:bg-white/10 transition-all disabled:opacity-50"
               >
                 Cancel
               </button>

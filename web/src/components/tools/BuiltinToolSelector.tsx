@@ -239,7 +239,7 @@ interface BuiltinToolSelectorProps {
 export function BuiltinToolSelector({ selectedType, onSelect, disabled }: BuiltinToolSelectorProps) {
   return (
     <div className="space-y-4">
-      <label className="block text-sm font-medium text-white/70">
+      <label className="block text-sm font-medium text-gray-600 dark:text-white/70">
         Select Built-in Tool <span className="text-red-400">*</span>
       </label>
       
@@ -255,7 +255,7 @@ export function BuiltinToolSelector({ selectedType, onSelect, disabled }: Builti
             className={`relative p-4 rounded-xl border text-left transition-all ${
               selectedType === tool.type
                 ? 'border-purple-500 bg-purple-500/10 ring-2 ring-purple-500/20'
-                : 'border-white/10 bg-white/5 hover:border-white/20'
+                : 'border-gray-200 bg-gray-50 hover:border-gray-300 dark:border-white/10 dark:bg-white/5 dark:hover:border-white/20'
             } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
           >
             {selectedType === tool.type && (
@@ -265,9 +265,9 @@ export function BuiltinToolSelector({ selectedType, onSelect, disabled }: Builti
             )}
             <div className="flex items-center gap-3 mb-2">
               {iconMap[tool.icon]}
-              <span className="font-medium text-white">{tool.name}</span>
+              <span className="font-medium text-gray-900 dark:text-white">{tool.name}</span>
             </div>
-            <p className="text-xs text-white/50">{tool.description}</p>
+            <p className="text-xs text-gray-500 dark:text-white/50">{tool.description}</p>
           </motion.button>
         ))}
       </div>
@@ -310,11 +310,11 @@ export function BuiltinToolConfig({
     switch (field.type) {
       case 'boolean':
         return (
-          <div key={field.key} className="flex items-center justify-between p-4 bg-white/5 rounded-xl">
+          <div key={field.key} className="flex items-center justify-between p-4 bg-gray-50 border border-gray-100 dark:bg-white/5 dark:border-transparent rounded-xl">
             <div>
-              <h4 className="font-medium text-white">{field.label}</h4>
+              <h4 className="font-medium text-gray-900 dark:text-white">{field.label}</h4>
               {field.description && (
-                <p className="text-sm text-white/50">{field.description}</p>
+                <p className="text-sm text-gray-500 dark:text-white/50">{field.description}</p>
               )}
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
@@ -346,7 +346,7 @@ export function BuiltinToolConfig({
               disabled={disabled}
             />
             {field.description && (
-              <p className="text-xs text-white/40 mt-1">{field.description}</p>
+              <p className="text-xs text-gray-400 dark:text-white/40 mt-1">{field.description}</p>
             )}
           </div>
         );
@@ -354,7 +354,7 @@ export function BuiltinToolConfig({
       case 'number':
         return (
           <div key={field.key}>
-            <label className="block text-sm font-medium text-white/70 mb-2">
+            <label className="block text-sm font-medium text-gray-600 dark:text-white/70 mb-2">
               {field.label} {field.required && <span className="text-red-400">*</span>}
             </label>
             <input
@@ -363,10 +363,10 @@ export function BuiltinToolConfig({
               onChange={(e) => updateConfig(field.key, parseInt(e.target.value) || 0)}
               placeholder={field.placeholder}
               disabled={disabled}
-              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 disabled:opacity-50"
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 disabled:opacity-50"
             />
             {field.description && (
-              <p className="text-xs text-white/40 mt-1">{field.description}</p>
+              <p className="text-xs text-gray-400 dark:text-white/40 mt-1">{field.description}</p>
             )}
           </div>
         );
@@ -374,7 +374,7 @@ export function BuiltinToolConfig({
       default:
         return (
           <div key={field.key}>
-            <label className="block text-sm font-medium text-white/70 mb-2">
+            <label className="block text-sm font-medium text-gray-600 dark:text-white/70 mb-2">
               {field.label} {field.required && <span className="text-red-400">*</span>}
             </label>
             <input
@@ -383,10 +383,10 @@ export function BuiltinToolConfig({
               onChange={(e) => updateConfig(field.key, e.target.value)}
               placeholder={field.placeholder}
               disabled={disabled}
-              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 disabled:opacity-50"
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 disabled:opacity-50"
             />
             {field.description && (
-              <p className="text-xs text-white/40 mt-1">{field.description}</p>
+              <p className="text-xs text-gray-400 dark:text-white/40 mt-1">{field.description}</p>
             )}
           </div>
         );
@@ -399,11 +399,11 @@ export function BuiltinToolConfig({
       <div className="p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl space-y-4">
         <div className="flex items-center gap-2 mb-2">
           {iconMap[toolDefinition.icon]}
-          <span className="font-medium text-white">{toolDefinition.name}</span>
+          <span className="font-medium text-gray-900 dark:text-white">{toolDefinition.name}</span>
         </div>
         
         <div>
-          <label className="block text-sm font-medium text-white/70 mb-2">
+          <label className="block text-sm font-medium text-gray-600 dark:text-white/70 mb-2">
             Custom Tool Name
           </label>
           <input
@@ -412,15 +412,15 @@ export function BuiltinToolConfig({
             onChange={(e) => onCustomNameChange?.(e.target.value)}
             placeholder={toolDefinition.name}
             disabled={disabled}
-            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 disabled:opacity-50"
+            className="w-full px-4 py-3 bg-white border border-purple-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 disabled:opacity-50"
           />
-          <p className="text-xs text-white/40 mt-1">
+          <p className="text-xs text-gray-400 dark:text-white/40 mt-1">
             Override the default name (used by AI and in logs)
           </p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-white/70 mb-2">
+          <label className="block text-sm font-medium text-gray-600 dark:text-white/70 mb-2">
             Custom Description
           </label>
           <textarea
@@ -429,9 +429,9 @@ export function BuiltinToolConfig({
             placeholder={toolDefinition.description}
             rows={2}
             disabled={disabled}
-            className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 resize-none disabled:opacity-50"
+            className="w-full px-4 py-3 bg-white border border-purple-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 resize-none disabled:opacity-50"
           />
-          <p className="text-xs text-white/40 mt-1">
+          <p className="text-xs text-gray-400 dark:text-white/40 mt-1">
             Override the description (helps AI understand when to use this tool)
           </p>
         </div>
@@ -440,13 +440,13 @@ export function BuiltinToolConfig({
       {/* Tool-specific configuration */}
       {toolDefinition.configFields.length > 0 && (
         <div className="space-y-4">
-          <h4 className="text-sm font-medium text-white/70">Tool Configuration</h4>
+          <h4 className="text-sm font-medium text-gray-600 dark:text-white/70">Tool Configuration</h4>
           {toolDefinition.configFields.map(renderField)}
         </div>
       )}
 
       {toolDefinition.configFields.length === 0 && (
-        <div className="text-center py-6 text-white/50">
+        <div className="text-center py-6 text-gray-400 dark:text-white/50">
           <Info size={24} className="mx-auto mb-2 opacity-50" />
           <p className="text-sm">This tool doesn't require additional configuration</p>
         </div>

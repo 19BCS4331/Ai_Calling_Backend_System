@@ -34,13 +34,13 @@ export function ToolNew() {
       <div className="flex items-center gap-4">
         <button
           onClick={handleCancel}
-          className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-all"
+          className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 dark:text-white/60 hover:text-gray-900 dark:hover:text-white transition-all"
         >
           <ArrowLeft size={20} />
         </button>
         <div>
-          <h1 className="text-2xl font-bold text-white">Create Tool</h1>
-          <p className="text-white/50">Add a new tool for your voice agents</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Create Tool</h1>
+          <p className="text-gray-500 dark:text-white/50">Add a new tool for your voice agents</p>
         </div>
       </div>
 

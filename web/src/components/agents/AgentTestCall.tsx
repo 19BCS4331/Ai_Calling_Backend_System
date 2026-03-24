@@ -151,8 +151,8 @@ export function AgentTestCall({ agent, className }: AgentTestCallProps) {
             )} />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-white">Test Call</h3>
-            <p className="text-sm text-white/50">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Test Call</h3>
+            <p className="text-sm text-gray-400 dark:text-white/50">
               {isActive ? 'Call in progress' :
                isStarting ? 'Connecting...' :
                'Test your agent via web call'}
@@ -165,20 +165,20 @@ export function AgentTestCall({ agent, className }: AgentTestCallProps) {
           'px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-2',
           isActive ? 'bg-green-500/10 text-green-400 border border-green-500/20' :
           isStarting ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
-          'bg-white/5 text-white/50 border border-white/10'
+          'bg-gray-100 dark:bg-white/5 text-gray-400 dark:text-white/50 border border-gray-200 dark:border-white/10'
         )}>
           <div className={cn(
             'w-2 h-2 rounded-full',
             isActive ? 'bg-green-400 animate-pulse' :
             isStarting ? 'bg-yellow-400 animate-pulse' :
-            'bg-white/30'
+            'bg-gray-300 dark:bg-white/30'
           )} />
           {isActive ? 'Active' : isStarting ? 'Connecting' : 'Ready'}
         </div>
       </div>
 
       {/* Main call interface */}
-      <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-6">
+      <div className="bg-white border border-gray-200 dark:bg-white/[0.02] dark:border-white/5 rounded-2xl p-6 shadow-sm dark:shadow-none">
         {/* Voice visualization */}
         <div className="relative h-32 mb-6 flex items-center justify-center">
           {/* Outer pulse ring */}
@@ -234,7 +234,7 @@ export function AgentTestCall({ agent, className }: AgentTestCallProps) {
         </div>
 
         {/* Status text */}
-        <p className="text-center text-sm text-white/40 mb-4">
+        <p className="text-center text-sm text-gray-400 dark:text-white/40 mb-4">
           {isActive ? 'Click to end call' :
            isAIPlaying ? `${agent.name} is speaking...` :
            isStarting ? `Connecting to ${agent.name}...` :
@@ -249,7 +249,7 @@ export function AgentTestCall({ agent, className }: AgentTestCallProps) {
               className={cn(
                 'px-4 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center gap-2',
                 isRecording 
-                  ? 'bg-white/5 border border-white/10 text-white/70 hover:bg-white/10'
+                  ? 'bg-gray-50 border border-gray-200 dark:bg-white/5 dark:border-white/10 text-gray-600 dark:text-white/70 hover:bg-gray-100 dark:hover:bg-white/10'
                   : 'bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20'
               )}
             >
@@ -268,19 +268,19 @@ export function AgentTestCall({ agent, className }: AgentTestCallProps) {
 
         {/* Transcripts */}
         <div className="space-y-3">
-          <div className="p-4 bg-white/[0.02] border border-white/5 rounded-xl min-h-[60px]">
+          <div className="p-4 bg-gray-50 border border-gray-200 dark:bg-white/[0.02] dark:border-white/5 rounded-xl min-h-[60px]">
             <div className="flex items-center gap-2 mb-2">
-              <Mic size={12} className="text-white/30" />
-              <p className="text-xs text-white/30">You</p>
+              <Mic size={12} className="text-gray-300 dark:text-white/30" />
+              <p className="text-xs text-gray-400 dark:text-white/30">You</p>
             </div>
-            <p className="text-sm text-white/70">{userTranscript || 'Waiting for input...'}</p>
+            <p className="text-sm text-gray-600 dark:text-white/70">{userTranscript || 'Waiting for input...'}</p>
           </div>
           <div className="p-4 bg-purple-500/5 border border-purple-500/10 rounded-xl min-h-[60px]">
             <div className="flex items-center gap-2 mb-2">
               <MessageSquare size={12} className="text-purple-400/60" />
               <p className="text-xs text-purple-400/60">{agent.name}</p>
             </div>
-            <p className="text-sm text-white/80">{aiResponse || 'Waiting for response...'}</p>
+            <p className="text-sm text-gray-700 dark:text-white/80">{aiResponse || 'Waiting for response...'}</p>
           </div>
         </div>
 
@@ -294,23 +294,23 @@ export function AgentTestCall({ agent, className }: AgentTestCallProps) {
 
         {/* Metrics */}
         {metrics && (
-          <div className="mt-4 pt-4 border-t border-white/5">
+          <div className="mt-4 pt-4 border-t border-gray-100 dark:border-white/5">
             <div className="flex items-center gap-2 mb-3">
-              <Zap size={14} className="text-white/30" />
-              <p className="text-xs text-white/30">Performance Metrics</p>
+              <Zap size={14} className="text-gray-300 dark:text-white/30" />
+              <p className="text-xs text-gray-400 dark:text-white/30">Performance Metrics</p>
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div className="text-center">
                 <p className="text-lg font-semibold text-purple-400">{metrics.firstLLMTokenMs}ms</p>
-                <p className="text-xs text-white/40">LLM Latency</p>
+                <p className="text-xs text-gray-400 dark:text-white/40">LLM Latency</p>
               </div>
               <div className="text-center">
                 <p className="text-lg font-semibold text-purple-400">{metrics.firstTTSByteMs}ms</p>
-                <p className="text-xs text-white/40">TTS Latency</p>
+                <p className="text-xs text-gray-400 dark:text-white/40">TTS Latency</p>
               </div>
               <div className="text-center">
                 <p className="text-lg font-semibold text-purple-400">{metrics.turnDurationMs}ms</p>
-                <p className="text-xs text-white/40">Total Turn</p>
+                <p className="text-xs text-gray-400 dark:text-white/40">Total Turn</p>
               </div>
             </div>
           </div>
@@ -318,27 +318,27 @@ export function AgentTestCall({ agent, className }: AgentTestCallProps) {
       </div>
 
       {/* Agent config summary */}
-      <div className="bg-white/[0.02] border border-white/5 rounded-xl p-4">
+      <div className="bg-white border border-gray-200 dark:bg-white/[0.02] dark:border-white/5 rounded-xl p-4 shadow-sm dark:shadow-none">
         <div className="flex items-center gap-2 mb-3">
-          <Clock size={14} className="text-white/30" />
-          <p className="text-xs text-white/30">Test Configuration</p>
+          <Clock size={14} className="text-gray-300 dark:text-white/30" />
+          <p className="text-xs text-gray-400 dark:text-white/30">Test Configuration</p>
         </div>
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
-            <p className="text-white/40 text-xs">STT Provider</p>
-            <p className="text-white/70">{agent.stt_provider || 'sarvam'}</p>
+            <p className="text-gray-400 dark:text-white/40 text-xs">STT Provider</p>
+            <p className="text-gray-700 dark:text-white/70">{agent.stt_provider || 'sarvam'}</p>
           </div>
           <div>
-            <p className="text-white/40 text-xs">LLM Provider</p>
-            <p className="text-white/70">{agent.llm_provider || 'gemini'}</p>
+            <p className="text-gray-400 dark:text-white/40 text-xs">LLM Provider</p>
+            <p className="text-gray-700 dark:text-white/70">{agent.llm_provider || 'gemini'}</p>
           </div>
           <div>
-            <p className="text-white/40 text-xs">TTS Provider</p>
-            <p className="text-white/70">{agent.tts_provider || 'cartesia'}</p>
+            <p className="text-gray-400 dark:text-white/40 text-xs">TTS Provider</p>
+            <p className="text-gray-700 dark:text-white/70">{agent.tts_provider || 'cartesia'}</p>
           </div>
           <div>
-            <p className="text-white/40 text-xs">Language</p>
-            <p className="text-white/70">{agent.language || 'en-IN'}</p>
+            <p className="text-gray-400 dark:text-white/40 text-xs">Language</p>
+            <p className="text-gray-700 dark:text-white/70">{agent.language || 'en-IN'}</p>
           </div>
         </div>
       </div>

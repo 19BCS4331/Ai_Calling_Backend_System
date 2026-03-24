@@ -143,11 +143,23 @@ export function useWebSocket() {
         break;
 
       case 'barge_in':
-        // Clear audio buffer immediately on barge-in
-        bargedInRef.current = true;  // Drop all audio until next turn
+        // Immediately stop audio output: set flag first, clear worklet buffer, then
+        // suspend the AudioContext for instant hardware-level silence.
+        // Chunks still in-flight (async decode) are dropped by the flag check in handleAudioData.
+        bargedInRef.current = true;
         consecutiveLoudRef.current = 0;
         if (workletNodeRef.current) {
           workletNodeRef.current.port.postMessage({ type: 'clear' });
+        }
+        if (audioContextRef.current && audioContextRef.current.state === 'running') {
+          audioContextRef.current.suspend().then(() => {
+            // Resume after a short gap so the context is ready for the next TTS turn
+            setTimeout(() => {
+              if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+                audioContextRef.current.resume();
+              }
+            }, 80);
+          });
         }
         isAIPlayingRef.current = false;
         setIsAIPlaying(false);
@@ -227,6 +239,10 @@ export function useWebSocket() {
     setIsAIPlaying(true);
     
     const arrayBuffer = await blob.arrayBuffer();
+    
+    // Re-check after async decode — barge-in may have arrived while we were awaiting
+    if (bargedInRef.current) return;
+    
     const header = new Uint8Array(arrayBuffer.slice(0, 4));
     const isWav = header[0] === 0x52 && header[1] === 0x49;
     
@@ -303,30 +319,55 @@ export function useWebSocket() {
         }
         wsRef.current.send(pcm.buffer);
         
-        // Client-side VAD for barge-in: detect user speech during AI playback
-        // The browser's echoCancellation reduces AI audio but user speech still shows
-        // higher energy than silence. RMS > 0.02 is a reasonable speech threshold.
+        // Smart client-side VAD for barge-in.
+        // Layer 1: RMS energy gate — reject true silence
+        // Layer 2: High-band energy ratio via first-difference — filters AC hum (<120Hz)
+        // Layer 3: Zero Crossing Rate range — speech is 50-250 ZCR/10ms; pure tones are low
+        // Require 3 consecutive speech-like frames before triggering (~768ms at 4096/16kHz)
         if (isAIPlayingRef.current && !bargedInRef.current) {
           const rms = Math.sqrt(sumSquares / input.length);
-          if (rms > 0.02) {
+
+          // High-band proxy: first-difference of float32 samples
+          let highBandSumSq = 0;
+          let zeroCrossings = 0;
+          for (let i = 1; i < input.length; i++) {
+            const diff = input[i] - input[i - 1];
+            highBandSumSq += diff * diff;
+            if ((input[i] >= 0) !== (input[i - 1] >= 0)) zeroCrossings++;
+          }
+          const bandRatio = sumSquares > 0 ? Math.sqrt(highBandSumSq / sumSquares) : 0;
+          // ZCR per 10ms (input.length samples at 16kHz)
+          const durationMs = (input.length / 16000) * 1000;
+          const zcrPer10ms = (zeroCrossings / durationMs) * 10;
+
+          // Speech thresholds (mid sensitivity defaults)
+          const isSpeechLike =
+            rms > 0.018 &&         // not silence (float32 ~= RMS 280 in int16)
+            bandRatio > 0.28 &&    // has high-frequency content (not AC hum)
+            zcrPer10ms >= 30 &&    // enough zero crossings for speech
+            zcrPer10ms <= 280;     // but not pure broadband impulse noise
+
+          if (isSpeechLike) {
             consecutiveLoudRef.current++;
-            // Require 3 consecutive loud chunks (~192ms at 4096 samples/16kHz) to confirm speech
             if (consecutiveLoudRef.current >= 3) {
-              console.log('[barge-in] Client-side VAD triggered, RMS:', rms.toFixed(4));
+              console.log('[barge-in] Smart VAD triggered', {
+                rms: rms.toFixed(4), bandRatio: bandRatio.toFixed(3), zcr: zcrPer10ms.toFixed(1)
+              });
               bargedInRef.current = true;
               consecutiveLoudRef.current = 0;
-              // Clear audio buffer immediately
               if (workletNodeRef.current) {
                 workletNodeRef.current.port.postMessage({ type: 'clear' });
               }
               isAIPlayingRef.current = false;
               setIsAIPlaying(false);
               setAIResponse('');
-              // Tell server about client-side barge-in
               wsRef.current.send(JSON.stringify({ type: 'barge_in' }));
             }
           } else {
-            consecutiveLoudRef.current = 0;
+            // Hangover: only reset after 5 non-speech frames to avoid flickering
+            if (consecutiveLoudRef.current > 0) {
+              consecutiveLoudRef.current = Math.max(0, consecutiveLoudRef.current - 1);
+            }
           }
         }
       };

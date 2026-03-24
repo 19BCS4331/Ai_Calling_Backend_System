@@ -190,11 +190,11 @@ export function CallDetail({ call, onClose }: CallDetailProps) {
           animate={{ x: 0 }}
           exit={{ x: '100%' }}
           transition={{ type: 'spring', damping: 25, stiffness: 250 }}
-          className="absolute right-0 top-0 h-full w-full max-w-2xl bg-[#0a0a0f] border-l border-white/10 overflow-y-auto"
+          className="absolute right-0 top-0 h-full w-full max-w-2xl bg-white dark:bg-[#0a0a0f] border-l border-gray-200 dark:border-white/10 overflow-y-auto"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="sticky top-0 z-10 bg-[#0a0a0f]/95 backdrop-blur-sm border-b border-white/10 p-6">
+          <div className="sticky top-0 z-10 bg-white/95 dark:bg-[#0a0a0f]/95 backdrop-blur-sm border-b border-gray-200 dark:border-white/10 p-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
@@ -205,15 +205,15 @@ export function CallDetail({ call, onClose }: CallDetailProps) {
                   {directionIcon}
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-white">Call Details</h2>
-                  <p className="text-sm text-white/40">
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Call Details</h2>
+                  <p className="text-sm text-gray-400 dark:text-white/40">
                     {call.direction.charAt(0).toUpperCase() + call.direction.slice(1)} · {formatDate(call.started_at)}
                   </p>
                 </div>
               </div>
               <button
                 onClick={onClose}
-                className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+                className="p-2 text-gray-400 dark:text-white/40 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors"
               >
                 <X size={20} />
               </button>
@@ -223,31 +223,31 @@ export function CallDetail({ call, onClose }: CallDetailProps) {
           <div className="p-6 space-y-6">
             {/* Quick Stats */}
             <div className="grid grid-cols-3 gap-4">
-              <div className="bg-white/[0.03] border border-white/5 rounded-xl p-4 text-center">
+              <div className="bg-gray-50 border border-gray-200 dark:bg-white/[0.03] dark:border-white/5 rounded-xl p-4 text-center">
                 <Clock size={18} className="text-blue-400 mx-auto mb-2" />
-                <p className="text-lg font-bold text-white">{formatDuration(call.duration_seconds)}</p>
-                <p className="text-xs text-white/40">Duration</p>
+                <p className="text-lg font-bold text-gray-900 dark:text-white">{formatDuration(call.duration_seconds)}</p>
+                <p className="text-xs text-gray-400 dark:text-white/40">Duration</p>
               </div>
-              <div className="bg-white/[0.03] border border-white/5 rounded-xl p-4 text-center">
+              <div className="bg-gray-50 border border-gray-200 dark:bg-white/[0.03] dark:border-white/5 rounded-xl p-4 text-center">
                 <DollarSign size={18} className="text-green-400 mx-auto mb-2" />
-                <p className="text-lg font-bold text-white">${userCost.toFixed(2)}</p>
-                <p className="text-xs text-white/40">Cost</p>
+                <p className="text-lg font-bold text-gray-900 dark:text-white">${userCost.toFixed(2)}</p>
+                <p className="text-xs text-gray-400 dark:text-white/40">Cost</p>
               </div>
-              <div className="bg-white/[0.03] border border-white/5 rounded-xl p-4 text-center">
+              <div className="bg-gray-50 border border-gray-200 dark:bg-white/[0.03] dark:border-white/5 rounded-xl p-4 text-center">
                 <Zap size={18} className="text-yellow-400 mx-auto mb-2" />
-                <p className="text-lg font-bold text-white">
+                <p className="text-lg font-bold text-gray-900 dark:text-white">
                   {d?.latency_first_response_ms ? `${(d.latency_first_response_ms / 1000).toFixed(1)}s` : '—'}
                 </p>
-                <p className="text-xs text-white/40">First Response</p>
+                <p className="text-xs text-gray-400 dark:text-white/40">First Response</p>
               </div>
             </div>
 
             {/* Call Info */}
-            <div className="bg-white/[0.03] border border-white/5 rounded-xl p-5">
-              <h3 className="text-sm font-medium text-white/60 uppercase tracking-wider mb-4">Call Information</h3>
+            <div className="bg-gray-50 border border-gray-200 dark:bg-white/[0.03] dark:border-white/5 rounded-xl p-5">
+              <h3 className="text-sm font-medium text-gray-400 dark:text-white/60 uppercase tracking-wider mb-4">Call Information</h3>
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-white/50">Status</span>
+                  <span className="text-gray-500 dark:text-white/50">Status</span>
                   <span className={`px-2 py-0.5 rounded-full text-xs border ${
                     call.status === 'completed' ? 'bg-green-500/10 text-green-400 border-green-500/20'
                     : call.status === 'failed' ? 'bg-red-500/10 text-red-400 border-red-500/20'
@@ -258,52 +258,52 @@ export function CallDetail({ call, onClose }: CallDetailProps) {
                 </div>
                 {d?.end_reason && (
                   <div className="flex justify-between">
-                    <span className="text-white/50">End Reason</span>
-                    <span className="text-white">{d.end_reason}</span>
+                    <span className="text-gray-500 dark:text-white/50">End Reason</span>
+                    <span className="text-gray-900 dark:text-white">{d.end_reason}</span>
                   </div>
                 )}
                 <div className="flex justify-between">
-                  <span className="text-white/50">From</span>
-                  <span className="text-white">{call.from_number || 'Web User'}</span>
+                  <span className="text-gray-500 dark:text-white/50">From</span>
+                  <span className="text-gray-900 dark:text-white">{call.from_number || 'Web User'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-white/50">To</span>
-                  <span className="text-white">{call.to_number || 'Agent'}</span>
+                  <span className="text-gray-500 dark:text-white/50">To</span>
+                  <span className="text-gray-900 dark:text-white">{call.to_number || 'Agent'}</span>
                 </div>
                 {d?.agents?.name && (
                   <div className="flex justify-between">
-                    <span className="text-white/50">Agent</span>
-                    <span className="text-white">{d.agents.name}</span>
+                    <span className="text-gray-500 dark:text-white/50">Agent</span>
+                    <span className="text-gray-900 dark:text-white">{d.agents.name}</span>
                   </div>
                 )}
                 {d?.billed_minutes != null && (
                   <div className="flex justify-between">
-                    <span className="text-white/50">Billed Minutes</span>
-                    <span className="text-white">{d.billed_minutes}</span>
+                    <span className="text-gray-500 dark:text-white/50">Billed Minutes</span>
+                    <span className="text-gray-900 dark:text-white">{d.billed_minutes}</span>
                   </div>
                 )}
                 {d?.interruptions_count != null && d.interruptions_count > 0 && (
                   <div className="flex justify-between">
-                    <span className="text-white/50">Interruptions</span>
-                    <span className="text-white">{d.interruptions_count}</span>
+                    <span className="text-gray-500 dark:text-white/50">Interruptions</span>
+                    <span className="text-gray-900 dark:text-white">{d.interruptions_count}</span>
                   </div>
                 )}
               </div>
             </div>
 
             {/* Cost Breakdown */}
-            <div className="bg-white/[0.03] border border-white/5 rounded-xl overflow-hidden">
+            <div className="bg-gray-50 dark:bg-[#0a0a0f] border border-gray-200 dark:border-white/5 rounded-xl overflow-hidden">
               <button
                 onClick={() => setShowCostBreakdown(!showCostBreakdown)}
-                className="w-full flex items-center justify-between p-5 hover:bg-white/[0.02] transition-colors"
+                className="w-full flex items-center justify-between p-5 hover:bg-gray-100 dark:hover:bg-white/[0.02] transition-colors"
               >
                 <div className="flex items-center gap-2">
                   <DollarSign size={16} className="text-green-400" />
-                  <h3 className="text-sm font-medium text-white/60 uppercase tracking-wider">Cost Breakdown</h3>
+                  <h3 className="text-sm font-medium text-gray-400 dark:text-white/60 uppercase tracking-wider">Cost Breakdown</h3>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-white font-medium">${userCost.toFixed(2)}</span>
-                  {showCostBreakdown ? <ChevronUp size={16} className="text-white/40" /> : <ChevronDown size={16} className="text-white/40" />}
+                  <span className="text-gray-900 dark:text-white font-medium">${userCost.toFixed(2)}</span>
+                  {showCostBreakdown ? <ChevronUp size={16} className="text-gray-400 dark:text-white/40" /> : <ChevronDown size={16} className="text-gray-400 dark:text-white/40" />}
                 </div>
               </button>
               <AnimatePresence>
@@ -314,45 +314,45 @@ export function CallDetail({ call, onClose }: CallDetailProps) {
                     exit={{ height: 0, opacity: 0 }}
                     className="overflow-hidden"
                   >
-                    <div className="px-5 pb-5 space-y-3 text-sm border-t border-white/5 pt-4">
+                    <div className="px-5 pb-5 space-y-3 text-sm border-t border-gray-200 dark:border-white/5 pt-4">
                       <div className="flex justify-between items-center">
-                        <span className="text-white/50">Billed Minutes</span>
-                        <span className="text-white font-mono">{d.billed_minutes || Math.ceil((d.duration_seconds || 0) / 60)}</span>
+                        <span className="text-gray-500 dark:text-white/50">Billed Minutes</span>
+                        <span className="text-gray-900 dark:text-white font-mono">{d.billed_minutes || Math.ceil((d.duration_seconds || 0) / 60)}</span>
                       </div>
                       {d.billed_minutes > 0 && d.cost_user_cents > 0 && (
                         <div className="flex justify-between items-center">
-                          <span className="text-white/50">Rate</span>
-                          <span className="text-white font-mono">${(d.cost_user_cents / d.billed_minutes / 100).toFixed(2)}/min</span>
+                          <span className="text-gray-500 dark:text-white/50">Rate</span>
+                          <span className="text-gray-900 dark:text-white font-mono">${(d.cost_user_cents / d.billed_minutes / 100).toFixed(2)}/min</span>
                         </div>
                       )}
-                      <div className="border-t border-white/5 pt-3 flex justify-between items-center">
-                        <span className="text-white font-medium">Total Cost</span>
-                        <span className="text-white font-bold">${(d.cost_user_cents / 100).toFixed(2)}</span>
+                      <div className="border-t border-gray-200 dark:border-white/5 pt-3 flex justify-between items-center">
+                        <span className="text-gray-900 dark:text-white font-medium">Total Cost</span>
+                        <span className="text-gray-900 dark:text-white font-bold">${(d.cost_user_cents / 100).toFixed(2)}</span>
                       </div>
 
                       {/* Usage Details */}
-                      <div className="border-t border-white/5 pt-3 mt-3">
-                        <p className="text-xs text-white/30 mb-3">Usage Details</p>
+                      <div className="border-t border-gray-200 dark:border-white/5 pt-3 mt-3">
+                        <p className="text-xs text-gray-400 dark:text-white/30 mb-3">Usage Details</p>
                         <div className="grid grid-cols-2 gap-3">
-                          <div className="bg-white/[0.02] rounded-lg p-3">
-                            <p className="text-xs text-white/40">LLM Tokens</p>
-                            <p className="text-sm text-white font-mono">
+                          <div className="bg-white border border-gray-100 dark:bg-white/[0.02] dark:border-transparent rounded-lg p-3">
+                            <p className="text-xs text-gray-400 dark:text-white/40">LLM Tokens</p>
+                            <p className="text-sm text-gray-900 dark:text-white font-mono">
                               {((d.llm_prompt_tokens || 0) + (d.llm_completion_tokens || 0)).toLocaleString()}
                             </p>
-                            <p className="text-xs text-white/30">
+                            <p className="text-xs text-gray-400 dark:text-white/30">
                               {d.llm_prompt_tokens?.toLocaleString()} in / {d.llm_completion_tokens?.toLocaleString()} out
                             </p>
                           </div>
-                          <div className="bg-white/[0.02] rounded-lg p-3">
-                            <p className="text-xs text-white/40">TTS Characters</p>
-                            <p className="text-sm text-white font-mono">{(d.tts_characters || 0).toLocaleString()}</p>
+                          <div className="bg-white border border-gray-100 dark:bg-white/[0.02] dark:border-transparent rounded-lg p-3">
+                            <p className="text-xs text-gray-400 dark:text-white/40">TTS Characters</p>
+                            <p className="text-sm text-gray-900 dark:text-white font-mono">{(d.tts_characters || 0).toLocaleString()}</p>
                           </div>
                         </div>
                       </div>
 
                       {/* Providers used */}
-                      <div className="border-t border-white/5 pt-3 mt-3">
-                        <p className="text-xs text-white/30 mb-3">Providers</p>
+                      <div className="border-t border-gray-200 dark:border-white/5 pt-3 mt-3">
+                        <p className="text-xs text-gray-400 dark:text-white/30 mb-3">Providers</p>
                         <div className="flex flex-wrap gap-2">
                           {d.stt_provider && (
                             <span className="px-2.5 py-1 bg-blue-500/10 border border-blue-500/20 rounded-lg text-xs text-blue-400">
@@ -379,8 +379,8 @@ export function CallDetail({ call, onClose }: CallDetailProps) {
 
             {/* Recording */}
             {call.recording_url && (
-              <div className="bg-white/[0.03] border border-white/5 rounded-xl p-5">
-                <h3 className="text-sm font-medium text-white/60 uppercase tracking-wider mb-3">Recording</h3>
+              <div className="bg-gray-50 border border-gray-200 dark:bg-white/[0.03] dark:border-white/5 rounded-xl p-5">
+                <h3 className="text-sm font-medium text-gray-400 dark:text-white/60 uppercase tracking-wider mb-3">Recording</h3>
                 <div className="flex items-center gap-3">
                   <button
                     onClick={togglePlayback}
@@ -389,20 +389,20 @@ export function CallDetail({ call, onClose }: CallDetailProps) {
                     {isPlaying ? <Pause size={18} className="text-purple-400" /> : <Play size={18} className="text-purple-400 ml-0.5" />}
                   </button>
                   <div className="flex-1">
-                    <p className="text-sm text-white">Call Recording</p>
-                    <p className="text-xs text-white/40">{formatDuration(call.duration_seconds)}</p>
+                    <p className="text-sm text-gray-900 dark:text-white">Call Recording</p>
+                    <p className="text-xs text-gray-400 dark:text-white/40">{formatDuration(call.duration_seconds)}</p>
                   </div>
                 </div>
               </div>
             )}
 
             {/* Transcript */}
-            <div className="bg-white/[0.03] border border-white/5 rounded-xl p-5">
+            <div className="bg-gray-50 border border-gray-200 dark:bg-white/[0.03] dark:border-white/5 rounded-xl p-5">
               <div className="flex items-center gap-2 mb-4">
                 <MessageSquare size={16} className="text-purple-400" />
-                <h3 className="text-sm font-medium text-white/60 uppercase tracking-wider">Transcript</h3>
+                <h3 className="text-sm font-medium text-gray-400 dark:text-white/60 uppercase tracking-wider">Transcript</h3>
                 {transcript.length > 0 && (
-                  <span className="text-xs text-white/30 ml-auto">{transcript.length} messages</span>
+                  <span className="text-xs text-gray-400 dark:text-white/30 ml-auto">{transcript.length} messages</span>
                 )}
               </div>
 
@@ -412,9 +412,9 @@ export function CallDetail({ call, onClose }: CallDetailProps) {
                 </div>
               ) : transcript.length === 0 ? (
                 <div className="text-center py-8">
-                  <MessageSquare size={32} className="mx-auto text-white/10 mb-3" />
-                  <p className="text-sm text-white/30">No transcript available</p>
-                  <p className="text-xs text-white/20 mt-1">Transcripts are saved for new calls</p>
+                  <MessageSquare size={32} className="mx-auto text-gray-200 dark:text-white/10 mb-3" />
+                  <p className="text-sm text-gray-400 dark:text-white/30">No transcript available</p>
+                  <p className="text-xs text-gray-300 dark:text-white/20 mt-1">Transcripts are saved for new calls</p>
                 </div>
               ) : (
                 <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
@@ -442,7 +442,7 @@ export function CallDetail({ call, onClose }: CallDetailProps) {
                           ? 'bg-orange-500/10 border border-orange-500/20'
                           : 'bg-purple-500/10 border border-purple-500/20'
                       }`}>
-                        <p className="text-sm text-white/90 leading-relaxed">{entry.content}</p>
+                        <p className="text-sm text-gray-800 dark:text-white/90 leading-relaxed">{entry.content}</p>
                       </div>
                     </div>
                   ))}

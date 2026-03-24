@@ -14,23 +14,24 @@
   }
   
   body {
-    @apply bg-dark-950 text-white font-sans antialiased;
+    @apply bg-white text-gray-900 font-sans antialiased dark:bg-dark-950 dark:text-white;
     margin: 0;
     min-height: 100vh;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 
   ::selection {
-    @apply bg-purple-500/30 text-white;
+    @apply bg-purple-500/30 text-gray-900 dark:text-white;
   }
 }
 
 @layer components {
   .glass {
-    @apply bg-dark-900/60 backdrop-blur-xl border border-white/10;
+    @apply bg-gray-100/80 backdrop-blur-xl border border-gray-200 dark:bg-dark-900/60 dark:border-white/10;
   }
   
   .glass-card {
-    @apply bg-white/[0.02] backdrop-blur-xl border border-white/5 rounded-2xl;
+    @apply bg-gray-50 backdrop-blur-xl border border-gray-200 rounded-2xl dark:bg-white/[0.02] dark:border-white/5;
   }
   
   .neon-border {
@@ -38,11 +39,11 @@
   }
   
   .neon-text {
-    @apply text-purple-400 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)];
+    @apply text-purple-500 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)] dark:text-purple-400;
   }
   
   .gradient-text {
-    @apply bg-gradient-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500 bg-clip-text text-transparent dark:from-purple-400 dark:via-pink-400 dark:to-purple-400;
   }
   
   .btn-primary {
@@ -53,25 +54,29 @@
   }
   
   .btn-secondary {
-    @apply px-6 py-3 bg-white/5 border border-white/10 rounded-xl font-semibold text-white 
-           hover:bg-white/10 hover:border-white/20 transition-all duration-300 
-           active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply px-6 py-3 bg-gray-100 border border-gray-300 rounded-xl font-semibold text-gray-700
+           hover:bg-gray-200 hover:border-gray-400 transition-all duration-300 
+           active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed
+           dark:bg-white/5 dark:border-white/10 dark:text-white dark:hover:bg-white/10 dark:hover:border-white/20;
   }
   
   .btn-ghost {
-    @apply px-4 py-2 text-white/60 hover:text-white hover:bg-white/5 rounded-lg transition-all duration-200;
+    @apply px-4 py-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all duration-200
+           dark:text-white/60 dark:hover:text-white dark:hover:bg-white/5;
   }
 
   .btn-danger {
-    @apply px-6 py-3 bg-red-500/10 border border-red-500/20 rounded-xl font-semibold text-red-400 
+    @apply px-6 py-3 bg-red-500/10 border border-red-500/20 rounded-xl font-semibold text-red-500 
            hover:bg-red-500/20 transition-all duration-300 active:scale-95 
-           disabled:opacity-50 disabled:cursor-not-allowed;
+           disabled:opacity-50 disabled:cursor-not-allowed dark:text-red-400;
   }
   
   .input-field {
-    @apply w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white 
-           placeholder:text-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-2 
-           focus:ring-purple-500/20 transition-all duration-200;
+    @apply w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl text-gray-900
+           placeholder:text-gray-400 focus:outline-none focus:border-purple-500/70 focus:ring-2 
+           focus:ring-purple-500/20 transition-all duration-200
+           dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder:text-white/30
+           dark:focus:border-purple-500/50;
   }
   
   .card-hover {

@@ -20,7 +20,8 @@ const SARVAM_WS_URL = 'wss://api.sarvam.ai/speech-to-text-translate/ws';
 const SARVAM_STT_WS_URL = 'wss://api.sarvam.ai/speech-to-text/ws';
 
 interface SarvamSTTConfig extends STTConfig {
-  model?: 'saarika:v2.5' | 'saaras:v2.5';
+  model?: 'saaras:v3' | 'saarika:v2.5' | 'saaras:v2.5';
+  mode?: 'transcribe' | 'translate' | 'verbatim' | 'translit' | 'codemix';
   highVadSensitivity?: boolean;
   vadSignals?: boolean;
   flushSignal?: boolean;
@@ -94,6 +95,7 @@ export class SarvamSTTProvider extends STTProvider {
     const effectiveLanguage = this.getEffectiveLanguage(language);
     const config = this.config as SarvamSTTConfig;
 
+    const model = config.model || 'saaras:v3';
     return new SarvamSTTStreamSession(
       events,
       this.logger,
@@ -101,11 +103,11 @@ export class SarvamSTTProvider extends STTProvider {
         apiKey: this.config.credentials.apiKey,
         wsUrl: this.wsUrl,
         language: effectiveLanguage,
-        model: config.model || 'saarika:v2.5',
+        model,
+        // saaras:v3 requires mode parameter; saarika:v2.5 does not use it
+        mode: model === 'saaras:v3' ? (config.mode || 'transcribe') : undefined,
         sampleRate: config.sampleRateHertz || 16000,
         encoding: config.encoding || 'LINEAR16',
-        // Phase 4: Default to LOW VAD sensitivity to prevent premature turn detection
-        // This gives users more time to pause and think without triggering AI response
         highVadSensitivity: config.highVadSensitivity ?? false,
         vadSignals: config.vadSignals ?? true,
         flushSignal: config.flushSignal ?? false
@@ -119,6 +121,7 @@ interface SarvamSessionConfig {
   wsUrl: string;
   language: SupportedLanguage;
   model: string;
+  mode?: string;
   sampleRate: number;
   encoding: string;
   highVadSensitivity: boolean;
@@ -158,17 +161,23 @@ class SarvamSTTStreamSession extends STTStreamSession {
       'language-code': languageCode,
       'model': this.sessionConfig.model,
       'sample_rate': this.sessionConfig.sampleRate.toString(),
-      'input_audio_codec': 'pcm_s16le',  // Required for raw PCM audio
+      'input_audio_codec': 'pcm_s16le',
       'high_vad_sensitivity': this.sessionConfig.highVadSensitivity ? 'true' : 'false',
       'vad_signals': 'true'
     });
+
+    // saaras:v3 requires mode parameter
+    if (this.sessionConfig.mode) {
+      params.set('mode', this.sessionConfig.mode);
+    }
 
     const wsUrl = `${this.sessionConfig.wsUrl}?${params.toString()}`;
 
     this.logger.info('Connecting to Sarvam STT', { 
       url: wsUrl,
       language: languageCode,
-      model: this.sessionConfig.model
+      model: this.sessionConfig.model,
+      mode: this.sessionConfig.mode
     });
 
     return new Promise((resolve, reject) => {
@@ -332,6 +341,10 @@ class SarvamSTTStreamSession extends STTStreamSession {
         'vad_signals': 'true'
       });
 
+      if (this.sessionConfig.mode) {
+        params.set('mode', this.sessionConfig.mode);
+      }
+
       const wsUrl = `${this.sessionConfig.wsUrl}?${params.toString()}`;
 
       this.ws = new WebSocket(wsUrl, {
@@ -397,34 +410,54 @@ class SarvamSTTStreamSession extends STTStreamSession {
         rawPreview: data.toString().substring(0, 200)
       });
       
-      // Handle response format per Sarvam AsyncAPI spec:
-      // { type: "data" | "error" | "events", data: {...} }
+      // Handle response formats for both saaras:v3 and saarika:v2.5:
+      //
+      // saaras:v3 format:   { type: "transcript", transcript: "...", ... }
+      //                     { type: "speech_start" | "speech_end" }  (vad_signals=true)
+      //
+      // saarika:v2.5 format: { type: "data", data: { transcript: "...", ... } }
+      //                      { type: "events", data: { signal_type: "START_SPEECH" } }
       switch (message.type) {
+        // ── saaras:v3 ──────────────────────────────────────────────────
+        case 'transcript':
+          if (message.transcript !== undefined) {
+            this.handleTranscript(message, true);
+          }
+          break;
+
+        case 'speech_start':
+          this.logger.debug('Sarvam: speech start detected');
+          break;
+
+        case 'speech_end':
+          this.logger.debug('Sarvam: speech end detected');
+          break;
+
+        // ── saarika:v2.5 (legacy) ──────────────────────────────────────
         case 'data':
-          // Transcription result
           if (message.data?.transcript !== undefined) {
             this.handleTranscript(message.data, true);
           }
           break;
-          
+
         case 'events':
-          // VAD events: START_SPEECH, END_SPEECH
           if (message.data?.signal_type === 'START_SPEECH') {
-            this.logger.debug('Speech start detected');
+            this.logger.debug('Sarvam: speech start detected');
           } else if (message.data?.signal_type === 'END_SPEECH') {
-            this.logger.debug('Speech end detected');
+            this.logger.debug('Sarvam: speech end detected');
           }
           break;
-          
-        case 'error':
+
+        case 'error': {
           const errorMsg = message.data?.error || message.message || 'Unknown Sarvam STT error';
           this.logger.error('Sarvam STT error', { error: errorMsg, code: message.data?.code });
           this.emitError(new Error(errorMsg));
           break;
-          
+        }
+
         default:
-          // Handle any other format
-          this.logger.debug('Unknown message type', { message });
+          this.logger.debug('Sarvam STT unknown message type', { type: message.type });
+          // Fallback: handle bare transcript field
           if (message.transcript !== undefined) {
             this.handleTranscript(message, true);
           }

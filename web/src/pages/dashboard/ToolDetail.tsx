@@ -61,7 +61,7 @@ export function ToolDetail() {
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <Loader size={32} className="text-purple-500 animate-spin mx-auto mb-4" />
-          <p className="text-white/50">Loading tool...</p>
+          <p className="text-gray-500 dark:text-white/50">Loading tool...</p>
         </div>
       </div>
     );
@@ -72,7 +72,7 @@ export function ToolDetail() {
       <div className="space-y-6">
         <button
           onClick={handleCancel}
-          className="flex items-center gap-2 text-white/60 hover:text-white transition-colors"
+          className="flex items-center gap-2 text-gray-500 dark:text-white/60 hover:text-gray-900 dark:hover:text-white transition-colors"
         >
           <ArrowLeft size={18} />
           Back to Tools
@@ -93,13 +93,13 @@ export function ToolDetail() {
         <div className="flex items-center gap-4">
           <button
             onClick={handleCancel}
-            className="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-all"
+            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 dark:text-white/60 hover:text-gray-900 dark:hover:text-white transition-all"
           >
             <ArrowLeft size={20} />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-white">{tool.name}</h1>
-            <p className="text-white/50">Configure your tool settings</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{tool.name}</h1>
+            <p className="text-gray-500 dark:text-white/50">Configure your tool settings</p>
           </div>
         </div>
 

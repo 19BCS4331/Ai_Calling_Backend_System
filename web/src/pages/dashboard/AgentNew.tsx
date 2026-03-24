@@ -33,7 +33,7 @@ export function AgentNew() {
     <div className="space-y-6">
       <button
         onClick={() => navigate('/dashboard/agents')}
-        className="flex items-center gap-2 text-white/60 hover:text-white transition-colors"
+        className="flex items-center gap-2 text-gray-500 dark:text-white/60 hover:text-gray-900 dark:hover:text-white transition-colors"
       >
         <ArrowLeft size={18} />
         Back to Agents

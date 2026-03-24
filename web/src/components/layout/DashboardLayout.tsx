@@ -4,7 +4,7 @@ import {
   Zap, LayoutDashboard, Phone, Settings, BarChart3, 
   Bot, LogOut, ChevronLeft, Menu, Wrench, X,
   PhoneIncoming, Wallet, TrendingUp,
-  Clock
+  Clock, Sun, Moon
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '../../store/auth';
@@ -13,6 +13,7 @@ import { cn } from '../../lib/utils';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import VocaCoreAILogo from '../../assets/VocaCore-final-square.png';
 import { supabase } from '../../lib/supabase';
+import { useTheme } from '../../hooks/useTheme';
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Overview', href: '/dashboard' },
@@ -39,6 +40,7 @@ export function DashboardLayout() {
   const { user, isAuthenticated, logout } = useAuthStore();
   const { currentOrganization, isLoading: orgLoading } = useOrganizationStore();
   const navigate = useNavigate();
+  const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -189,7 +191,7 @@ export function DashboardLayout() {
   const sidebarWidth = collapsed ? 80 : 260;
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f]">
+    <div className="min-h-screen bg-gray-50 dark:bg-[#0a0a0f]">
       {/* Mobile overlay */}
       <AnimatePresence>
         {mobileOpen && (
@@ -209,7 +211,7 @@ export function DashboardLayout() {
         initial={false}
         animate={{ width: sidebarWidth }}
         transition={{ duration: 0.2, ease: 'easeInOut' }}
-        className="hidden lg:flex fixed left-0 top-0 h-screen flex-col z-50 bg-gradient-to-b from-[#0d0d14] to-[#0a0a0f] border-r border-white/[0.06]"
+        className="hidden lg:flex fixed left-0 top-0 h-screen flex-col z-50 bg-gradient-to-b from-white to-gray-50 dark:from-[#0d0d14] dark:to-[#0a0a0f] border-r border-gray-200 dark:border-white/[0.06]"
       >
         {/* Logo */}
         <div className="h-16 flex items-center justify-between px-4 border-b border-white/[0.06]">
@@ -228,7 +230,7 @@ export function DashboardLayout() {
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -10 }}
                   transition={{ duration: 0.15 }}
-                  className="text-lg font-bold whitespace-nowrap bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent"
+                  className="text-lg font-bold whitespace-nowrap text-gray-900 dark:text-transparent dark:bg-gradient-to-r dark:from-white dark:to-white/80 dark:bg-clip-text"
                 >
                   VocaCore AI
                 </motion.span>
@@ -237,7 +239,7 @@ export function DashboardLayout() {
           </Link>
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="p-2 text-white/40 hover:text-white/80 hover:bg-white/[0.06] rounded-lg transition-all duration-200"
+            className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:text-white/40 dark:hover:text-white/80 dark:hover:bg-white/[0.06] rounded-lg transition-all duration-200"
           >
             <ChevronLeft size={18} className={cn('transition-transform duration-200', collapsed && 'rotate-180')} />
           </button>
@@ -255,8 +257,8 @@ export function DashboardLayout() {
                 className={cn(
                   'group relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200',
                   isActive 
-                    ? 'bg-purple-500/15 text-white' 
-                    : 'text-white/50 hover:text-white/90 hover:bg-white/[0.04]'
+                    ? 'bg-purple-500/15 text-gray-900 dark:text-white' 
+                    : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100 dark:text-white/50 dark:hover:text-white/90 dark:hover:bg-white/[0.04]'
                 )}
               >
                 {/* Active indicator */}
@@ -271,7 +273,7 @@ export function DashboardLayout() {
                   size={20} 
                   className={cn(
                     'flex-shrink-0 transition-colors duration-200',
-                    isActive ? 'text-purple-400' : 'group-hover:text-white/80'
+                    isActive ? 'text-purple-400' : 'group-hover:text-gray-800 dark:group-hover:text-white/80'
                   )} 
                 />
                 <AnimatePresence mode="wait">
@@ -283,7 +285,7 @@ export function DashboardLayout() {
                       transition={{ duration: 0.15 }}
                       className={cn(
                         'font-medium text-sm whitespace-nowrap',
-                        isActive && 'text-white'
+                        isActive ? 'text-gray-900 dark:text-white' : ''
                       )}
                     >
                       {item.label}
@@ -304,20 +306,20 @@ export function DashboardLayout() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 10 }}
-                  className="px-3 py-3 rounded-xl bg-gradient-to-br from-purple-500/10 to-blue-500/10 border border-purple-500/20"
+                  className="px-3 py-3 rounded-xl bg-gradient-to-br from-purple-500/10 to-blue-500/10 border border-purple-500/20 dark:border-purple-500/20"
                 >
                   {/* Trial Plan - Credit Balance */}
                   {planType === 'trial' && creditBalance !== null && (
                     <>
                       <div className="flex items-center gap-2 mb-2">
                         <Wallet size={14} className="text-purple-400" />
-                        <span className="text-xs font-medium text-white/70">Trial Credit</span>
+                        <span className="text-xs font-medium text-gray-500 dark:text-white/70">Trial Credit</span>
                       </div>
                       <div className="flex items-baseline gap-1 mb-2">
-                        <span className="text-xl font-bold text-white">${creditBalance.toFixed(2)}</span>
-                        <span className="text-xs text-white/40">/ ${creditTotal?.toFixed(2)}</span>
+                        <span className="text-xl font-bold text-gray-900 dark:text-white">${creditBalance.toFixed(2)}</span>
+                        <span className="text-xs text-gray-400 dark:text-white/40">/ ${creditTotal?.toFixed(2)}</span>
                       </div>
-                      <div className="h-1.5 bg-white/10 rounded-full overflow-hidden mb-2">
+                      <div className="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-2">
                         <motion.div
                           initial={{ width: 0 }}
                           animate={{ width: `${creditTotal ? (creditBalance / creditTotal) * 100 : 0}%` }}
@@ -329,7 +331,7 @@ export function DashboardLayout() {
                         />
                       </div>
                       {creditBalance < 1 && (
-                        <p className="text-xs text-red-400 flex items-center gap-1">
+                        <p className="text-xs text-red-500 dark:text-red-400 flex items-center gap-1">
                           <TrendingUp size={12} />
                           Low balance - Upgrade soon
                         </p>
@@ -342,12 +344,12 @@ export function DashboardLayout() {
                     <>
                       <div className="flex items-center gap-2 mb-2">
                         <TrendingUp size={14} className="text-blue-400" />
-                        <span className="text-xs font-medium text-white/70">This Month</span>
+                        <span className="text-xs font-medium text-gray-500 dark:text-white/70">This Month</span>
                       </div>
                       <div className="flex items-baseline gap-1 mb-1">
-                        <span className="text-xl font-bold text-white">${monthlyUsage.toFixed(2)}</span>
+                        <span className="text-xl font-bold text-gray-900 dark:text-white">${monthlyUsage.toFixed(2)}</span>
                       </div>
-                      <p className="text-xs text-white/40">Pay-as-you-go • $0.15/min</p>
+                      <p className="text-xs text-gray-400 dark:text-white/40">Pay-as-you-go • $0.15/min</p>
                     </>
                   )}
 
@@ -356,13 +358,13 @@ export function DashboardLayout() {
                     <>
                       <div className="flex items-center gap-2 mb-2">
                         <Clock size={14} className="text-green-400" />
-                        <span className="text-xs font-medium text-white/70 capitalize">{planSlug} Plan</span>
+                        <span className="text-xs font-medium text-gray-500 dark:text-white/70 capitalize">{planSlug} Plan</span>
                       </div>
                       <div className="flex items-baseline gap-1 mb-2">
-                        <span className="text-xl font-bold text-white">{minutesUsed}</span>
-                        <span className="text-xs text-white/40">/ {minutesIncluded} min</span>
+                        <span className="text-xl font-bold text-gray-900 dark:text-white">{minutesUsed}</span>
+                        <span className="text-xs text-gray-400 dark:text-white/40">/ {minutesIncluded} min</span>
                       </div>
-                      <div className="h-1.5 bg-white/10 rounded-full overflow-hidden mb-2">
+                      <div className="h-1.5 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden mb-2">
                         <motion.div
                           initial={{ width: 0 }}
                           animate={{ width: `${minutesIncluded ? Math.min((minutesUsed / minutesIncluded) * 100, 100) : 0}%` }}
@@ -374,7 +376,7 @@ export function DashboardLayout() {
                         />
                       </div>
                       {minutesUsed > minutesIncluded && (
-                        <p className="text-xs text-red-400 flex items-center gap-1">
+                        <p className="text-xs text-red-500 dark:text-red-400 flex items-center gap-1">
                           <TrendingUp size={12} />
                           {minutesUsed - minutesIncluded} min overage
                         </p>
@@ -401,28 +403,57 @@ export function DashboardLayout() {
         )}
 
         {/* User section */}
-        <div className="p-3 border-t border-white/[0.06]">
+        <div className="p-3 border-t border-gray-200 dark:border-white/[0.06]">
           <AnimatePresence mode="wait">
             {!collapsed && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="px-3 py-2.5 mb-2 rounded-xl bg-white/[0.02]"
+                className="px-3 py-2.5 mb-2 rounded-xl bg-gray-50 dark:bg-white/[0.02]"
               >
-                <p className="text-sm font-medium text-white/90 truncate">{user?.name}</p>
-                <p className="text-xs text-white/40 truncate">{user?.email}</p>
+                <p className="text-sm font-medium text-gray-800 dark:text-white/90 truncate">{user?.name}</p>
+                <p className="text-xs text-gray-400 dark:text-white/40 truncate">{user?.email}</p>
               </motion.div>
             )}
           </AnimatePresence>
+          {/* Theme Toggle */}
+          <button
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            className={cn(
+              'group flex items-center gap-3 px-3 py-2.5 w-full rounded-xl transition-all duration-200 mb-1',
+              'text-gray-500 hover:text-gray-900 hover:bg-gray-100 dark:text-white/50 dark:hover:text-white dark:hover:bg-white/[0.06]'
+            )}
+          >
+            {theme === 'dark' ? (
+              <Sun size={20} className="flex-shrink-0 text-yellow-400 group-hover:text-yellow-300 transition-colors" />
+            ) : (
+              <Moon size={20} className="flex-shrink-0 text-indigo-500 group-hover:text-indigo-600 transition-colors" />
+            )}
+            <AnimatePresence mode="wait">
+              {!collapsed && (
+                <motion.span
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  transition={{ duration: 0.15 }}
+                  className="font-medium text-sm"
+                >
+                  {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </button>
+
           <button
             onClick={() => setShowLogoutConfirm(true)}
             className={cn(
               'group flex items-center gap-3 px-3 py-2.5 w-full rounded-xl transition-all duration-200',
-              'text-white/50 hover:text-red-400 hover:bg-red-500/10'
+              'text-gray-500 hover:text-red-500 hover:bg-red-50 dark:text-white/50 dark:hover:text-red-400 dark:hover:bg-red-500/10'
             )}
           >
-            <LogOut size={20} className="flex-shrink-0 group-hover:text-red-400 transition-colors" />
+            <LogOut size={20} className="flex-shrink-0 group-hover:text-red-500 dark:group-hover:text-red-400 transition-colors" />
             <AnimatePresence mode="wait">
               {!collapsed && (
                 <motion.span
@@ -448,21 +479,21 @@ export function DashboardLayout() {
             animate={{ x: 0 }}
             exit={{ x: '-100%' }}
             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className="lg:hidden fixed left-0 top-0 h-full w-[280px] z-50 bg-gradient-to-b from-[#0d0d14] to-[#0a0a0f] border-r border-white/[0.06] flex flex-col"
+            className="lg:hidden fixed left-0 top-0 h-full w-[280px] z-50 bg-gradient-to-b from-white to-gray-50 dark:from-[#0d0d14] dark:to-[#0a0a0f] border-r border-gray-200 dark:border-white/[0.06] flex flex-col"
           >
             {/* Mobile Header */}
-            <div className="h-16 flex items-center justify-between px-4 border-b border-white/[0.06]">
+            <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200 dark:border-white/[0.06]">
               <Link to="/dashboard" className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 via-purple-600 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/20">
                   <Zap size={20} className="text-white" />
                 </div>
-                <span className="text-lg font-bold bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent">
+                <span className="text-lg font-bold text-gray-900 dark:text-transparent dark:bg-gradient-to-r dark:from-white dark:to-white/80 dark:bg-clip-text">
                   VocaCore AI
                 </span>
               </Link>
               <button
                 onClick={() => setMobileOpen(false)}
-                className="p-2 text-white/40 hover:text-white/80 hover:bg-white/[0.06] rounded-lg transition-all"
+                className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:text-white/40 dark:hover:text-white/80 dark:hover:bg-white/[0.06] rounded-lg transition-all"
               >
                 <X size={20} />
               </button>
@@ -485,8 +516,8 @@ export function DashboardLayout() {
                       className={cn(
                         'group relative flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200',
                         isActive 
-                          ? 'bg-purple-500/15 text-white' 
-                          : 'text-white/50 hover:text-white/90 hover:bg-white/[0.04]'
+                          ? 'bg-purple-500/15 text-gray-900 dark:text-white' 
+                          : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100 dark:text-white/50 dark:hover:text-white/90 dark:hover:bg-white/[0.04]'
                       )}
                     >
                       {isActive && (
@@ -499,7 +530,7 @@ export function DashboardLayout() {
                           isActive ? 'text-purple-400' : ''
                         )} 
                       />
-                      <span className={cn('font-medium', isActive && 'text-white')}>
+                      <span className={cn('font-medium', isActive && 'text-gray-900 dark:text-white')}>
                         {item.label}
                       </span>
                     </Link>
@@ -517,13 +548,13 @@ export function DashboardLayout() {
                     <>
                       <div className="flex items-center gap-2 mb-2">
                         <Wallet size={16} className="text-purple-400" />
-                        <span className="text-sm font-medium text-white/70">Trial Credit</span>
+                        <span className="text-sm font-medium text-gray-500 dark:text-white/70">Trial Credit</span>
                       </div>
                       <div className="flex items-baseline gap-1 mb-2">
-                        <span className="text-2xl font-bold text-white">${creditBalance.toFixed(2)}</span>
-                        <span className="text-sm text-white/40">/ ${creditTotal?.toFixed(2)}</span>
+                        <span className="text-2xl font-bold text-gray-900 dark:text-white">${creditBalance.toFixed(2)}</span>
+                        <span className="text-sm text-gray-400 dark:text-white/40">/ ${creditTotal?.toFixed(2)}</span>
                       </div>
-                      <div className="h-2 bg-white/10 rounded-full overflow-hidden mb-2">
+                      <div className="h-2 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden mb-2">
                         <div
                           style={{ width: `${creditTotal ? (creditBalance / creditTotal) * 100 : 0}%` }}
                           className={cn(
@@ -533,7 +564,7 @@ export function DashboardLayout() {
                         />
                       </div>
                       {creditBalance < 1 && (
-                        <p className="text-xs text-red-400 flex items-center gap-1">
+                        <p className="text-xs text-red-500 dark:text-red-400 flex items-center gap-1">
                           <TrendingUp size={12} />
                           Low balance - Upgrade soon
                         </p>
@@ -546,12 +577,12 @@ export function DashboardLayout() {
                     <>
                       <div className="flex items-center gap-2 mb-2">
                         <TrendingUp size={16} className="text-blue-400" />
-                        <span className="text-sm font-medium text-white/70">This Month</span>
+                        <span className="text-sm font-medium text-gray-500 dark:text-white/70">This Month</span>
                       </div>
                       <div className="flex items-baseline gap-1 mb-1">
-                        <span className="text-2xl font-bold text-white">${monthlyUsage.toFixed(2)}</span>
+                        <span className="text-2xl font-bold text-gray-900 dark:text-white">${monthlyUsage.toFixed(2)}</span>
                       </div>
-                      <p className="text-xs text-white/40">Pay-as-you-go • $0.15/min</p>
+                      <p className="text-xs text-gray-400 dark:text-white/40">Pay-as-you-go • $0.15/min</p>
                     </>
                   )}
 
@@ -560,13 +591,13 @@ export function DashboardLayout() {
                     <>
                       <div className="flex items-center gap-2 mb-2">
                         <Clock size={16} className="text-green-400" />
-                        <span className="text-sm font-medium text-white/70 capitalize">{planSlug} Plan</span>
+                        <span className="text-sm font-medium text-gray-500 dark:text-white/70 capitalize">{planSlug} Plan</span>
                       </div>
                       <div className="flex items-baseline gap-1 mb-2">
-                        <span className="text-2xl font-bold text-white">{minutesUsed}</span>
-                        <span className="text-sm text-white/40">/ {minutesIncluded} min</span>
+                        <span className="text-2xl font-bold text-gray-900 dark:text-white">{minutesUsed}</span>
+                        <span className="text-sm text-gray-400 dark:text-white/40">/ {minutesIncluded} min</span>
                       </div>
-                      <div className="h-2 bg-white/10 rounded-full overflow-hidden mb-2">
+                      <div className="h-2 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden mb-2">
                         <div
                           style={{ width: `${minutesIncluded ? Math.min((minutesUsed / minutesIncluded) * 100, 100) : 0}%` }}
                           className={cn(
@@ -576,7 +607,7 @@ export function DashboardLayout() {
                         />
                       </div>
                       {minutesUsed > minutesIncluded && (
-                        <p className="text-xs text-red-400 flex items-center gap-1">
+                        <p className="text-xs text-red-500 dark:text-red-400 flex items-center gap-1">
                           <TrendingUp size={12} />
                           {minutesUsed - minutesIncluded} min overage
                         </p>
@@ -588,14 +619,14 @@ export function DashboardLayout() {
             )}
 
             {/* Mobile User Section */}
-            <div className="p-3 border-t border-white/[0.06]">
-              <div className="px-4 py-3 mb-2 rounded-xl bg-white/[0.02]">
-                <p className="text-sm font-medium text-white/90 truncate">{user?.name}</p>
-                <p className="text-xs text-white/40 truncate">{user?.email}</p>
+            <div className="p-3 border-t border-gray-200 dark:border-white/[0.06]">
+              <div className="px-4 py-3 mb-2 rounded-xl bg-gray-50 dark:bg-white/[0.02]">
+                <p className="text-sm font-medium text-gray-800 dark:text-white/90 truncate">{user?.name}</p>
+                <p className="text-xs text-gray-400 dark:text-white/40 truncate">{user?.email}</p>
               </div>
               <button
                 onClick={() => setShowLogoutConfirm(true)}
-                className="group flex items-center gap-3 px-4 py-3 w-full rounded-xl text-white/50 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                className="group flex items-center gap-3 px-4 py-3 w-full rounded-xl text-gray-500 hover:text-red-500 hover:bg-red-50 dark:text-white/50 dark:hover:text-red-400 dark:hover:bg-red-500/10 transition-all"
               >
                 <LogOut size={22} className="flex-shrink-0 group-hover:text-red-400" />
                 <span className="font-medium">Logout</span>
@@ -611,19 +642,26 @@ export function DashboardLayout() {
         style={{ marginLeft: collapsed ? 80 : 260 }}
       >
         {/* Mobile header */}
-        <header className="lg:hidden sticky top-0 z-30 bg-[#0a0a0f]/95 backdrop-blur-xl border-b border-white/[0.06] px-4 h-14 flex items-center gap-4">
+        <header className="lg:hidden sticky top-0 z-30 bg-white/95 dark:bg-[#0a0a0f]/95 backdrop-blur-xl border-b border-gray-200 dark:border-white/[0.06] px-4 h-14 flex items-center gap-4">
           <button
             onClick={() => setMobileOpen(true)}
-            className="p-2 -ml-2 text-white/60 hover:text-white hover:bg-white/[0.06] rounded-lg transition-all"
+            className="p-2 -ml-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 dark:text-white/60 dark:hover:text-white dark:hover:bg-white/[0.06] rounded-lg transition-all"
           >
             <Menu size={22} />
           </button>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-1">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
               <Zap size={16} className="text-white" />
             </div>
-            <span className="font-bold text-white">VocaCore AI</span>
+            <span className="font-bold text-gray-900 dark:text-white">VocaCore AI</span>
           </div>
+          <button
+            onClick={toggleTheme}
+            className="p-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 dark:text-white/50 dark:hover:text-white dark:hover:bg-white/[0.06] rounded-lg transition-all"
+            aria-label="Toggle theme"
+          >
+            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
         </header>
 
         {/* Page content - Scrollable */}

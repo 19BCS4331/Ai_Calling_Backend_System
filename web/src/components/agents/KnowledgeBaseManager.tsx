@@ -270,7 +270,7 @@ export function KnowledgeBaseManager({ agentId, orgId }: Props) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12 text-white/40">
+      <div className="flex items-center justify-center py-12 text-gray-400 dark:text-white/40">
         <Loader2 size={24} className="animate-spin mr-2" />
         Loading knowledge bases...
       </div>
@@ -291,7 +291,7 @@ export function KnowledgeBaseManager({ agentId, orgId }: Props) {
 
       {/* KB List + Create */}
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
           <Database size={20} className="text-purple-400" />
           Knowledge Bases
         </h3>
@@ -313,26 +313,26 @@ export function KnowledgeBaseManager({ agentId, orgId }: Props) {
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden"
           >
-            <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-3">
+            <div className="bg-gray-50 border border-gray-200 dark:bg-white/5 dark:border-white/10 rounded-xl p-4 space-y-3">
               <input
                 type="text"
                 placeholder="Knowledge base name"
                 value={newKBName}
                 onChange={e => setNewKBName(e.target.value)}
-                className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 text-sm"
+                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 text-sm"
               />
               <input
                 type="text"
                 placeholder="Description (optional)"
                 value={newKBDescription}
                 onChange={e => setNewKBDescription(e.target.value)}
-                className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 text-sm"
+                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 text-sm"
               />
               <div className="flex gap-2 justify-end">
                 <button
                   type="button"
                   onClick={() => { setShowCreateForm(false); setNewKBName(''); setNewKBDescription(''); }}
-                  className="px-3 py-1.5 text-sm text-white/50 hover:text-white/70 transition-colors"
+                  className="px-3 py-1.5 text-sm text-gray-400 dark:text-white/50 hover:text-gray-600 dark:hover:text-white/70 transition-colors"
                 >
                   Cancel
                 </button>
@@ -353,7 +353,7 @@ export function KnowledgeBaseManager({ agentId, orgId }: Props) {
 
       {/* KB Cards */}
       {knowledgeBases.length === 0 && !showCreateForm ? (
-        <div className="text-center py-8 text-white/30">
+        <div className="text-center py-8 text-gray-300 dark:text-white/30">
           <Database size={32} className="mx-auto mb-2 opacity-50" />
           <p className="text-sm">No knowledge bases yet</p>
           <p className="text-xs mt-1">Create one to add documents, URLs, or text for your agent to reference</p>
@@ -366,29 +366,29 @@ export function KnowledgeBaseManager({ agentId, orgId }: Props) {
               className={`border rounded-xl p-3 cursor-pointer transition-all ${
                 selectedKB?.id === kb.id
                   ? 'bg-purple-500/10 border-purple-500/30'
-                  : 'bg-white/[0.02] border-white/10 hover:border-white/20'
+                  : 'bg-white dark:bg-white/[0.02] border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20 shadow-sm dark:shadow-none'
               }`}
               onClick={() => setSelectedKB(selectedKB?.id === kb.id ? null : kb)}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {getStatusIcon(kb.status)}
-                  <span className="text-sm font-medium text-white">{kb.name}</span>
-                  <span className="text-xs text-white/30">{kb.chunk_count} chunks</span>
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">{kb.name}</span>
+                  <span className="text-xs text-gray-300 dark:text-white/30">{kb.chunk_count} chunks</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={e => { e.stopPropagation(); handleDeleteKB(kb.id); }}
-                    className="p-1 text-white/30 hover:text-red-400 transition-colors"
+                    className="p-1 text-gray-300 dark:text-white/30 hover:text-red-400 transition-colors"
                   >
                     <Trash2 size={14} />
                   </button>
-                  {selectedKB?.id === kb.id ? <ChevronUp size={14} className="text-white/40" /> : <ChevronDown size={14} className="text-white/40" />}
+                  {selectedKB?.id === kb.id ? <ChevronUp size={14} className="text-gray-400 dark:text-white/40" /> : <ChevronDown size={14} className="text-gray-400 dark:text-white/40" />}
                 </div>
               </div>
               {kb.description && (
-                <p className="text-xs text-white/40 mt-1 ml-5">{kb.description}</p>
+                <p className="text-xs text-gray-400 dark:text-white/40 mt-1 ml-5">{kb.description}</p>
               )}
             </div>
           ))}
@@ -406,12 +406,12 @@ export function KnowledgeBaseManager({ agentId, orgId }: Props) {
           >
             {/* Add Source Buttons */}
             <div className="flex items-center gap-2">
-              <span className="text-sm text-white/50">Add source:</span>
+              <span className="text-sm text-gray-400 dark:text-white/50">Add source:</span>
               <button
                 type="button"
                 onClick={() => setAddSourceMode(addSourceMode === 'text' ? null : 'text')}
                 className={`px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 transition-colors ${
-                  addSourceMode === 'text' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/5 text-white/50 hover:text-white/70'
+                  addSourceMode === 'text' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gray-100 dark:bg-white/5 text-gray-400 dark:text-white/50 hover:text-gray-700 dark:hover:text-white/70'
                 }`}
               >
                 <Type size={12} /> Text
@@ -420,7 +420,7 @@ export function KnowledgeBaseManager({ agentId, orgId }: Props) {
                 type="button"
                 onClick={() => setAddSourceMode(addSourceMode === 'url' ? null : 'url')}
                 className={`px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 transition-colors ${
-                  addSourceMode === 'url' ? 'bg-purple-500/20 text-purple-400' : 'bg-white/5 text-white/50 hover:text-white/70'
+                  addSourceMode === 'url' ? 'bg-purple-500/20 text-purple-400' : 'bg-gray-100 dark:bg-white/5 text-gray-400 dark:text-white/50 hover:text-gray-700 dark:hover:text-white/70'
                 }`}
               >
                 <Globe size={12} /> URL
@@ -429,7 +429,7 @@ export function KnowledgeBaseManager({ agentId, orgId }: Props) {
                 type="button"
                 onClick={() => setAddSourceMode(addSourceMode === 'document' ? null : 'document')}
                 className={`px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 transition-colors ${
-                  addSourceMode === 'document' ? 'bg-blue-500/20 text-blue-400' : 'bg-white/5 text-white/50 hover:text-white/70'
+                  addSourceMode === 'document' ? 'bg-blue-500/20 text-blue-400' : 'bg-gray-100 dark:bg-white/5 text-gray-400 dark:text-white/50 hover:text-gray-700 dark:hover:text-white/70'
                 }`}
               >
                 <Upload size={12} /> Document
@@ -439,7 +439,7 @@ export function KnowledgeBaseManager({ agentId, orgId }: Props) {
                   type="button"
                   onClick={() => setShowSearch(!showSearch)}
                   className={`px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 transition-colors ${
-                    showSearch ? 'bg-yellow-500/20 text-yellow-400' : 'bg-white/5 text-white/50 hover:text-white/70'
+                    showSearch ? 'bg-yellow-500/20 text-yellow-400' : 'bg-gray-100 dark:bg-white/5 text-gray-400 dark:text-white/50 hover:text-gray-700 dark:hover:text-white/70'
                   }`}
                 >
                   <Search size={12} /> Test
@@ -462,17 +462,17 @@ export function KnowledgeBaseManager({ agentId, orgId }: Props) {
                       placeholder="Source name (e.g., 'Product FAQ')"
                       value={sourceName}
                       onChange={e => setSourceName(e.target.value)}
-                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 focus:outline-none focus:border-emerald-500/50 text-sm"
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:border-emerald-500/50 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 text-sm"
                     />
                     <textarea
                       placeholder="Paste your text content here..."
                       value={sourceContent}
                       onChange={e => setSourceContent(e.target.value)}
                       rows={6}
-                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 focus:outline-none focus:border-emerald-500/50 text-sm resize-none"
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:border-emerald-500/50 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 text-sm resize-none"
                     />
                     <div className="flex gap-2 justify-end">
-                      <button type="button" onClick={resetSourceForm} className="px-3 py-1.5 text-sm text-white/50 hover:text-white/70">
+                      <button type="button" onClick={resetSourceForm} className="px-3 py-1.5 text-sm text-gray-400 dark:text-white/50 hover:text-gray-600 dark:hover:text-white/70">
                         Cancel
                       </button>
                       <button
@@ -502,17 +502,17 @@ export function KnowledgeBaseManager({ agentId, orgId }: Props) {
                       placeholder="Source name (e.g., 'Company Website')"
                       value={sourceName}
                       onChange={e => setSourceName(e.target.value)}
-                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 text-sm"
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 text-sm"
                     />
                     <input
                       type="url"
                       placeholder="https://example.com/page"
                       value={sourceUrl}
                       onChange={e => setSourceUrl(e.target.value)}
-                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 text-sm"
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 text-sm"
                     />
                     <div className="flex gap-2 justify-end">
-                      <button type="button" onClick={resetSourceForm} className="px-3 py-1.5 text-sm text-white/50 hover:text-white/70">
+                      <button type="button" onClick={resetSourceForm} className="px-3 py-1.5 text-sm text-gray-400 dark:text-white/50 hover:text-gray-600 dark:hover:text-white/70">
                         Cancel
                       </button>
                       <button
@@ -537,10 +537,10 @@ export function KnowledgeBaseManager({ agentId, orgId }: Props) {
                   className="overflow-hidden"
                 >
                   <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-4">
-                    <label className="flex flex-col items-center justify-center py-6 border-2 border-dashed border-white/10 rounded-xl cursor-pointer hover:border-blue-500/30 transition-colors">
+                    <label className="flex flex-col items-center justify-center py-6 border-2 border-dashed border-gray-200 dark:border-white/10 rounded-xl cursor-pointer hover:border-blue-500/30 transition-colors">
                       <Upload size={24} className="text-blue-400 mb-2" />
-                      <span className="text-sm text-white/60">Click to upload a document</span>
-                      <span className="text-xs text-white/30 mt-1">PDF, DOCX, TXT, CSV, MD, JSON</span>
+                      <span className="text-sm text-gray-500 dark:text-white/60">Click to upload a document</span>
+                      <span className="text-xs text-gray-300 dark:text-white/30 mt-1">PDF, DOCX, TXT, CSV, MD, JSON</span>
                       <input
                         type="file"
                         className="hidden"
@@ -557,7 +557,7 @@ export function KnowledgeBaseManager({ agentId, orgId }: Props) {
                       </div>
                     )}
                     <div className="flex justify-end mt-3">
-                      <button type="button" onClick={resetSourceForm} className="px-3 py-1.5 text-sm text-white/50 hover:text-white/70">
+                      <button type="button" onClick={resetSourceForm} className="px-3 py-1.5 text-sm text-gray-400 dark:text-white/50 hover:text-gray-600 dark:hover:text-white/70">
                         Cancel
                       </button>
                     </div>
@@ -583,7 +583,7 @@ export function KnowledgeBaseManager({ agentId, orgId }: Props) {
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && handleSearch()}
-                        className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 focus:outline-none focus:border-yellow-500/50 text-sm"
+                        className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:border-yellow-500/50 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 text-sm"
                       />
                       <button
                         type="button"
@@ -598,12 +598,12 @@ export function KnowledgeBaseManager({ agentId, orgId }: Props) {
                     {searchResults.length > 0 && (
                       <div className="space-y-2 max-h-60 overflow-y-auto">
                         {searchResults.map((r, i) => (
-                          <div key={i} className="bg-white/5 border border-white/10 rounded-lg p-3">
+                          <div key={i} className="bg-gray-50 border border-gray-200 dark:bg-white/5 dark:border-white/10 rounded-lg p-3">
                             <div className="flex items-center justify-between mb-1">
-                              <span className="text-xs text-white/40">{r.source_name}</span>
+                              <span className="text-xs text-gray-400 dark:text-white/40">{r.source_name}</span>
                               <span className="text-xs text-yellow-400">{Math.round(r.similarity * 100)}% match</span>
                             </div>
-                            <p className="text-xs text-white/70 line-clamp-3">{r.content}</p>
+                            <p className="text-xs text-gray-600 dark:text-white/70 line-clamp-3">{r.content}</p>
                           </div>
                         ))}
                       </div>
@@ -615,22 +615,22 @@ export function KnowledgeBaseManager({ agentId, orgId }: Props) {
 
             {/* Sources List */}
             <div>
-              <h4 className="text-sm font-medium text-white/60 mb-2">Sources ({sources.length})</h4>
+              <h4 className="text-sm font-medium text-gray-500 dark:text-white/60 mb-2">Sources ({sources.length})</h4>
               {sources.length === 0 ? (
-                <p className="text-xs text-white/30 py-4 text-center">No sources added yet</p>
+                <p className="text-xs text-gray-300 dark:text-white/30 py-4 text-center">No sources added yet</p>
               ) : (
                 <div className="space-y-1.5">
                   {sources.map(source => (
                     <div
                       key={source.id}
-                      className="flex items-center justify-between bg-white/[0.02] border border-white/5 rounded-lg px-3 py-2"
+                      className="flex items-center justify-between bg-gray-50 border border-gray-100 dark:bg-white/[0.02] dark:border-white/5 rounded-lg px-3 py-2"
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         {getSourceIcon(source.source_type)}
-                        <span className="text-sm text-white/80 truncate">{source.name}</span>
+                        <span className="text-sm text-gray-700 dark:text-white/80 truncate">{source.name}</span>
                         {getStatusIcon(source.status)}
                         {source.status === 'ready' && (
-                          <span className="text-xs text-white/30">{source.chunk_count} chunks</span>
+                          <span className="text-xs text-gray-300 dark:text-white/30">{source.chunk_count} chunks</span>
                         )}
                         {source.status === 'error' && source.error_message && (
                           <span className="text-xs text-red-400 truncate max-w-[200px]" title={source.error_message}>
@@ -641,7 +641,7 @@ export function KnowledgeBaseManager({ agentId, orgId }: Props) {
                       <button
                         type="button"
                         onClick={() => handleDeleteSource(source.id)}
-                        className="p-1 text-white/20 hover:text-red-400 transition-colors flex-shrink-0"
+                        className="p-1 text-gray-300 dark:text-white/20 hover:text-red-400 transition-colors flex-shrink-0"
                       >
                         <Trash2 size={14} />
                       </button>

@@ -92,10 +92,10 @@ export function VersionHistory({ agentId, currentVersion, publishedVersion, onRo
 
   if (versions.length === 0) {
     return (
-      <div className="bg-white/[0.02] border border-white/5 rounded-xl p-8 text-center">
-        <Clock size={32} className="mx-auto text-white/20 mb-3" />
-        <p className="text-white/50 text-sm">No version history yet</p>
-        <p className="text-white/30 text-xs mt-1">Publish this agent to create the first version</p>
+      <div className="bg-gray-50 border border-gray-200 dark:bg-white/[0.02] dark:border-white/5 rounded-xl p-8 text-center">
+        <Clock size={32} className="mx-auto text-gray-300 dark:text-white/20 mb-3" />
+        <p className="text-gray-400 dark:text-white/50 text-sm">No version history yet</p>
+        <p className="text-gray-300 dark:text-white/30 text-xs mt-1">Publish this agent to create the first version</p>
       </div>
     );
   }
@@ -112,17 +112,17 @@ export function VersionHistory({ agentId, currentVersion, publishedVersion, onRo
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.05 }}
-            className={`bg-white/[0.02] border rounded-xl p-4 ${
+            className={`border rounded-xl p-4 ${
               isPublished
                 ? 'border-green-500/30 bg-green-500/5'
-                : 'border-white/5'
+                : 'bg-white dark:bg-white/[0.02] border-gray-200 dark:border-white/5 shadow-sm dark:shadow-none'
             }`}
           >
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
                 {/* Version Header */}
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-sm font-semibold text-white">
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">
                     Version {version.version}
                   </span>
                   {isPublished && (
@@ -140,11 +140,11 @@ export function VersionHistory({ agentId, currentVersion, publishedVersion, onRo
 
                 {/* Change Summary */}
                 {version.change_summary && (
-                  <p className="text-sm text-white/70 mb-3">{version.change_summary}</p>
+                  <p className="text-sm text-gray-600 dark:text-white/70 mb-3">{version.change_summary}</p>
                 )}
 
                 {/* Metadata */}
-                <div className="flex flex-wrap items-center gap-4 text-xs text-white/40">
+                <div className="flex flex-wrap items-center gap-4 text-xs text-gray-400 dark:text-white/40">
                   {version.published_at && (
                     <div className="flex items-center gap-1.5">
                       <Clock size={14} />
@@ -160,29 +160,29 @@ export function VersionHistory({ agentId, currentVersion, publishedVersion, onRo
                 </div>
 
                 {/* Config Preview */}
-                <div className="mt-3 pt-3 border-t border-white/5">
+                <div className="mt-3 pt-3 border-t border-gray-100 dark:border-white/5">
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
                     <div>
-                      <p className="text-white/40 mb-0.5">LLM</p>
-                      <p className="text-white/70 font-medium">
+                      <p className="text-gray-400 dark:text-white/40 mb-0.5">LLM</p>
+                      <p className="text-gray-700 dark:text-white/70 font-medium">
                         {version.config_snapshot.llm_provider}
                       </p>
                     </div>
                     <div>
-                      <p className="text-white/40 mb-0.5">TTS</p>
-                      <p className="text-white/70 font-medium">
+                      <p className="text-gray-400 dark:text-white/40 mb-0.5">TTS</p>
+                      <p className="text-gray-700 dark:text-white/70 font-medium">
                         {version.config_snapshot.tts_provider}
                       </p>
                     </div>
                     <div>
-                      <p className="text-white/40 mb-0.5">STT</p>
-                      <p className="text-white/70 font-medium">
+                      <p className="text-gray-400 dark:text-white/40 mb-0.5">STT</p>
+                      <p className="text-gray-700 dark:text-white/70 font-medium">
                         {version.config_snapshot.stt_provider}
                       </p>
                     </div>
                     <div>
-                      <p className="text-white/40 mb-0.5">Language</p>
-                      <p className="text-white/70 font-medium">
+                      <p className="text-gray-400 dark:text-white/40 mb-0.5">Language</p>
+                      <p className="text-gray-700 dark:text-white/70 font-medium">
                         {version.config_snapshot.language}
                       </p>
                     </div>
@@ -195,7 +195,7 @@ export function VersionHistory({ agentId, currentVersion, publishedVersion, onRo
                 <button
                   onClick={() => handleRollback(version.version)}
                   disabled={isRollingBack}
-                  className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm font-medium text-white hover:bg-white/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 whitespace-nowrap"
+                  className="px-3 py-2 bg-gray-100 border border-gray-200 dark:bg-white/5 dark:border-white/10 rounded-lg text-sm font-medium text-gray-700 dark:text-white hover:bg-gray-200 dark:hover:bg-white/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 whitespace-nowrap"
                   title="Rollback to this version"
                 >
                   {isRollingBack ? (

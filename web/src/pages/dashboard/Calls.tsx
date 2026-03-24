@@ -154,8 +154,8 @@ export function Calls() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-1">Call History</h1>
-          <p className="text-white/50">View and manage your call records</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Call History</h1>
+          <p className="text-gray-500 dark:text-white/50">View and manage your call records</p>
         </div>
         <button className="px-4 py-2 bg-gradient-to-r from-purple-600 to-purple-500 rounded-lg font-medium text-white hover:from-purple-500 hover:to-purple-400 transition-all duration-300 flex items-center gap-2">
           <Phone size={18} />
@@ -165,31 +165,31 @@ export function Calls() {
 
       {/* Stats Row */}
       <div className="grid sm:grid-cols-3 gap-4">
-        <div className="bg-white/[0.02] border border-white/5 rounded-xl p-4 flex items-center gap-4">
+        <div className="bg-white border border-gray-200 dark:bg-white/[0.02] dark:border-white/5 rounded-xl p-4 flex items-center gap-4 shadow-sm dark:shadow-none">
           <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
             <Phone size={18} className="text-blue-400" />
           </div>
           <div>
-            <p className="text-2xl font-bold text-white">{totalCalls}</p>
-            <p className="text-sm text-white/40">Total Calls (30d)</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{totalCalls}</p>
+            <p className="text-sm text-gray-400 dark:text-white/40">Total Calls (30d)</p>
           </div>
         </div>
-        <div className="bg-white/[0.02] border border-white/5 rounded-xl p-4 flex items-center gap-4">
+        <div className="bg-white border border-gray-200 dark:bg-white/[0.02] dark:border-white/5 rounded-xl p-4 flex items-center gap-4 shadow-sm dark:shadow-none">
           <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
             <TrendingUp size={18} className="text-green-400" />
           </div>
           <div>
-            <p className="text-2xl font-bold text-white">{successRate}%</p>
-            <p className="text-sm text-white/40">Success Rate</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">{successRate}%</p>
+            <p className="text-sm text-gray-400 dark:text-white/40">Success Rate</p>
           </div>
         </div>
-        <div className="bg-white/[0.02] border border-white/5 rounded-xl p-4 flex items-center gap-4">
+        <div className="bg-white border border-gray-200 dark:bg-white/[0.02] dark:border-white/5 rounded-xl p-4 flex items-center gap-4 shadow-sm dark:shadow-none">
           <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
             <Clock size={18} className="text-purple-400" />
           </div>
           <div>
-            <p className="text-2xl font-bold text-white">${totalCost.toFixed(2)}</p>
-            <p className="text-sm text-white/40">Total Cost</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white">${totalCost.toFixed(2)}</p>
+            <p className="text-sm text-gray-400 dark:text-white/40">Total Cost</p>
           </div>
         </div>
       </div>
@@ -197,7 +197,7 @@ export function Calls() {
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
-          <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
+          <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-white/40" />
           <input
             type="text"
             value={search}
@@ -222,26 +222,26 @@ export function Calls() {
 
       {/* Calls Table */}
       {filteredCalls.length === 0 ? (
-        <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-12 text-center">
-          <Phone size={48} className="mx-auto text-white/20 mb-4" />
-          <h3 className="text-lg font-semibold text-white mb-2">No Calls Yet</h3>
-          <p className="text-white/50">
+        <div className="bg-white border border-gray-200 dark:bg-white/[0.02] dark:border-white/5 rounded-2xl p-12 text-center shadow-sm dark:shadow-none">
+          <Phone size={48} className="mx-auto text-gray-300 dark:text-white/20 mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No Calls Yet</h3>
+          <p className="text-gray-500 dark:text-white/50">
             Your call history will appear here once you start making or receiving calls.
           </p>
         </div>
       ) : (
-        <div className="bg-white/[0.02] border border-white/5 rounded-2xl overflow-hidden">
+        <div className="bg-white border border-gray-200 dark:bg-white/[0.02] dark:border-white/5 rounded-2xl overflow-hidden shadow-sm dark:shadow-none">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-white/5 bg-white/[0.02]">
-                  <th className="text-left text-xs font-medium text-white/40 uppercase tracking-wider p-4">Type</th>
-                  <th className="text-left text-xs font-medium text-white/40 uppercase tracking-wider p-4">From / To</th>
-                  <th className="text-left text-xs font-medium text-white/40 uppercase tracking-wider p-4">Duration</th>
-                  <th className="text-left text-xs font-medium text-white/40 uppercase tracking-wider p-4">Status</th>
-                  <th className="text-left text-xs font-medium text-white/40 uppercase tracking-wider p-4">Cost</th>
-                  <th className="text-left text-xs font-medium text-white/40 uppercase tracking-wider p-4">Date</th>
-                  <th className="text-left text-xs font-medium text-white/40 uppercase tracking-wider p-4">Actions</th>
+                <tr className="border-b border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-white/[0.02]">
+                  <th className="text-left text-xs font-medium text-gray-400 dark:text-white/40 uppercase tracking-wider p-4">Type</th>
+                  <th className="text-left text-xs font-medium text-gray-400 dark:text-white/40 uppercase tracking-wider p-4">From / To</th>
+                  <th className="text-left text-xs font-medium text-gray-400 dark:text-white/40 uppercase tracking-wider p-4">Duration</th>
+                  <th className="text-left text-xs font-medium text-gray-400 dark:text-white/40 uppercase tracking-wider p-4">Status</th>
+                  <th className="text-left text-xs font-medium text-gray-400 dark:text-white/40 uppercase tracking-wider p-4">Cost</th>
+                  <th className="text-left text-xs font-medium text-gray-400 dark:text-white/40 uppercase tracking-wider p-4">Date</th>
+                  <th className="text-left text-xs font-medium text-gray-400 dark:text-white/40 uppercase tracking-wider p-4">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -251,7 +251,7 @@ export function Calls() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: i * 0.02 }}
-                    className="border-b border-white/5 hover:bg-white/[0.02] transition-colors cursor-pointer"
+                    className="border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors cursor-pointer"
                     onClick={() => setSelectedCall(call)}
                   >
                     <td className="p-4">
@@ -272,10 +272,10 @@ export function Calls() {
                       </div>
                     </td>
                     <td className="p-4">
-                      <p className="text-white font-medium">{call.from_number || 'Web User'}</p>
-                      <p className="text-sm text-white/40">→ {call.to_number || 'Agent'}</p>
+                      <p className="text-gray-900 dark:text-white font-medium">{call.from_number || 'Web User'}</p>
+                      <p className="text-sm text-gray-400 dark:text-white/40">→ {call.to_number || 'Agent'}</p>
                     </td>
-                    <td className="p-4 text-white/60 font-mono">{formatDuration(call.duration_seconds)}</td>
+                    <td className="p-4 text-gray-500 dark:text-white/60 font-mono">{formatDuration(call.duration_seconds)}</td>
                     <td className="p-4">
                       <span className={`text-xs px-2.5 py-1 rounded-full border ${
                         call.status === 'completed' 
@@ -289,14 +289,14 @@ export function Calls() {
                         {call.status.replace('_', ' ')}
                       </span>
                     </td>
-                    <td className="p-4 text-white/60 font-mono">${((call.cost_user_cents || call.cost_total_cents) / 100).toFixed(2)}</td>
-                    <td className="p-4 text-white/40 text-sm">{formatDate(call.started_at)}</td>
+                    <td className="p-4 text-gray-500 dark:text-white/60 font-mono">${((call.cost_user_cents || call.cost_total_cents) / 100).toFixed(2)}</td>
+                    <td className="p-4 text-gray-400 dark:text-white/40 text-sm">{formatDate(call.started_at)}</td>
                     <td className="p-4">
                       <div className="flex gap-1">
                         {call.recording_url && (
                           <button 
                             onClick={() => window.open(call.recording_url!, '_blank')}
-                            className="p-2 text-white/40 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition-colors"
+                            className="p-2 text-gray-400 hover:text-purple-400 hover:bg-purple-500/10 dark:text-white/40 rounded-lg transition-colors"
                             title="Play recording"
                           >
                             <Play size={16} />
@@ -304,7 +304,7 @@ export function Calls() {
                         )}
                         <button 
                           onClick={(e) => { e.stopPropagation(); setSelectedCall(call); }}
-                          className="p-2 text-white/40 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition-colors"
+                          className="p-2 text-gray-400 hover:text-purple-400 hover:bg-purple-500/10 dark:text-white/40 rounded-lg transition-colors"
                           title="View details & transcript"
                         >
                           <MessageSquare size={16} />
@@ -319,25 +319,25 @@ export function Calls() {
 
           {/* Pagination */}
           {pagination.total_pages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-white/5">
-              <p className="text-sm text-white/40">
+            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-white/5">
+              <p className="text-sm text-gray-400 dark:text-white/40">
                 Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} calls
               </p>
               <div className="flex gap-2">
                 <button
                   onClick={() => setPagination(p => ({ ...p, page: p.page - 1 }))}
                   disabled={pagination.page <= 1}
-                  className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 dark:text-white/40 dark:hover:text-white dark:hover:bg-white/5 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                 >
                   <ChevronLeft size={18} />
                 </button>
-                <span className="px-3 py-2 text-sm text-white/60">
+                <span className="px-3 py-2 text-sm text-gray-500 dark:text-white/60">
                   Page {pagination.page} of {pagination.total_pages}
                 </span>
                 <button
                   onClick={() => setPagination(p => ({ ...p, page: p.page + 1 }))}
                   disabled={pagination.page >= pagination.total_pages}
-                  className="p-2 text-white/40 hover:text-white hover:bg-white/5 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 dark:text-white/40 dark:hover:text-white dark:hover:bg-white/5 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                 >
                   <ChevronRight size={18} />
                 </button>

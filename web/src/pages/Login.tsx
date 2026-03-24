@@ -64,14 +64,14 @@ export function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] flex">
+    <div className="min-h-screen bg-white dark:bg-[#0a0a0f] flex">
       {/* Left Panel - Branding */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
         {/* Background gradients */}
         <div className="absolute inset-0">
           <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-600/30 rounded-full blur-[150px]" />
           <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-pink-500/20 rounded-full blur-[120px]" />
-          <div className="absolute inset-0 bg-[linear-gradient(rgba(168,85,247,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(168,85,247,0.03)_1px,transparent_1px)] bg-[size:32px_32px]" />
+          <div className="absolute inset-0 bg-[linear-gradient(rgba(168,85,247,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(168,85,247,0.06)_1px,transparent_1px)] dark:bg-[linear-gradient(rgba(168,85,247,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(168,85,247,0.03)_1px,transparent_1px)] bg-[size:32px_32px]" />
         </div>
 
         <div className="relative z-10 flex flex-col justify-center px-16">
@@ -82,16 +82,16 @@ export function Login() {
               alt="VocaCore AI" 
               className="w-12 h-12 rounded-xl shadow-lg shadow-purple-500/30 object-contain"
             />
-            <span className="text-2xl font-bold text-white">VocaCore AI</span>
+            <span className="text-2xl font-bold text-gray-900 dark:text-white">VocaCore AI</span>
           </Link>
 
-          <h1 className="text-4xl font-bold text-white mb-4">
+          <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
             Welcome back to the<br />
             <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
               future of voice AI
             </span>
           </h1>
-          <p className="text-white/50 text-lg mb-12 max-w-md">
+          <p className="text-gray-500 dark:text-white/50 text-lg mb-12 max-w-md">
             Deploy human-like voice agents that handle thousands of calls simultaneously.
           </p>
 
@@ -102,7 +102,7 @@ export function Login() {
                 <div className="w-6 h-6 rounded-full bg-purple-500/20 flex items-center justify-center">
                   <Check size={14} className="text-purple-400" />
                 </div>
-                <span className="text-white/60">{feature}</span>
+                <span className="text-gray-600 dark:text-white/60">{feature}</span>
               </div>
             ))}
           </div>
@@ -123,15 +123,15 @@ export function Login() {
               alt="VocaCore AI" 
               className="w-10 h-10 rounded-xl object-contain"
             />
-            <span className="text-xl font-bold text-white">VocaCore AI</span>
+            <span className="text-xl font-bold text-gray-900 dark:text-white">VocaCore AI</span>
           </Link>
 
           {/* Card */}
-          <div className="bg-white/[0.02] border border-white/10 rounded-2xl p-8">
+          <div className="bg-gray-50 border border-gray-200 rounded-2xl p-8 dark:bg-white/[0.02] dark:border-white/10">
             {showResetForm ? (
               <>
-                <h1 className="text-2xl font-bold text-white mb-2">Reset password</h1>
-                <p className="text-white/50 mb-8">
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Reset password</h1>
+                <p className="text-gray-500 dark:text-white/50 mb-8">
                   {resetSent 
                     ? "Check your email for a password reset link. This also works for Google accounts!"
                     : "Enter your email and we'll send you a link to set a new password."
@@ -151,7 +151,7 @@ export function Login() {
                         setShowResetForm(false);
                         setResetSent(false);
                       }}
-                      className="w-full py-3 bg-white/5 border border-white/10 rounded-xl font-medium text-white hover:bg-white/10 transition-all"
+                      className="w-full py-3 bg-gray-100 border border-gray-200 rounded-xl font-medium text-gray-700 hover:bg-gray-200 dark:bg-white/5 dark:border-white/10 dark:text-white dark:hover:bg-white/10 transition-all"
                     >
                       Back to login
                     </button>
@@ -159,14 +159,14 @@ export function Login() {
                 ) : (
                   <form onSubmit={handleForgotPassword} className="space-y-5">
                     <div>
-                      <label className="block text-sm text-white/60 mb-2">Email address</label>
+                      <label className="block text-sm text-gray-500 dark:text-white/60 mb-2">Email address</label>
                       <div className="relative">
-                        <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
+                        <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-white/30" />
                         <input
                           type="email"
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
-                          className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
+                          className="w-full pl-11 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/70 focus:ring-1 focus:ring-purple-500/20 transition-all dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 dark:focus:border-purple-500/50"
                           placeholder="you@example.com"
                         />
                       </div>
@@ -189,7 +189,7 @@ export function Login() {
                       onClick={() => {
                         setShowResetForm(false);
                       }}
-                      className="w-full py-3 bg-white/5 border border-white/10 rounded-xl font-medium text-white hover:bg-white/10 transition-all"
+                      className="w-full py-3 bg-gray-100 border border-gray-200 rounded-xl font-medium text-gray-700 hover:bg-gray-200 dark:bg-white/5 dark:border-white/10 dark:text-white dark:hover:bg-white/10 transition-all"
                     >
                       Back to login
                     </button>
@@ -198,19 +198,19 @@ export function Login() {
               </>
             ) : (
               <>
-                <h1 className="text-2xl font-bold text-white mb-2">Sign in</h1>
-                <p className="text-white/50 mb-8">Enter your credentials to access your account</p>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Sign in</h1>
+                <p className="text-gray-500 dark:text-white/50 mb-8">Enter your credentials to access your account</p>
 
                 <form onSubmit={handleSubmit} className="space-y-5">
               <div>
-                <label className="block text-sm text-white/60 mb-2">Email address</label>
+                <label className="block text-sm text-gray-500 dark:text-white/60 mb-2">Email address</label>
                 <div className="relative">
-                  <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
+                  <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-white/30" />
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
+                    className="w-full pl-11 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/70 focus:ring-1 focus:ring-purple-500/20 transition-all dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 dark:focus:border-purple-500/50"
                     placeholder="you@example.com"
                   />
                 </div>
@@ -218,7 +218,7 @@ export function Login() {
 
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm text-white/60">Password</label>
+                  <label className="text-sm text-gray-500 dark:text-white/60">Password</label>
                   <button
                     type="button"
                     onClick={() => setShowResetForm(true)}
@@ -228,12 +228,12 @@ export function Login() {
                   </button>
                 </div>
                 <div className="relative">
-                  <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
+                  <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-white/30" />
                   <input
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
+                    className="w-full pl-11 pr-4 py-3 bg-white border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/70 focus:ring-1 focus:ring-purple-500/20 transition-all dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 dark:focus:border-purple-500/50"
                     placeholder="••••••••"
                   />
                 </div>
@@ -257,9 +257,9 @@ export function Login() {
 
                 {/* Divider */}
                 <div className="flex items-center gap-4 my-6">
-                  <div className="flex-1 h-px bg-white/10" />
-                  <span className="text-white/30 text-sm">or</span>
-                  <div className="flex-1 h-px bg-white/10" />
+                  <div className="flex-1 h-px bg-gray-200 dark:bg-white/10" />
+                  <span className="text-gray-400 dark:text-white/30 text-sm">or</span>
+                  <div className="flex-1 h-px bg-gray-200 dark:bg-white/10" />
                 </div>
 
                 {/* Social Login */}
@@ -267,7 +267,7 @@ export function Login() {
                   type="button"
                   onClick={handleGoogleLogin}
                   disabled={isLoading}
-                  className="w-full py-3 bg-white/5 border border-white/10 rounded-xl font-medium text-white hover:bg-white/10 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full py-3 bg-gray-100 border border-gray-200 rounded-xl font-medium text-gray-700 hover:bg-gray-200 dark:bg-white/5 dark:border-white/10 dark:text-white dark:hover:bg-white/10 transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <svg className="w-5 h-5" viewBox="0 0 24 24">
                     <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -278,7 +278,7 @@ export function Login() {
                   Continue with Google
                 </button>
 
-                <p className="text-center text-white/50 mt-6">
+                <p className="text-center text-gray-500 dark:text-white/50 mt-6">
                   Don't have an account?{' '}
                   <Link to="/signup" className="text-purple-400 hover:text-purple-300 transition-colors">
                     Sign up free

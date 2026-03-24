@@ -154,8 +154,8 @@ export function Tools() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-1">Tools</h1>
-          <p className="text-white/50">Manage tools for your voice agents</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Tools</h1>
+          <p className="text-gray-500 dark:text-white/50">Manage tools for your voice agents</p>
         </div>
         <button
           onClick={() => navigate('/dashboard/tools/new')}
@@ -170,13 +170,13 @@ export function Tools() {
       <div className="flex flex-col sm:flex-row gap-4">
         {/* Search */}
         <div className="flex-1 relative">
-          <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" />
+          <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-white/30" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search tools..."
-            className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
+            className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 transition-all"
           />
         </div>
 
@@ -201,12 +201,12 @@ export function Tools() {
           <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-purple-500"></div>
         </div>
       ) : filteredTools.length === 0 ? (
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-12 text-center">
-          <Wrench size={48} className="text-white/20 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-white mb-2">
+        <div className="bg-white border border-gray-200 dark:bg-white/5 dark:border-white/10 rounded-2xl p-12 text-center shadow-sm dark:shadow-none">
+          <Wrench size={48} className="text-gray-200 dark:text-white/20 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
             {searchQuery || typeFilter ? 'No tools found' : 'No tools yet'}
           </h3>
-          <p className="text-white/50 mb-6">
+          <p className="text-gray-500 dark:text-white/50 mb-6">
             {searchQuery || typeFilter
               ? 'Try adjusting your search or filters'
               : 'Create your first tool to extend your agent\'s capabilities'}
@@ -229,7 +229,7 @@ export function Tools() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.05 }}
-              className="bg-white/5 border border-white/10 rounded-2xl p-5 hover:border-purple-500/30 transition-all group"
+              className="bg-white border border-gray-200 dark:bg-white/5 dark:border-white/10 rounded-2xl p-5 hover:border-purple-500/30 transition-all group shadow-sm dark:shadow-none"
             >
               {/* Header */}
               <div className="flex items-start justify-between mb-3">
@@ -238,7 +238,7 @@ export function Tools() {
                     {getTypeIcon(tool.type)}
                   </div>
                   <div>
-                    <h3 className="font-semibold text-white group-hover:text-purple-400 transition-colors">
+                    <h3 className="font-semibold text-gray-900 dark:text-white group-hover:text-purple-500 dark:group-hover:text-purple-400 transition-colors">
                       {tool.name}
                     </h3>
                     <div className="flex items-center gap-2 mt-0.5">
@@ -257,19 +257,19 @@ export function Tools() {
                 <div className="relative">
                   <button
                     onClick={() => setOpenMenuId(openMenuId === tool.id ? null : tool.id)}
-                    className="p-1.5 rounded-lg hover:bg-white/10 text-white/40 hover:text-white transition-all"
+                    className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 text-gray-400 dark:text-white/40 hover:text-gray-700 dark:hover:text-white transition-all"
                   >
                     <MoreVertical size={16} />
                   </button>
 
                   {openMenuId === tool.id && (
-                    <div className="absolute right-0 top-8 bg-gray-900 border border-white/10 rounded-xl shadow-xl py-1 min-w-[140px] z-10">
+                    <div className="absolute right-0 top-8 bg-white dark:bg-gray-900 border border-gray-200 dark:border-white/10 rounded-xl shadow-xl py-1 min-w-[140px] z-10">
                       <button
                         onClick={() => {
                           navigate(`/dashboard/tools/${tool.id}`);
                           setOpenMenuId(null);
                         }}
-                        className="w-full px-3 py-2 text-left text-sm text-white hover:bg-white/5 flex items-center gap-2"
+                        className="w-full px-3 py-2 text-left text-sm text-gray-700 dark:text-white hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2"
                       >
                         <Edit size={14} />
                         Edit
@@ -281,7 +281,7 @@ export function Tools() {
                             setOpenMenuId(null);
                           }}
                           disabled={isValidating === tool.id}
-                          className="w-full px-3 py-2 text-left text-sm text-white hover:bg-white/5 flex items-center gap-2 disabled:opacity-50"
+                          className="w-full px-3 py-2 text-left text-sm text-gray-700 dark:text-white hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2 disabled:opacity-50"
                         >
                           <RefreshCw size={14} className={isValidating === tool.id ? 'animate-spin' : ''} />
                           Validate
@@ -302,22 +302,22 @@ export function Tools() {
 
               {/* Description */}
               {tool.description && (
-                <p className="text-sm text-white/50 mb-3 line-clamp-2">
+                <p className="text-sm text-gray-500 dark:text-white/50 mb-3 line-clamp-2">
                   {tool.description}
                 </p>
               )}
 
               {/* URL */}
               {getToolUrl(tool) && (
-                <div className="flex items-center gap-2 text-xs text-white/30 bg-white/5 rounded-lg px-3 py-2 mb-3">
+                <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-white/30 bg-gray-50 dark:bg-white/5 rounded-lg px-3 py-2 mb-3">
                   <ExternalLink size={12} />
                   <span className="truncate">{getToolUrl(tool)}</span>
                 </div>
               )}
 
               {/* Footer */}
-              <div className="flex items-center justify-between pt-3 border-t border-white/5">
-                <span className="text-xs text-white/30">
+              <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-white/5">
+                <span className="text-xs text-gray-400 dark:text-white/30">
                   {new Date(tool.created_at).toLocaleDateString()}
                 </span>
                 <button

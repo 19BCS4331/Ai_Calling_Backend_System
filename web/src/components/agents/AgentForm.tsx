@@ -118,16 +118,16 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white mb-1">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
             {agent ? 'Edit Agent' : 'Create New Agent'}
           </h2>
-          <p className="text-white/50">Configure your AI voice agent</p>
+          <p className="text-gray-500 dark:text-white/50">Configure your AI voice agent</p>
         </div>
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl font-medium text-white hover:bg-white/10 transition-all flex items-center gap-2"
+            className="px-4 py-2.5 bg-gray-100 border border-gray-200 dark:bg-white/5 dark:border-white/10 rounded-xl font-medium text-gray-700 dark:text-white hover:bg-gray-200 dark:hover:bg-white/10 transition-all flex items-center gap-2"
           >
             <X size={18} />
             Cancel
@@ -148,7 +148,7 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-white/10">
+      <div className="flex gap-2 border-b border-gray-200 dark:border-white/10">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -156,8 +156,8 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
             onClick={() => setActiveTab(tab.id)}
             className={`px-4 py-3 font-medium transition-all flex items-center gap-2 border-b-2 ${
               activeTab === tab.id
-                ? 'text-purple-400 border-purple-500'
-                : 'text-white/50 border-transparent hover:text-white/70'
+                ? 'text-purple-600 dark:text-purple-400 border-purple-500'
+                : 'text-gray-400 dark:text-white/50 border-transparent hover:text-gray-700 dark:hover:text-white/70'
             }`}
           >
             <tab.icon size={18} />
@@ -167,7 +167,7 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
       </div>
 
       {/* Form Content */}
-      <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-6">
+      <div className="bg-white border border-gray-200 dark:bg-white/[0.02] dark:border-white/5 rounded-2xl p-6 shadow-sm dark:shadow-none">
         {/* Basic Info Tab */}
         {activeTab === 'basic' && (
           <motion.div
@@ -177,7 +177,7 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
           >
             <div className="grid md:grid-cols-2 gap-5">
               <div>
-                <label className="block text-sm text-white/60 mb-2">
+                <label className="block text-sm text-gray-600 dark:text-white/60 mb-2">
                   Agent Name <span className="text-red-400">*</span>
                 </label>
                 <input
@@ -186,36 +186,36 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
                   onChange={(e) => updateField('name', e.target.value)}
                   placeholder="e.g., Customer Support Agent"
                   required
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 transition-all"
                 />
               </div>
 
               <div>
-                <label className="block text-sm text-white/60 mb-2">Slug (URL-friendly name)</label>
+                <label className="block text-sm text-gray-600 dark:text-white/60 mb-2">Slug (URL-friendly name)</label>
                 <input
                   type="text"
                   value={formData.slug}
                   onChange={(e) => updateField('slug', e.target.value)}
                   placeholder="e.g., customer-support"
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 transition-all"
                 />
-                <p className="text-xs text-white/40 mt-1">Leave empty to auto-generate from name</p>
+                <p className="text-xs text-gray-400 dark:text-white/40 mt-1">Leave empty to auto-generate from name</p>
               </div>
             </div>
 
             <div>
-              <label className="block text-sm text-white/60 mb-2">Description</label>
+              <label className="block text-sm text-gray-600 dark:text-white/60 mb-2">Description</label>
               <textarea
                 value={formData.description}
                 onChange={(e) => updateField('description', e.target.value)}
                 placeholder="Brief description of what this agent does..."
                 rows={3}
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all resize-none"
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 transition-all resize-none"
               />
             </div>
 
             <div>
-              <label className="block text-sm text-white/60 mb-2">
+              <label className="block text-sm text-gray-600 dark:text-white/60 mb-2">
                 System Prompt <span className="text-red-400">*</span>
               </label>
               <textarea
@@ -224,9 +224,9 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
                 placeholder="You are a helpful AI assistant..."
                 rows={8}
                 required
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all resize-none font-mono text-sm"
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 transition-all resize-none font-mono text-sm"
               />
-              <p className="text-xs text-white/40 mt-1">
+              <p className="text-xs text-gray-400 dark:text-white/40 mt-1">
                 Define the agent's personality, role, and behavior guidelines
               </p>
             </div>
@@ -242,16 +242,16 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
             className="space-y-6"
           >
             {/* LLM Provider */}
-            <div className="bg-white/5 rounded-xl p-5 space-y-4">
+            <div className="bg-gray-50 border border-gray-100 dark:bg-white/5 dark:border-transparent rounded-xl p-5 space-y-4">
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
                   <Zap size={16} className="text-blue-400" />
                 </div>
-                <h3 className="font-semibold text-white">LLM (Language Model)</h3>
+                <h3 className="font-semibold text-gray-900 dark:text-white">LLM (Language Model)</h3>
               </div>
 
               <div>
-                <label className="block text-sm text-white/60 mb-2">Provider</label>
+                <label className="block text-sm text-gray-600 dark:text-white/60 mb-2">Provider</label>
                 <Select
                   value={formData.llm_provider || ''}
                   onChange={(value) => {
@@ -273,7 +273,7 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <label className="block text-sm text-white/60">Model</label>
+                    <label className="block text-sm text-gray-600 dark:text-white/60">Model</label>
                     {llmModelOptions.length > 0 && (
                       <button
                         type="button"
@@ -294,10 +294,10 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
                           updateField('llm_config', { ...formData.llm_config, model: e.target.value })
                         }
                         placeholder={formData.llm_provider === 'openrouter' ? 'e.g. google/gemini-2.5-flash' : 'Enter model name'}
-                        className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 transition-all"
                       />
                       {formData.llm_provider === 'openrouter' && (
-                        <p className="text-xs text-white/40 mt-1">
+                        <p className="text-xs text-gray-400 dark:text-white/40 mt-1">
                           Format: provider/model (e.g. google/gemini-2.5-flash)
                         </p>
                       )}
@@ -316,7 +316,7 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
                 </div>
 
                 <div>
-                  <label className="block text-sm text-white/60 mb-2">Temperature</label>
+                  <label className="block text-sm text-gray-600 dark:text-white/60 mb-2">Temperature</label>
                   <input
                     type="number"
                     min="0"
@@ -329,23 +329,23 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
                         temperature: parseFloat(e.target.value),
                       })
                     }
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 transition-all"
                   />
                 </div>
               </div>
             </div>
 
             {/* TTS Provider */}
-            <div className="bg-white/5 rounded-xl p-5 space-y-4">
+            <div className="bg-gray-50 border border-gray-100 dark:bg-white/5 dark:border-transparent rounded-xl p-5 space-y-4">
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center">
                   <Phone size={16} className="text-green-400" />
                 </div>
-                <h3 className="font-semibold text-white">TTS (Text-to-Speech)</h3>
+                <h3 className="font-semibold text-gray-900 dark:text-white">TTS (Text-to-Speech)</h3>
               </div>
 
               <div>
-                <label className="block text-sm text-white/60 mb-2">Provider</label>
+                <label className="block text-sm text-gray-600 dark:text-white/60 mb-2">Provider</label>
                 <Select
                   value={formData.tts_provider || ''}
                   onChange={(value) => updateField('tts_provider', value)}
@@ -361,7 +361,7 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-white/60 mb-2">Language</label>
+                  <label className="block text-sm text-gray-600 dark:text-white/60 mb-2">Language</label>
                   <Select
                     value={formData.language || 'en-IN'}
                     onChange={(value) => updateField('language', value)}
@@ -381,7 +381,7 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
                 </div>
 
                 <div>
-                  <label className="block text-sm text-white/60 mb-2">TTS Language Code</label>
+                  <label className="block text-sm text-gray-600 dark:text-white/60 mb-2">TTS Language Code</label>
                   <input
                     type="text"
                     value={(formData.tts_config as any)?.language || 'en-IN'}
@@ -389,9 +389,9 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
                       updateField('tts_config', { ...formData.tts_config, language: e.target.value })
                     }
                     placeholder="e.g., en-IN, hi-IN"
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 transition-all"
                   />
-                  <p className="text-xs text-white/40 mt-1">Provider-specific language code</p>
+                  <p className="text-xs text-gray-400 dark:text-white/40 mt-1">Provider-specific language code</p>
                 </div>
               </div>
 
@@ -403,16 +403,16 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
             </div>
 
             {/* STT Provider */}
-            <div className="bg-white/5 rounded-xl p-5 space-y-4">
+            <div className="bg-gray-50 border border-gray-100 dark:bg-white/5 dark:border-transparent rounded-xl p-5 space-y-4">
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
                   <MessageSquare size={16} className="text-orange-400" />
                 </div>
-                <h3 className="font-semibold text-white">STT (Speech-to-Text)</h3>
+                <h3 className="font-semibold text-gray-900 dark:text-white">STT (Speech-to-Text)</h3>
               </div>
 
               <div>
-                <label className="block text-sm text-white/60 mb-2">Provider</label>
+                <label className="block text-sm text-gray-600 dark:text-white/60 mb-2">Provider</label>
                 <Select
                   value={formData.stt_provider || ''}
                   onChange={(value) => updateField('stt_provider', value)}
@@ -437,11 +437,11 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
             className="space-y-5"
           >
             {/* AI Speaks First */}
-            <div className="bg-white/5 rounded-xl p-5 space-y-3">
+            <div className="bg-gray-50 border border-gray-100 dark:bg-white/5 dark:border-transparent rounded-xl p-5 space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="font-semibold text-white">AI Speaks First</h3>
-                  <p className="text-xs text-white/40 mt-0.5">
+                  <h3 className="font-semibold text-gray-900 dark:text-white">AI Speaks First</h3>
+                  <p className="text-xs text-gray-400 dark:text-white/40 mt-0.5">
                     Agent greets the caller immediately when the call connects
                   </p>
                 </div>
@@ -463,14 +463,14 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
                   onChange={(e) => updateField('first_message', e.target.value)}
                   placeholder="Hello! How can I help you today?"
                   rows={2}
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all resize-none text-sm"
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 transition-all resize-none text-sm"
                 />
               )}
             </div>
 
             {/* End Call Phrases */}
             <div>
-              <label className="block text-sm text-white/60 mb-2">End Call Phrases</label>
+              <label className="block text-sm text-gray-600 dark:text-white/60 mb-2">End Call Phrases</label>
               <div className="flex gap-2 mb-2">
                 <input
                   type="text"
@@ -478,7 +478,7 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
                   onChange={(e) => setEndCallPhrase(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addEndCallPhrase())}
                   placeholder="Add a phrase..."
-                  className="flex-1 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
+                  className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 transition-all"
                 />
                 <button
                   type="button"
@@ -492,27 +492,27 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
                 {formData.end_call_phrases?.map((phrase) => (
                   <span
                     key={phrase}
-                    className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-sm text-white flex items-center gap-2"
+                    className="px-3 py-1.5 bg-gray-100 border border-gray-200 dark:bg-white/5 dark:border-white/10 rounded-lg text-sm text-gray-700 dark:text-white flex items-center gap-2"
                   >
                     {phrase}
                     <button
                       type="button"
                       onClick={() => removeEndCallPhrase(phrase)}
-                      className="text-white/40 hover:text-red-400 transition-colors"
+                      className="text-gray-400 dark:text-white/40 hover:text-red-400 transition-colors"
                     >
                       <X size={14} />
                     </button>
                   </span>
                 ))}
               </div>
-              <p className="text-xs text-white/40 mt-2">
+              <p className="text-xs text-gray-400 dark:text-white/40 mt-2">
                 When the caller says any of these phrases, the call ends automatically
               </p>
             </div>
 
             {/* Interruption Sensitivity */}
             <div>
-              <label className="block text-sm text-white/60 mb-2">
+              <label className="block text-sm text-gray-600 dark:text-white/60 mb-2">
                 Interruption Sensitivity: {formData.interruption_sensitivity}
               </label>
               <input
@@ -522,13 +522,13 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
                 step="0.1"
                 value={formData.interruption_sensitivity}
                 onChange={(e) => updateField('interruption_sensitivity', parseFloat(e.target.value))}
-                className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                className="w-full h-2 bg-gray-200 dark:bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
               />
-              <div className="flex justify-between text-xs text-white/40 mt-1">
+              <div className="flex justify-between text-xs text-gray-400 dark:text-white/40 mt-1">
                 <span>Less sensitive (harder to interrupt)</span>
                 <span>More sensitive (easy to interrupt)</span>
               </div>
-              <p className="text-xs text-white/40 mt-1">
+              <p className="text-xs text-gray-400 dark:text-white/40 mt-1">
                 Controls how easily the caller can interrupt the AI while it's speaking
               </p>
             </div>
@@ -546,9 +546,9 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
               <AgentToolsManager agentId={agent.id} />
             ) : (
               <div className="text-center py-12">
-                <Wrench size={48} className="text-white/20 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-white mb-2">Save Agent First</h3>
-                <p className="text-white/50 max-w-md mx-auto">
+                <Wrench size={48} className="text-gray-200 dark:text-white/20 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Save Agent First</h3>
+                <p className="text-gray-500 dark:text-white/50 max-w-md mx-auto">
                   You need to create and save the agent before you can configure tools.
                   Complete the basic setup first, then come back to add tools.
                 </p>
@@ -568,9 +568,9 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
               <KnowledgeBaseManager agentId={agent.id} orgId={currentOrganization.id} />
             ) : (
               <div className="text-center py-12">
-                <Database size={48} className="text-white/20 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-white mb-2">Save Agent First</h3>
-                <p className="text-white/50 max-w-md mx-auto">
+                <Database size={48} className="text-gray-200 dark:text-white/20 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Save Agent First</h3>
+                <p className="text-gray-500 dark:text-white/50 max-w-md mx-auto">
                   You need to create and save the agent before you can add knowledge bases.
                   Complete the basic setup first, then come back to add documents, URLs, or text.
                 </p>
@@ -588,7 +588,7 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
           >
             <div className="grid md:grid-cols-2 gap-5">
               <div>
-                <label className="block text-sm text-white/60 mb-2">
+                <label className="block text-sm text-gray-600 dark:text-white/60 mb-2">
                   Silence Timeout (ms)
                 </label>
                 <input
@@ -598,15 +598,15 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
                   step="1000"
                   value={formData.silence_timeout_ms}
                   onChange={(e) => updateField('silence_timeout_ms', parseInt(e.target.value))}
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 transition-all"
                 />
-                <p className="text-xs text-white/40 mt-1">
+                <p className="text-xs text-gray-400 dark:text-white/40 mt-1">
                   Time to wait before ending call due to silence
                 </p>
               </div>
 
               <div>
-                <label className="block text-sm text-white/60 mb-2">
+                <label className="block text-sm text-gray-600 dark:text-white/60 mb-2">
                   Max Call Duration (seconds)
                 </label>
                 <input
@@ -616,9 +616,9 @@ export function AgentForm({ agent, onSubmit, onCancel, isLoading }: AgentFormPro
                   step="60"
                   value={formData.max_call_duration_seconds}
                   onChange={(e) => updateField('max_call_duration_seconds', parseInt(e.target.value))}
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 transition-all"
                 />
-                <p className="text-xs text-white/40 mt-1">
+                <p className="text-xs text-gray-400 dark:text-white/40 mt-1">
                   Maximum duration for a single call
                 </p>
               </div>

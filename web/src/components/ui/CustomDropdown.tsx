@@ -58,7 +58,7 @@ export function CustomDropdown<T = string>({
   return (
     <div className={`relative ${className}`} ref={dropdownRef}>
       {label && (
-        <label className="block text-sm font-medium text-white/70 mb-2">
+        <label className="block text-sm font-medium text-gray-600 dark:text-white/70 mb-2">
           {label} {required && <span className="text-red-400">*</span>}
         </label>
       )}
@@ -67,23 +67,23 @@ export function CustomDropdown<T = string>({
         type="button"
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
-        className={`w-full flex items-center justify-between px-4 py-3 bg-white/5 border rounded-xl text-left transition-all ${
+        className={`w-full flex items-center justify-between px-4 py-3 bg-gray-50 border rounded-xl text-left transition-all dark:bg-white/5 ${
           error
             ? 'border-red-500/50 focus:border-red-500'
             : isOpen
             ? 'border-purple-500/50 ring-2 ring-purple-500/20'
-            : 'border-white/10 hover:border-white/20'
+            : 'border-gray-200 hover:border-gray-300 dark:border-white/10 dark:hover:border-white/20'
         } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
       >
         <div className="flex items-center gap-3 min-w-0">
           {selectedOption?.icon}
-          <span className={selectedOption ? 'text-white' : 'text-white/40'}>
+          <span className={selectedOption ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-white/40'}>
             {selectedOption?.label || placeholder}
           </span>
         </div>
         <ChevronDown
           size={18}
-          className={`text-white/40 transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`}
+          className={`text-gray-400 dark:text-white/40 transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`}
         />
       </button>
 
@@ -98,7 +98,7 @@ export function CustomDropdown<T = string>({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.95 }}
             transition={{ duration: 0.15 }}
-            className="absolute z-50 w-full mt-2 py-2 bg-gray-900 border border-white/10 rounded-xl shadow-xl max-h-64 overflow-y-auto"
+            className="absolute z-50 w-full mt-2 py-2 bg-white border border-gray-200 rounded-xl shadow-xl max-h-64 overflow-y-auto dark:bg-gray-900 dark:border-white/10 dark:shadow-2xl"
           >
             {options.map((option) => (
               <button
@@ -110,8 +110,8 @@ export function CustomDropdown<T = string>({
                   option.disabled
                     ? 'opacity-50 cursor-not-allowed'
                     : option.value === value
-                    ? 'bg-purple-600/20 text-purple-400'
-                    : 'hover:bg-white/5 text-white'
+                    ? 'bg-purple-600/20 text-purple-600 dark:text-purple-400'
+                    : 'hover:bg-gray-50 dark:hover:bg-white/5 text-gray-800 dark:text-white'
                 }`}
               >
                 {option.icon && (
@@ -120,7 +120,7 @@ export function CustomDropdown<T = string>({
                 <div className="flex-1 min-w-0">
                   <div className="font-medium">{option.label}</div>
                   {option.description && (
-                    <div className="text-xs text-white/50 mt-0.5 truncate">
+                    <div className="text-xs text-gray-400 dark:text-white/50 mt-0.5 truncate">
                       {option.description}
                     </div>
                   )}

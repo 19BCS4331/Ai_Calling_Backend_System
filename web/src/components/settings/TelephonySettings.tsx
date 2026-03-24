@@ -107,15 +107,15 @@ export function TelephonySettings() {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-white/[0.02] border border-white/5 rounded-2xl p-6"
+      className="bg-white border border-gray-200 dark:bg-white/[0.02] dark:border-white/5 rounded-2xl p-6 shadow-sm dark:shadow-none"
     >
       <div className="flex items-center gap-3 mb-6">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center">
           <Phone size={20} className="text-white" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold text-white">Plivo Integration</h2>
-          <p className="text-sm text-white/50">Connect your Plivo account for phone calling</p>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Plivo Integration</h2>
+          <p className="text-sm text-gray-500 dark:text-white/50">Connect your Plivo account for phone calling</p>
         </div>
       </div>
 
@@ -125,14 +125,14 @@ export function TelephonySettings() {
             <div className="flex items-start gap-3">
               <Check size={20} className="text-green-400 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <p className="text-white font-medium mb-1">Connected</p>
-                <p className="text-sm text-white/60">
+                <p className="text-gray-900 dark:text-white font-medium mb-1">Connected</p>
+                <p className="text-sm text-gray-600 dark:text-white/60">
                   Account: <span className="font-mono">{status.authId}</span>
                 </p>
-                <p className="text-sm text-white/60">
+                <p className="text-sm text-gray-600 dark:text-white/60">
                   Application ID: <span className="font-mono">{status.appId}</span>
                 </p>
-                <p className="text-sm text-white/60">
+                <p className="text-sm text-gray-600 dark:text-white/60">
                   Phone Numbers: {status.numberCount}
                 </p>
               </div>
@@ -161,8 +161,8 @@ export function TelephonySettings() {
             <div className="flex items-start gap-3">
               <AlertCircle size={20} className="text-blue-400 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-white font-medium mb-1">Not Connected</p>
-                <p className="text-sm text-white/60">
+                <p className="text-gray-900 dark:text-white font-medium mb-1">Not Connected</p>
+                <p className="text-sm text-gray-600 dark:text-white/60">
                   Connect your Plivo account to enable phone calling features.
                 </p>
               </div>
@@ -170,23 +170,23 @@ export function TelephonySettings() {
           </div>
 
           <div>
-            <label className="block text-sm text-white/60 mb-2">Plivo Auth ID</label>
+            <label className="block text-sm text-gray-600 dark:text-white/60 mb-2">Plivo Auth ID</label>
             <input
               type="text"
               value={authId}
               onChange={(e) => setAuthId(e.target.value)}
-              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 transition-all"
               placeholder="MAXXXXXXXXXXXXXXXXXX"
             />
           </div>
 
           <div>
-            <label className="block text-sm text-white/60 mb-2">Plivo Auth Token</label>
+            <label className="block text-sm text-gray-600 dark:text-white/60 mb-2">Plivo Auth Token</label>
             <input
               type="password"
               value={authToken}
               onChange={(e) => setAuthToken(e.target.value)}
-              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder-white/30 transition-all"
               placeholder="••••••••••••••••••••"
             />
           </div>
@@ -209,7 +209,7 @@ export function TelephonySettings() {
             )}
           </button>
 
-          <p className="text-xs text-white/40">
+          <p className="text-xs text-gray-400 dark:text-white/40">
             Find your Auth ID and Auth Token in your{' '}
             <a
               href="https://console.plivo.com/dashboard/"
