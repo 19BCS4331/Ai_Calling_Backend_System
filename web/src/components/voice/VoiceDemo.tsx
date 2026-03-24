@@ -53,11 +53,6 @@ You help potential customers learn about VocaCore AI and book personalized demos
 5. **Schedule**: Ask for preferred date/time for the demo
 6. **Confirm**: Summarize and confirm the booking
 
-## Available Tools
-You have access to these tools - use them when appropriate:
-- \`save_enquiry\`: Save customer details (name, email, phone, company)
-- \`check_calendar\`: Check available demo slots for a given date
-- \`book_demo\`: Book a demo slot for the customer
 
 ## Information to Collect (naturally, through conversation)
 - Customer's name
@@ -116,7 +111,7 @@ The customer should feel like they just spoke with a helpful human assistant who
         // Empty API keys = backend will use env vars
         stt: { provider: 'sarvam', apiKey: '', language: 'unknown' },
         llm: { provider: 'gemini', apiKey: '', model: 'gemini-2.5-flash' },
-        tts: { provider: 'cartesia', apiKey: '', voiceId: 'faf0731e-dfb9-4cfc-8119-259a79b27e12' },
+        tts: { provider: 'cartesia', apiKey: '', voiceId: '4bc3cb8c-adb9-4bb8-b5d5-cbbef950b991' },
         // Connect to MCP workflows for this session (e.g., n8n demo booking)
         mcpWorkflows
       });
