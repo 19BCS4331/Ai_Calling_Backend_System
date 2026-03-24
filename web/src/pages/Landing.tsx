@@ -10,6 +10,8 @@ import { Navbar } from '../components/layout/Navbar';
 import { VoiceDemo } from '../components/voice/VoiceDemo';
 import { VoiceOrbit } from '../components/voice/VoiceOrbit';
 import { GlowingEffect } from '../components/ui/GlowingEffect';
+import { AIChatWidget } from '../components/chat/AIChatWidget';
+import { useAuthStore } from '../store/auth';
 import VocaCoreAILogo from '../assets/VocaCore-final-square.png';
 
 const fadeInUp = {
@@ -26,6 +28,7 @@ export function Landing() {
   const [minutes, setMinutes] = useState(1000);
   const [billingInterval, setBillingInterval] = useState<'monthly' | 'yearly'>('monthly');
   const [titleNumber, setTitleNumber] = useState(0);
+  const { isAuthenticated } = useAuthStore();
 
   // Animated rotating words for hero
   const heroWords = useMemo(
@@ -400,7 +403,7 @@ export function Landing() {
             className="text-center mt-12"
           >
             <p className="text-gray-400 dark:text-white/40 mb-4">Don't see your industry?</p>
-            <Link to="/signup">
+            <Link to="/contact">
               <button className="btn-ghost text-purple-400 hover:text-purple-300">
                 Contact us for custom solutions →
               </button>
@@ -762,7 +765,7 @@ export function Landing() {
                 <li><a href="#" className="hover:text-gray-900 dark:hover:text-white transition-colors">About</a></li>
                 <li><a href="#" className="hover:text-gray-900 dark:hover:text-white transition-colors">Blog</a></li>
                 <li><a href="#" className="hover:text-gray-900 dark:hover:text-white transition-colors">Careers</a></li>
-                <li><a href="#" className="hover:text-gray-900 dark:hover:text-white transition-colors">Contact</a></li>
+                <li><Link to="/contact" className="hover:text-gray-900 dark:hover:text-white transition-colors">Contact</Link></li>
               </ul>
             </div>
             <div>
@@ -792,6 +795,9 @@ export function Landing() {
           </div>
         </div>
       </footer>
+
+      {/* AI Chat Widget - only for unauthenticated users */}
+      {!isAuthenticated && <AIChatWidget />}
     </div>
   );
 }

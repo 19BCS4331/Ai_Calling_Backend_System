@@ -1979,6 +1979,171 @@ export function createSaaSRouter(): Router {
   );
 
   // ===========================================
+  // PUBLIC ROUTES (No Auth Required)
+  // ===========================================
+
+  /**
+   * POST /contact
+   * Send a contact form email via SMTP
+   */
+  router.post('/contact', asyncHandler(async (req, res) => {
+    const { name, email, company, topic, message } = req.body;
+
+    if (!name || !email || !message) {
+      throw SaaSError.validation('Missing required fields: name, email, message');
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw SaaSError.validation('Invalid email address');
+    }
+
+    try {
+      const nodemailer = await import('nodemailer');
+
+      const transporter = nodemailer.default.createTransport({
+        host: process.env.SMTP_HOST || 'smtp.gmail.com',
+        port: parseInt(process.env.SMTP_PORT || '587'),
+        secure: process.env.SMTP_SECURE === 'true',
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS,
+        },
+      });
+
+      const topicLabels: Record<string, string> = {
+        general: 'General Inquiry',
+        demo: 'Demo Request',
+        pricing: 'Pricing & Plans',
+        enterprise: 'Enterprise Solutions',
+        partnership: 'Partnership',
+        support: 'Technical Support',
+        other: 'Other'
+      };
+
+      const topicLabel = topicLabels[topic] || topic || 'General Inquiry';
+
+      // Send notification to team
+      await transporter.sendMail({
+        from: `"VocaCore AI Contact" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
+        to: process.env.CONTACT_EMAIL || 'hello@vocacore.ai',
+        replyTo: email,
+        subject: `[Contact Form] ${topicLabel} — ${name}`,
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background: linear-gradient(135deg, #7c3aed, #ec4899); padding: 24px 32px; border-radius: 12px 12px 0 0;">
+              <h1 style="color: white; margin: 0; font-size: 20px;">New Contact Form Submission</h1>
+            </div>
+            <div style="background: #f9fafb; padding: 32px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 12px 12px;">
+              <table style="width: 100%; border-collapse: collapse;">
+                <tr><td style="padding: 8px 0; color: #6b7280; font-size: 14px; width: 100px;">Name</td><td style="padding: 8px 0; font-weight: 600;">${name}</td></tr>
+                <tr><td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Email</td><td style="padding: 8px 0;"><a href="mailto:${email}" style="color: #7c3aed;">${email}</a></td></tr>
+                ${company ? `<tr><td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Company</td><td style="padding: 8px 0;">${company}</td></tr>` : ''}
+                <tr><td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Topic</td><td style="padding: 8px 0;"><span style="background: #ede9fe; color: #7c3aed; padding: 2px 10px; border-radius: 12px; font-size: 13px;">${topicLabel}</span></td></tr>
+              </table>
+              <div style="margin-top: 20px; padding: 16px; background: white; border-radius: 8px; border: 1px solid #e5e7eb;">
+                <p style="color: #6b7280; font-size: 12px; margin: 0 0 8px;">Message</p>
+                <p style="margin: 0; white-space: pre-wrap; line-height: 1.6;">${message}</p>
+              </div>
+              <p style="color: #9ca3af; font-size: 12px; margin-top: 20px;">Received at ${new Date().toISOString()}</p>
+            </div>
+          </div>
+        `
+      });
+
+      // Send confirmation to user
+      await transporter.sendMail({
+        from: `"VocaCore AI" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
+        to: email,
+        subject: `We received your message — VocaCore AI`,
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background: linear-gradient(135deg, #7c3aed, #ec4899); padding: 24px 32px; border-radius: 12px 12px 0 0;">
+              <h1 style="color: white; margin: 0; font-size: 20px;">Thanks for reaching out!</h1>
+            </div>
+            <div style="background: #f9fafb; padding: 32px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 12px 12px;">
+              <p style="font-size: 16px; line-height: 1.6;">Hi ${name},</p>
+              <p style="line-height: 1.6; color: #374151;">Thank you for contacting VocaCore AI. We've received your message regarding <strong>${topicLabel}</strong> and will get back to you within 24 hours.</p>
+              <p style="line-height: 1.6; color: #374151;">In the meantime, feel free to:</p>
+              <ul style="color: #374151; line-height: 1.8;">
+                <li>Try our <a href="https://vocacore.com/#demo" style="color: #7c3aed;">live voice demo</a></li>
+                <li>Start a <a href="https://vocacore.com/signup" style="color: #7c3aed;">free 14-day trial</a></li>
+                <li>Explore our <a href="https://vocacore.com/#pricing" style="color: #7c3aed;">pricing plans</a></li>
+              </ul>
+              <p style="line-height: 1.6; color: #6b7280; font-size: 14px; margin-top: 24px;">Best regards,<br/>The VocaCore AI Team</p>
+            </div>
+          </div>
+        `
+      });
+
+      logger.info('Contact form email sent', { name, email, topic });
+      res.json({ success: true, message: 'Message sent successfully' });
+    } catch (err: any) {
+      logger.error('Failed to send contact email', { error: err.message });
+      // Still return success if SMTP not configured but log the error
+      if (!process.env.SMTP_USER) {
+        logger.warn('SMTP not configured — contact form submission logged but email not sent', { name, email, topic, message });
+        res.json({ success: true, message: 'Message received (email delivery pending)' });
+        return;
+      }
+      throw new SaaSError('INTERNAL_ERROR', 'Failed to send email. Please try again later.', 500);
+    }
+  }));
+
+  /**
+   * POST /chat
+   * AI chatbot endpoint using Groq for fast responses
+   */
+  router.post('/chat', asyncHandler(async (req, res) => {
+    const { messages, systemPrompt } = req.body;
+
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+      throw SaaSError.validation('messages array is required');
+    }
+
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) {
+      throw new SaaSError('INTERNAL_ERROR', 'Chat service is not configured', 500);
+    }
+
+    try {
+      const Groq = (await import('groq-sdk')).default;
+      const groq = new Groq({ apiKey });
+
+      const groqMessages: any[] = [];
+
+      if (systemPrompt) {
+        groqMessages.push({ role: 'system', content: systemPrompt });
+      }
+
+      // Only include last 20 messages to keep context manageable
+      const recentMessages = messages.slice(-20);
+      for (const msg of recentMessages) {
+        groqMessages.push({
+          role: msg.role === 'assistant' ? 'assistant' : 'user',
+          content: msg.content
+        });
+      }
+
+      const completion = await groq.chat.completions.create({
+        model: process.env.GROQ_CHAT_MODEL || 'llama-3.3-70b-versatile',
+        messages: groqMessages,
+        temperature: 0.7,
+        max_tokens: 500,
+        top_p: 0.9,
+      });
+
+      const content = completion.choices?.[0]?.message?.content || '';
+
+      res.json({ content });
+    } catch (err: any) {
+      logger.error('Groq chat error', { error: err.message });
+      throw new SaaSError('INTERNAL_ERROR', 'Failed to generate response', 500);
+    }
+  }));
+
+  // ===========================================
   // Error Handler
   // ===========================================
 

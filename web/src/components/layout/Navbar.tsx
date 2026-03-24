@@ -17,6 +17,7 @@ export function Navbar() {
     { href: '/#usecases', label: 'Use Cases' },
     { href: '/#demo', label: 'Docs' },
     { href: '/#pricing', label: 'Pricing' },
+    { href: '/contact', label: 'Contact' },
   ];
 
   return (
@@ -50,15 +51,25 @@ export function Navbar() {
 
             {/* Desktop Navigation */}
             <div className="hidden lg:flex items-center gap-4 xl:gap-6">
-              {navLinks.map((link) => (
-                <a
-                  key={link.href}
-                  href={link.href}
-                  className="text-gray-500 hover:text-gray-900 dark:text-white/60 dark:hover:text-white transition-colors text-sm font-medium"
-                >
-                  {link.label}
-                </a>
-              ))}
+              {navLinks.map((link) =>
+                link.href.startsWith('/') && !link.href.includes('#') ? (
+                  <Link
+                    key={link.href}
+                    to={link.href}
+                    className="text-gray-500 hover:text-gray-900 dark:text-white/60 dark:hover:text-white transition-colors text-sm font-medium"
+                  >
+                    {link.label}
+                  </Link>
+                ) : (
+                  <a
+                    key={link.href}
+                    href={link.href}
+                    className="text-gray-500 hover:text-gray-900 dark:text-white/60 dark:hover:text-white transition-colors text-sm font-medium"
+                  >
+                    {link.label}
+                  </a>
+                )
+              )}
             </div>
 
             {/* Auth Buttons + Theme Toggle */}
@@ -129,16 +140,27 @@ export function Navbar() {
               className="lg:hidden mt-3 sm:mt-4 pb-2 border-t border-gray-100 dark:border-white/5 pt-3 sm:pt-4"
             >
               <div className="flex flex-col gap-2 sm:gap-3">
-                {navLinks.map((link) => (
-                  <a
-                    key={link.href}
-                    href={link.href}
-                    className="text-gray-500 hover:text-gray-900 dark:text-white/60 dark:hover:text-white transition-colors text-sm py-1"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    {link.label}
-                  </a>
-                ))}
+                {navLinks.map((link) =>
+                  link.href.startsWith('/') && !link.href.includes('#') ? (
+                    <Link
+                      key={link.href}
+                      to={link.href}
+                      className="text-gray-500 hover:text-gray-900 dark:text-white/60 dark:hover:text-white transition-colors text-sm py-1"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      {link.label}
+                    </Link>
+                  ) : (
+                    <a
+                      key={link.href}
+                      href={link.href}
+                      className="text-gray-500 hover:text-gray-900 dark:text-white/60 dark:hover:text-white transition-colors text-sm py-1"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      {link.label}
+                    </a>
+                  )
+                )}
                 <div className="flex flex-col sm:flex-row gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-white/5">
                   {isAuthenticated ? (
                     <>
