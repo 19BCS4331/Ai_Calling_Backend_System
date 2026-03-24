@@ -27,7 +27,7 @@ export function VoiceDemo({ className, compact = false }: VoiceDemoProps) {
   } = useVoiceStore();
 
   // Demo booking assistant system prompt
-  const systemPrompt = `You are Maya, VocaCore AI's friendly AI assistant for demo booking and product inquiries.
+  const systemPrompt = `You are George, VocaCore AI's friendly AI assistant for demo booking and product inquiries.
 
 ## Your Role
 You help potential customers learn about VocaCore AI and book personalized demos. You're warm, professional, and genuinely helpful.
@@ -179,7 +179,7 @@ The customer should feel like they just spoke with a helpful human assistant who
           <span className="text-sm text-gray-500 dark:text-white/50">
             {isActive ? 'Listening...' :
              isStarting ? 'Connecting...' :
-             isAIPlaying ? 'Maya is speaking...' :
+             isAIPlaying ? 'George is speaking...' :
              connectionStatus === 'error' ? 'Error' : 'Ready to chat'}
           </span>
         </div>
@@ -260,9 +260,9 @@ The customer should feel like they just spoke with a helpful human assistant who
       {/* Status text */}
       <p className="relative text-center text-sm text-gray-400 dark:text-gray-500 mb-4">
         {isActive ? 'Tap to end conversation' :
-         isAIPlaying ? 'Maya is responding...' :
-         isStarting ? 'Connecting to Maya...' :
-         'Tap to talk with Maya'}
+         isAIPlaying ? 'George is responding...' :
+         isStarting ? 'Connecting to George...' :
+         'Tap to talk with George'}
       </p>
 
       {/* Transcripts */}
@@ -273,7 +273,7 @@ The customer should feel like they just spoke with a helpful human assistant who
             <p className="text-sm text-gray-700 dark:text-white/70">{userTranscript || '...'}</p>
           </div>
           <div className="p-3 bg-purple-50/80 border border-purple-200/60 rounded-xl min-h-[56px] backdrop-blur-sm dark:bg-purple-500/[0.08] dark:border-purple-500/20">
-            <p className="text-xs font-medium text-purple-500 dark:text-purple-400 mb-1">Maya</p>
+            <p className="text-xs font-medium text-purple-500 dark:text-purple-400 mb-1">George</p>
             <p className="text-sm text-gray-800 dark:text-white/80">{aiResponse || '...'}</p>
           </div>
         </div>
