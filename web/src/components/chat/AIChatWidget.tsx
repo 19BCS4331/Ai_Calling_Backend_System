@@ -154,6 +154,12 @@ VocaCore AI is an enterprise voice AI platform that lets businesses deploy human
 - BYOK (Bring Your Own Keys) support
 - Enterprise security (SOC 2, encryption)
 
+## Contact Information
+- support email: support@vocacore.com
+- domain: vocacore.com
+- mobile number: +91 9773100410
+- contact page url: https://vocacore.com/contact
+
 ## Use Cases
 - Customer support automation (70% ticket deflection)
 - Financial services (KYC, payments, loans)
